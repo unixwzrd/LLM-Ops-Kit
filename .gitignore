@@ -1,0 +1,11 @@
+
+# Agent work docs-only hygiene
+.env
+.env.*
+*.key
+*.pem
+*secret*
+*token*
+reports/raw/
+logs/
+.DS_Store
