@@ -1,0 +1,30 @@
+{
+  "bos_token": "",
+  "system_prompt": "You are a helpful assistant.",
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "web_search",
+        "description": "Search the web",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string"
+            }
+          },
+          "required": ["query"]
+        }
+      }
+    }
+  ],
+  "messages": [
+    {
+      "role": "user",
+      "content": "Find one interesting fact about the Fermi paradox."
+    }
+  ],
+  "add_generation_prompt": true,
+  "enable_thinking": true
+}

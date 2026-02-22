@@ -1,12 +1,28 @@
 # Agent Ops Changelog
 
 **Created**: 2026-02-20
-**Updated**: 2026-02-20
+**Updated**: 2026-02-21
 
 All notable changes to agent-work will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+### 2026-02-21 — Prompt transparency + image-context hardening
+
+- **Scope:** `.openclaw`, `agent-work`
+- **Category:** `runtime`, `performance`, `observability`
+- **What changed:**
+  - Added OpenAI proxy tap logging to inspect actual request/response payloads sent to llama.cpp.
+  - Added `latest image only` proxy rewrite mode to strip older `image_url` parts from prior turns.
+  - Tightened OpenClaw image/context controls: single attachment, newest-first media preference, and stronger context pruning for tool/media-heavy histories.
+- **Why:**
+  - Prevent stale image replay, repeated tool loops, and context bloat that caused slowdowns/timeouts.
+- **Performance impact:**
+  - Lower prompt growth under image-heavy chats, improved stability, fewer long-run retries/timeouts.
+- **Recovery note:**
+  - If stale image errors recur, restart run/session and resend image in a fresh turn; keep proxy `latest image only` enabled.
+- **Public blog candidate:** yes (strong case study for cost control + observability-first tuning)
 
 ### 2026-02-20 — Privacy-first local repo strategy adopted
 
@@ -54,3 +70,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Recovery note:**
   - Canonical docs + scripts are now recoverable from `agent-work` local history.
 - **Public blog candidate:** yes (sanitize machine-specific paths)
+
