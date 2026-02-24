@@ -1,0 +1,185 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SOURCE="${BASH_SOURCE[0]}"
+while [[ -h "$SOURCE" ]]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+# shellcheck disable=SC1091
+. "$SCRIPT_DIR/lib/common.sh"
+
+is_action() {
+  case "$1" in
+    start|stop|restart|status) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+resolve_model_from_invocation() {
+  local bn
+  bn="$(basename "$0")"
+  case "$bn" in
+    Qwen3) echo "Qwen3" ;;
+    BGEen) echo "BGEen" ;;
+    *) echo "Qwen3" ;;
+  esac
+}
+
+resolve_args() {
+  local arg1="${1:-}"
+  local arg2="${2:-}"
+
+  if [[ -z "$arg1" ]]; then
+    model_name="$(resolve_model_from_invocation)"
+    action="start"
+    return
+  fi
+
+  if is_action "$arg1"; then
+    model_name="$(resolve_model_from_invocation)"
+    action="$arg1"
+    return
+  fi
+
+  model_name="$arg1"
+  action="${arg2:-start}"
+}
+
+load_model_defaults() {
+  local m="$1"
+  local model_file="$SCRIPT_DIR/models/${m}.sh"
+  [[ -f "$model_file" ]] || { echo "Model defaults not found: $model_file" >&2; exit 2; }
+
+  case "$m" in
+    Qwen3)
+      # shellcheck disable=SC1091
+      . "$SCRIPT_DIR/defaults/llm-defaults.sh"
+      ;;
+    BGEen)
+      # shellcheck disable=SC1091
+      . "$SCRIPT_DIR/defaults/embedding-defaults.sh"
+      ;;
+    *)
+      echo "Unknown model: $m" >&2
+      exit 2
+      ;;
+  esac
+
+  # shellcheck disable=SC1091
+  . "$model_file"
+}
+
+model_name=""
+action=""
+resolve_args "${1:-}" "${2:-}"
+
+if ! is_action "$action"; then
+  echo "Invalid action: $action" >&2
+  echo "Usage: $(basename "$0") [start|stop|restart|status]" >&2
+  echo "   or: modelctl [Qwen3|BGEen] [start|stop|restart|status]" >&2
+  exit 2
+fi
+
+if [[ "$action" == "start" || "$action" == "restart" ]]; then
+  load_shell_env
+fi
+ensure_runtime_dirs
+load_model_defaults "$model_name"
+
+THREADS_BATCH="${THREADS_BATCH:-$THREADS}"
+pid_name="llama-$MODEL_PROFILE"
+
+status_model() {
+  if pid="$(read_pid "$pid_name" 2>/dev/null)"; then
+    if is_pid_running "$pid"; then
+      echo "$pid_name: running pid=$pid"
+      return 0
+    fi
+    echo "$pid_name: stale pid=$pid"
+    return 1
+  fi
+  echo "$pid_name: stopped"
+  return 1
+}
+
+start_model() {
+  if status_model >/dev/null 2>&1; then
+    echo "$pid_name: already running"
+    return 0
+  fi
+
+  [[ -f "$MODEL" ]] || { echo "Model not found: $MODEL" >&2; exit 1; }
+
+  LOG_FILE="$OPENCLAW_LOG_DIR/llama-server-$MODEL_PROFILE.log"
+  EXTRA_ARGS=()
+  MM_FLAGS=()
+  TEMPLATE_FLAGS=()
+  MODE_FLAGS=()
+  DEBUG_FLAGS=()
+  RUNTIME_FLAGS=()
+
+  if [[ "$MODEL_KIND" == "llm" ]]; then
+    if [[ -n "${MMPROJ:-}" && -f "$MMPROJ" ]]; then
+      MM_FLAGS+=(--mmproj "$MMPROJ")
+    fi
+    if [[ "${USE_CUSTOM_TEMPLATE:-0}" == "1" ]]; then
+      [[ -f "$CHAT_TEMPLATE" ]] || { echo "Template not found: $CHAT_TEMPLATE" >&2; exit 1; }
+      TEMPLATE_FLAGS+=(--jinja --chat-template-file "$CHAT_TEMPLATE")
+    fi
+    if [[ "${VERBOSE_PROMPT:-0}" == "1" ]]; then
+      DEBUG_FLAGS+=(--verbose-prompt)
+    fi
+    if [[ "${USE_MLOCK:-0}" == "1" ]]; then
+      RUNTIME_FLAGS+=(--mlock)
+    fi
+    if [[ "${USE_NO_MMAP:-0}" == "1" ]]; then
+      RUNTIME_FLAGS+=(--no-mmap)
+    fi
+    if [[ "${USE_NO_WEBUI:-1}" == "1" ]]; then
+      RUNTIME_FLAGS+=(--no-webui)
+    fi
+  else
+    MODE_FLAGS+=(--embedding --pooling "$POOLING" --mmap)
+    if [[ "${USE_NO_WEBUI:-1}" == "1" ]]; then
+      RUNTIME_FLAGS+=(--no-webui)
+    fi
+  fi
+
+  nohup /usr/local/bin/llama-server \
+    --model "$MODEL" \
+    "${MM_FLAGS[@]}" \
+    --ctx-size "$CTX_SIZE" \
+    --gpu-layers "$GPU_LAYERS" \
+    --batch-size "$BATCH_SIZE" \
+    --ubatch-size "$UBATCH_SIZE" \
+    --port "$PORT" \
+    --host "$HOST" \
+    --threads "$THREADS" \
+    --threads-batch "$THREADS_BATCH" \
+    "${RUNTIME_FLAGS[@]}" \
+    "${TEMPLATE_FLAGS[@]}" \
+    "${DEBUG_FLAGS[@]}" \
+    --log-timestamps \
+    --log-file "$LOG_FILE" \
+    "${MODE_FLAGS[@]}" \
+    "${EXTRA_ARGS[@]}" \
+    > "$LOG_FILE" 2>&1 &
+
+  pid="$!"
+  write_pid "$pid_name" "$pid"
+  echo "Started $pid_name pid=$pid log=$LOG_FILE"
+}
+
+stop_model() {
+  stop_by_name "$pid_name"
+}
+
+case "$action" in
+  start) start_model ;;
+  stop) stop_model ;;
+  restart) stop_model || true; start_model ;;
+  status) status_model ;;
+esac

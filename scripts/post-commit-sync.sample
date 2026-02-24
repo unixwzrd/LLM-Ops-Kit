@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Optional git post-commit hook.
+# Enable by copying to .git/hooks/post-commit and chmod +x.
+# To disable temporarily: export DISABLE_AGENT_WORK_SYNC=1
+
+[[ "${DISABLE_AGENT_WORK_SYNC:-0}" == "1" ]] && exit 0
+
+"$(git rev-parse --show-toplevel)/scripts/sync-agent-work.sh" --quiet || {
+  echo "post-commit sync failed" >&2
+  exit 0
+}

@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SOURCE="${BASH_SOURCE[0]}"
+while [[ -h "$SOURCE" ]]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+# shellcheck disable=SC1091
+. "$SCRIPT_DIR/lib/common.sh"
+
+action="${1:-status}"
+
+start_proxy() {
+  load_shell_env
+  ensure_runtime_dirs
+
+  if pid="$(read_pid proxy 2>/dev/null)" && is_pid_running "$pid"; then
+    echo "proxy: already running pid=$pid"
+    return 0
+  fi
+
+  LOG_OUT="$OPENCLAW_LOG_DIR/openai-proxy-tap.log"
+  LOG_ERR="$OPENCLAW_LOG_DIR/openai-proxy-tap.err.log"
+
+  nohup /Users/miafour/projects/agent-work/bin/openai-proxy-tap > "$LOG_OUT" 2> "$LOG_ERR" &
+  pid="$!"
+  write_pid proxy "$pid"
+  echo "proxy: started pid=$pid"
+}
+
+stop_proxy() {
+  force="${2:-}"
+  if [[ "$force" == "--force" ]]; then
+    pf="$(pid_file_for proxy)"
+    if [[ -f "$pf" ]]; then
+      pid="$(cat "$pf")"
+      if is_pid_running "$pid"; then
+        kill -9 "$pid" >/dev/null 2>&1 || true
+        echo "proxy: force-stopped pid $pid"
+      fi
+      rm -f "$pf"
+    else
+      echo "proxy: no pid file"
+    fi
+  else
+    stop_by_name proxy
+  fi
+}
+
+status_proxy() {
+  if pid="$(read_pid proxy 2>/dev/null)"; then
+    if is_pid_running "$pid"; then
+      echo "proxy: running pid=$pid"
+      return 0
+    fi
+    echo "proxy: stale pid=$pid"
+    return 1
+  fi
+  echo "proxy: stopped"
+  return 1
+}
+
+case "$action" in
+  start) start_proxy ;;
+  stop) stop_proxy "$@" ;;
+  restart) stop_proxy "$@" || true; start_proxy ;;
+  status) status_proxy ;;
+  *) echo "Usage: proxy [start|stop|restart|status] [--force]" >&2; exit 2 ;;
+esac

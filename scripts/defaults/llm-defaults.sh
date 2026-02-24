@@ -1,0 +1,11 @@
+# shellcheck shell=bash
+MODEL_KIND="llm"
+HOST="${HOST:-0.0.0.0}"
+THREADS="${THREADS:-20}"
+CTX_SIZE="${CTX_SIZE:-49152}"
+GPU_LAYERS="${GPU_LAYERS:-99}"
+BATCH_SIZE="${BATCH_SIZE:-1024}"
+UBATCH_SIZE="${UBATCH_SIZE:-512}"
+USE_CUSTOM_TEMPLATE="${USE_CUSTOM_TEMPLATE:-1}"
+CHAT_TEMPLATE="${CHAT_TEMPLATE:-/Users/miafour/projects/agent-work/scripts/templates/chatml-tools.jinja}"
+VERBOSE_PROMPT="${VERBOSE_PROMPT:-0}"

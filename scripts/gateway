@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SOURCE="${BASH_SOURCE[0]}"
+while [[ -h "$SOURCE" ]]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+# shellcheck disable=SC1091
+. "$SCRIPT_DIR/lib/common.sh"
+
+action="${1:-status}"
+
+start_gateway() {
+  load_shell_env
+  ensure_runtime_dirs
+  PORT="${OPENCLAW_GATEWAY_PORT:-18789}"
+  LOG_OUT="$OPENCLAW_LOG_DIR/gateway.log"
+  LOG_ERR="$OPENCLAW_LOG_DIR/gateway.err.log"
+
+  if pid="$(read_pid gateway 2>/dev/null)" && is_pid_running "$pid"; then
+    echo "gateway: already running pid=$pid"
+    return 0
+  fi
+
+  nohup /usr/local/bin/openclaw gateway --port "$PORT" > "$LOG_OUT" 2> "$LOG_ERR" &
+  pid="$!"
+  write_pid gateway "$pid"
+  echo "gateway: started pid=$pid port=$PORT"
+}
+
+stop_gateway() {
+  stop_by_name gateway
+}
+
+status_gateway() {
+  if pid="$(read_pid gateway 2>/dev/null)"; then
+    if is_pid_running "$pid"; then
+      echo "gateway: running pid=$pid"
+      return 0
+    fi
+    echo "gateway: stale pid=$pid"
+    return 1
+  fi
+  echo "gateway: stopped"
+  return 1
+}
+
+case "$action" in
+  start) start_gateway ;;
+  stop) stop_gateway ;;
+  restart) stop_gateway || true; start_gateway ;;
+  status) status_gateway ;;
+  *) echo "Usage: gateway [start|stop|restart|status]" >&2; exit 2 ;;
+esac

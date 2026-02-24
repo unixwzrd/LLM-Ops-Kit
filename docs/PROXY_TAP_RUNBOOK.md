@@ -7,7 +7,7 @@ Capture what OpenClaw sends to the model with enough observability to debug prom
 ## Start Proxy (Default)
 
 ```bash
-openai-proxy-tap
+~/bin/openai-proxy-tap
 ```
 
 Default wrapper values (`~/bin/openai-proxy-tap`):
@@ -30,19 +30,19 @@ Sample output:
 ## Start Proxy With Rendered Prompt Logging
 
 ```bash
-openai-proxy-tap --chat-template /Volumes/mps/bin/chatml-tools.jinja
+~/bin/openai-proxy-tap --chat-template ~/projects/agent-work/scripts/templates/chatml-tools.jinja
 ```
 
 Sample output:
 
 ```text
-[openai-proxy-tap] chat template loaded: /Volumes/mps/bin/chatml-tools.jinja
+[openai-proxy-tap] chat template loaded: /Users/miafour/projects/agent-work/scripts/templates/chatml-tools.jinja
 ```
 
 ## Strict Flush Mode
 
 ```bash
-LOG_FSYNC=1 openai-proxy-tap
+LOG_FSYNC=1 ~/bin/openai-proxy-tap
 ```
 
 Sample output:

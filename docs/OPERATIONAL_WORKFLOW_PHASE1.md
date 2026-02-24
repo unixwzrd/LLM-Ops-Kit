@@ -4,7 +4,39 @@
 
 - `.openclaw`: local-only, no remote push.
 - `OpenClaw-workspace`: local-only, no remote push.
-- `agent-work`: canonical docs/planning repository; only potential remote candidate later.
+- `agent-work`: canonical docs/planning/operations repository; only potential remote candidate later.
+
+## Context Bootstrapping Flow
+
+- Stage A always: `SOUL.md`, `USER.md`, `CONTEXTS.md`.
+- Stage B route-based:
+  - read matched `CONTEXT_INFO.md`
+  - read `constraints_file` (`CONTEXT_CONSTRAINTS.md`)
+  - continue startup reads listed in context metadata.
+- Private route `telegram:group:-1003713298137` is the only route allowed to load `contexts/private/knowledge/*`.
+
+## Script Operations
+
+Canonical scripts live under:
+
+- `~/projects/agent-work/scripts`
+
+Primary operator commands (from `~/bin`):
+
+- Start all: `~/bin/openclaw-stack start all`
+- Start llm only: `~/bin/Qwen3 start`
+- Start embedding only: `~/bin/BGEen start`
+- Start proxy only: `~/bin/proxy start`
+- Stop model directly: `~/bin/Qwen3 stop` / `~/bin/BGEen stop`
+- Stack status: `~/bin/openclaw-stack status`
+- Deploy symlinks: `~/bin/deploy-runtime-links.sh`
+- Verify links: `~/bin/verify-runtime-links.sh`
+- Runtime report: `~/bin/openclaw-report`
+- Sync repo to remote host: `~/bin/sync-agent-work`
+
+## Deployment Reference
+
+- See `docs/DEPLOYMENT_SYNC_RUNBOOK.md` for the full sync/deploy/verify flow and remote bash compatibility notes.
 
 ## Commit Cadence
 

@@ -8,6 +8,74 @@ All notable changes to agent-work will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### 2026-02-24 — Context system first-pass finalized (workspace-owned)
+
+- **Scope:** `OpenClaw-workspace`, `agent-work`
+- **Category:** `architecture`, `documentation`, `operations`
+- **What changed:**
+  - Finalized context routing around `OpenClaw-workspace/CONTEXTS.md` as the canonical router/index.
+  - Standardized context metadata split:
+    - `CONTEXT_INFO.md` for startup/context guide
+    - `CONTEXT_CONSTRAINTS.md` for access/tooling/refresh policy
+  - Removed `CONVERSATIONS_INDEX.md` from active context path (routing/index now handled by `CONTEXTS.md`).
+  - Moved context system docs/templates under workspace ownership:
+    - `OpenClaw-workspace/contexts/docs/*`
+  - Updated backend docs in `agent-work/docs` to reflect current context architecture and file layout.
+- **Why:**
+  - Reduce prompt bloat and indirection while making routing deterministic and policy boundaries explicit.
+- **Behavior notes:**
+  - Private chat route remains bound to `telegram:group:-1003713298137`.
+  - Prune-time refresh now maps naturally to context constraints (`refresh_on_prune`, `refresh_files`).
+
+### 2026-02-24 — Documentation normalization for deployment commands
+
+- **Scope:** `agent-work`
+- **Category:** `documentation`, `operations`
+- **What changed:**
+  - Normalized operator docs to the extensionless command surface in `~/bin` (`gateway`, `proxy`, `Qwen3`, `BGEen`, `openclaw-stack`).
+  - Updated `docs/OPERATIONAL_WORKFLOW_PHASE1.md` examples to use runtime commands instead of direct script paths.
+  - Updated `docs/IMPLEMENTATION_CHECKLIST.md` quick commands and snapshots to match current operator workflow.
+  - Corrected `docs/SCRIPT_LAYOUT.md` to the flattened `scripts/` layout (removed stale `scripts/openclaw` reference).
+- **Why:**
+  - Keep deployment/operator docs aligned with the current runtime surface and reduce drift during remote rollouts.
+
+### 2026-02-24 — Context architecture + private scope migration + script consolidation
+
+- **Scope:** `OpenClaw-workspace`, `agent-work`
+- **Category:** `architecture`, `policy`, `operations`, `runtime`
+- **What changed:**
+  - Implemented channel-keyed context system with deterministic dispatch in `OpenClaw-workspace/CONTEXTS.md`.
+  - Added context guide tree under `OpenClaw-workspace/contexts/` for primary and private routes.
+  - Migrated private-only relationship files from `memory/*` into `contexts/private/knowledge/*`.
+  - Added compatibility stubs at legacy paths to avoid read-path breakage.
+  - Updated privacy scope policy to canonical private context paths.
+  - Added `CONVERSATIONS_INDEX.md` pointer index for operators.
+  - Consolidated startup/utility scripts under `agent-work/scripts/openclaw`.
+  - Added profile-driven llama startup (`llm`, `embedding`) and stack lifecycle helper.
+  - Added symlink-first deployment helper, drift verifier, and fallback sync mode.
+  - Updated operational workflow doc and added dedicated context architecture plan doc.
+- **Why:**
+  - Keep sessions aligned to intended context without manual re-steering.
+  - Isolate private knowledge to a single scoped location.
+  - Centralize runtime operations in one canonical, versioned script location.
+- **Behavior notes:**
+  - Runtime path compatibility is preserved via stubs and deploy link tooling.
+  - Non-private contexts should no longer load private knowledge by default.
+- **Public blog candidate:** yes (context routing + privacy-scoped memory architecture)
+
+### 2026-02-24 — Deployment runbook + portable link strategy
+
+- **Scope:** `agent-work`
+- **Category:** `operations`, `deployment`, `portability`
+- **What changed:**
+  - Added `docs/DEPLOYMENT_SYNC_RUNBOOK.md` with repeatable sync/deploy/verify steps.
+  - Standardized runtime link management to `$HOME/bin` only for host portability.
+  - Documented remote execution with `/usr/local/bin/bash` for hosts with older default bash.
+  - Updated phase workflow doc to reference new runbook and flattened script layout.
+- **Why:**
+  - Avoid host-specific path failures and make deployment process reusable across macOS/Linux/VPS targets.
+- **Public blog candidate:** yes (portable operator workflow + low-friction deployments)
+
 ### 2026-02-23 — Jinja tool-loop stabilization + proxy observability hardening
 
 - **Scope:** `agent-work`, `.openclaw`, mounted template at `/Volumes/mps/bin/chatml-tools.jinja`
