@@ -1,7 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-
-PKG="$HOME/.bun/install/global/node_modules/@tobilu/qmd"
-NODE="/usr/local/bin/node"   # your Node 24 (works for OpenClaw)
-
-exec "$NODE" "$PKG/dist/qmd.js" "$@"
