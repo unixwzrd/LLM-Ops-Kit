@@ -205,6 +205,8 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
     chat_template_max_chars: int = 200000
     chat_template_renderer: Any = None
     chat_template_error: str | None = None
+    raw_request_log_path: Path | None = None
+    rendered_prompt_log_path: Path | None = None
 
     protocol_version = "HTTP/1.1"
 
@@ -222,6 +224,22 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         with self.log_path.open("a", encoding="utf-8", buffering=1) as f:
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
+            f.flush()
+            if self.log_fsync:
+                os.fsync(f.fileno())
+
+    def _write_framed_log(self, path: Path | None, ts: str, request_id: str, label: str, body: str | None) -> None:
+        if path is None:
+            return
+        path.parent.mkdir(parents=True, exist_ok=True)
+        text = body or ""
+        with path.open("a", encoding="utf-8", buffering=1) as f:
+            f.write(f"{ts}\t{request_id}\t{label}\n")
+            f.write("================ REQUEST START ================\n")
+            f.write(text)
+            if not text.endswith("\n"):
+                f.write("\n")
+            f.write("================= REQUEST END =================\n\n")
             f.flush()
             if self.log_fsync:
                 os.fsync(f.fileno())
@@ -275,10 +293,11 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
             request_text_log = request_text_log[: self.max_log_bytes] + "\n<truncated>"
 
         # Immediate event so you can see the request while upstream is still processing.
+        request_start_ts = utc_now()
         self._write_log(
             {
                 "event": "request_start",
-                "ts": utc_now(),
+                "ts": request_start_ts,
                 "request_id": request_id,
                 "pid": os.getpid(),
                 "client": self.client_address[0],
@@ -293,6 +312,22 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
                 "request_rewrite": request_rewrite,
             }
         )
+
+        self._write_framed_log(
+            self.raw_request_log_path,
+            request_start_ts,
+            request_id,
+            "RAW_REQUEST",
+            request_text_log,
+        )
+        if self.chat_template_path:
+            self._write_framed_log(
+                self.rendered_prompt_log_path,
+                request_start_ts,
+                request_id,
+                "RENDERED_PROMPT",
+                rendered_prompt if rendered_prompt is not None else rendered_prompt_error,
+            )
 
         fwd_headers: dict[str, str] = {}
         for k, v in self.headers.items():
@@ -476,6 +511,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--stream-chunk-size", type=int, default=65536)
     p.add_argument("--chat-template", help="Optional Jinja chat template path to render/log final prompt text.")
     p.add_argument("--chat-template-max-chars", type=int, default=200000)
+    p.add_argument("--raw-request-log", help="Optional plain-text framed log path for raw request_text per request_start")
+    p.add_argument("--rendered-prompt-log", help="Optional plain-text framed log path for rendered_prompt per request_start")
     p.set_defaults(log_fsync=True)
     p.add_argument("--log-fsync", dest="log_fsync", action="store_true", help="Force fsync after each log line write (default: on)")
     p.add_argument("--no-log-fsync", dest="log_fsync", action="store_false", help="Disable fsync after each log line write")
@@ -501,6 +538,8 @@ def main() -> int:
     ProxyTapHandler.chat_template_max_chars = int(args.chat_template_max_chars)
     ProxyTapHandler.chat_template_renderer = None
     ProxyTapHandler.chat_template_error = None
+    ProxyTapHandler.raw_request_log_path = Path(os.path.expanduser(args.raw_request_log)) if args.raw_request_log else None
+    ProxyTapHandler.rendered_prompt_log_path = Path(os.path.expanduser(args.rendered_prompt_log)) if args.rendered_prompt_log else None
 
     if args.chat_template:
         if jinja2 is None:
@@ -522,7 +561,7 @@ def main() -> int:
     server = ForkingHTTPServer((args.listen_host, args.listen_port), ProxyTapHandler)
     print(
         f"openai-proxy-tap listening on http://{args.listen_host}:{args.listen_port} "
-        f"-> {args.upstream} (forking, log: {ProxyTapHandler.log_path}, latest_image_only={ProxyTapHandler.latest_image_only}, log_fsync={ProxyTapHandler.log_fsync}, stream_chunk_size={ProxyTapHandler.stream_chunk_size}, chat_template={ProxyTapHandler.chat_template_path})",
+        f"-> {args.upstream} (forking, log: {ProxyTapHandler.log_path}, raw_log={ProxyTapHandler.raw_request_log_path}, rendered_log={ProxyTapHandler.rendered_prompt_log_path}, latest_image_only={ProxyTapHandler.latest_image_only}, log_fsync={ProxyTapHandler.log_fsync}, stream_chunk_size={ProxyTapHandler.stream_chunk_size}, chat_template={ProxyTapHandler.chat_template_path})",
         flush=True,
     )
 
