@@ -99,8 +99,11 @@ RSYNC_ARGS=( -avz )
 [[ "$DELETE_MODE" -eq 1 ]] && RSYNC_ARGS+=( --delete )
 [[ "$DRY_RUN" -eq 1 ]] && RSYNC_ARGS+=( --dry-run )
 
+# Always exclude local VCS metadata from deployment sync.
+RSYNC_EXCLUDES=( --exclude ".git/" )
+
 log "Syncing ${LOCAL_DIR} -> ${SSH_TARGET}:${REMOTE_DIR}/"
-rsync "${RSYNC_ARGS[@]}" -e "ssh -i ${KEY_PATH}" \
+rsync "${RSYNC_ARGS[@]}" "${RSYNC_EXCLUDES[@]}" -e "ssh -i ${KEY_PATH}" \
   "$LOCAL_DIR" "${SSH_TARGET}:${REMOTE_DIR}/"
 
 log "Sync complete"

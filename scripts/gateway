@@ -28,6 +28,23 @@ start_gateway() {
   nohup /usr/local/bin/openclaw gateway --port "$PORT" > "$LOG_OUT" 2> "$LOG_ERR" &
   pid="$!"
   write_pid gateway "$pid"
+
+  # Verify the process survived startup so we do not report false success.
+  sleep 1
+  if ! is_pid_running "$pid"; then
+    rm -f "$(pid_file_for gateway)"
+    echo "gateway: failed to start (process exited)" >&2
+    echo "gateway: inspect $LOG_OUT and $LOG_ERR" >&2
+    return 1
+  fi
+
+  if command -v curl >/dev/null 2>&1; then
+    if ! curl -fsS "http://127.0.0.1:${PORT}/health" >/dev/null 2>&1; then
+      echo "gateway: started pid=$pid port=$PORT (health endpoint not ready yet)"
+      return 0
+    fi
+  fi
+
   echo "gateway: started pid=$pid port=$PORT"
 }
 

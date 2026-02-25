@@ -13,8 +13,17 @@ SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
 
 is_action() {
   case "$1" in
-    start|stop|restart|status) return 0 ;;
+    start|stop|restart|status|settings) return 0 ;;
     *) return 1 ;;
+  esac
+}
+
+normalize_action() {
+  case "$1" in
+    setttings|setings|settigns) echo "settings" ;;
+    staus|statsu) echo "status" ;;
+    restar|retsart) echo "restart" ;;
+    *) echo "$1" ;;
   esac
 }
 
@@ -29,8 +38,10 @@ resolve_model_from_invocation() {
 }
 
 resolve_args() {
-  local arg1="${1:-}"
-  local arg2="${2:-}"
+  local arg1
+  local arg2
+  arg1="$(normalize_action "${1:-}")"
+  arg2="$(normalize_action "${2:-}")"
 
   if [[ -z "$arg1" ]]; then
     model_name="$(resolve_model_from_invocation)"
@@ -84,23 +95,6 @@ load_model_defaults() {
   . "$SCRIPT_DIR/defaults/llama-defaults.sh"
 }
 
-model_name=""
-action=""
-resolve_args "${1:-}" "${2:-}"
-
-if ! is_action "$action"; then
-  echo "Invalid action: $action" >&2
-  echo "Usage: $(basename "$0") [start|stop|restart|status]" >&2
-  echo "   or: modelctl [Qwen3|BGEen] [start|stop|restart|status]" >&2
-  exit 2
-fi
-
-if [[ "$action" == "start" || "$action" == "restart" ]]; then
-  load_shell_env
-fi
-ensure_runtime_dirs
-load_model_defaults "$model_name"
-
 require_non_empty() {
   local name="$1"
   local value="${!name-}"
@@ -129,24 +123,76 @@ validate_model_settings() {
   esac
 }
 
+print_model_settings() {
+  echo "modelctl settings ($model_name)"
+  echo "  MODEL_PROFILE=$MODEL_PROFILE"
+  echo "  MODEL_KIND=$MODEL_KIND"
+  echo "  MODEL=$MODEL"
+  [[ -n "${MMPROJ:-}" ]] && echo "  MMPROJ=$MMPROJ"
+  echo "  PORT=$PORT"
+  echo "  HOST=$HOST"
+  echo "  THREADS=$THREADS"
+  echo "  THREADS_BATCH=$THREADS_BATCH"
+  echo "  CTX_SIZE=$CTX_SIZE"
+  echo "  GPU_LAYERS=$GPU_LAYERS"
+  echo "  BATCH_SIZE=$BATCH_SIZE"
+  echo "  UBATCH_SIZE=$UBATCH_SIZE"
+  echo "  USE_NO_WEBUI=${USE_NO_WEBUI:-0}"
+  echo "  USE_NO_MMAP=${USE_NO_MMAP:-0}"
+  echo "  USE_MLOCK=${USE_MLOCK:-0}"
+  echo "  VERBOSE_PROMPT=${VERBOSE_PROMPT:-0}"
+  if [[ "$MODEL_KIND" == "embedding" ]]; then
+    echo "  POOLING=${POOLING:-}"
+    if [[ "${MODEL_PROFILE:-}" == "bge-small-en" && "${CTX_SIZE:-0}" -gt 512 ]]; then
+      echo "  WARNING=bge-small-en effective context is 512; higher CTX_SIZE may be ignored by runtime"
+    fi
+  fi
+  if [[ "$MODEL_KIND" == "llm" ]]; then
+    echo "  USE_CUSTOM_TEMPLATE=${USE_CUSTOM_TEMPLATE:-0}"
+    if [[ "${USE_CUSTOM_TEMPLATE:-0}" == "1" ]]; then
+      echo "  CHAT_TEMPLATE=${CHAT_TEMPLATE:-}"
+    fi
+  fi
+}
+
+model_name=""
+action=""
+resolve_args "${1:-}" "${2:-}"
+
+if ! is_action "$action"; then
+  echo "Invalid action: $action" >&2
+  echo "Usage: $(basename "$0") [start|stop|restart|status|settings]" >&2
+  echo "   or: modelctl [Qwen3|BGEen] [start|stop|restart|status|settings]" >&2
+  exit 2
+fi
+
+if [[ "$action" == "start" || "$action" == "restart" || "$action" == "settings" ]]; then
+  load_shell_env
+fi
+ensure_runtime_dirs
+load_model_defaults "$model_name"
+
 THREADS_BATCH="${THREADS_BATCH:-$THREADS}"
 validate_model_settings
 pid_name="llama-$MODEL_PROFILE"
+model_log_file="$OPENCLAW_LOG_DIR/llama-server-$MODEL_PROFILE.log"
 
 status_model() {
   if pid="$(read_pid "$pid_name" 2>/dev/null)"; then
     if is_pid_running "$pid"; then
-      echo "$pid_name: running pid=$pid"
+      echo "$pid_name: running pid=$pid log=$model_log_file"
       return 0
     fi
-    echo "$pid_name: stale pid=$pid"
+    echo "$pid_name: stale pid=$pid log=$model_log_file"
     return 1
   fi
-  echo "$pid_name: stopped"
+  echo "$pid_name: stopped log=$model_log_file"
   return 1
 }
 
 start_model() {
+  print_model_settings
+
   if status_model >/dev/null 2>&1; then
     echo "$pid_name: already running"
     return 0
@@ -154,7 +200,7 @@ start_model() {
 
   [[ -f "$MODEL" ]] || { echo "Model not found: $MODEL" >&2; exit 1; }
 
-  LOG_FILE="$OPENCLAW_LOG_DIR/llama-server-$MODEL_PROFILE.log"
+  LOG_FILE="$model_log_file"
   EXTRA_ARGS=()
   MM_FLAGS=()
   TEMPLATE_FLAGS=()
@@ -223,4 +269,5 @@ case "$action" in
   stop) stop_model ;;
   restart) stop_model || true; start_model ;;
   status) status_model ;;
+  settings) print_model_settings ;;
 esac
