@@ -26,6 +26,35 @@ load_shell_env() {
   done
 }
 
+cpu_count() {
+  local n=""
+
+  if [[ -n "${OPENCLAW_CPU_COUNT_OVERRIDE:-}" ]]; then
+    n="$OPENCLAW_CPU_COUNT_OVERRIDE"
+  elif command -v getconf >/dev/null 2>&1; then
+    n="$(getconf _NPROCESSORS_ONLN 2>/dev/null || true)"
+  elif command -v nproc >/dev/null 2>&1; then
+    n="$(nproc 2>/dev/null || true)"
+  elif command -v sysctl >/dev/null 2>&1; then
+    n="$(sysctl -n hw.logicalcpu 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || true)"
+  fi
+
+  if [[ -z "$n" || ! "$n" =~ ^[0-9]+$ || "$n" -lt 1 ]]; then
+    n=4
+  fi
+  printf '%s\n' "$n"
+}
+
+default_threads() {
+  local n t
+  n="$(cpu_count)"
+  t=$((n * 2))
+  if [[ "$t" -lt 1 ]]; then
+    t=1
+  fi
+  printf '%s\n' "$t"
+}
+
 pid_file_for() {
   local name="$1"
   printf '%s/%s.pid\n' "$OPENCLAW_RUN_DIR" "$name"

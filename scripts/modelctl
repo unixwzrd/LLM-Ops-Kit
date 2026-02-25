@@ -53,6 +53,17 @@ load_model_defaults() {
   local model_file="$SCRIPT_DIR/models/${m}.sh"
   [[ -f "$model_file" ]] || { echo "Model defaults not found: $model_file" >&2; exit 2; }
 
+  # Precedence (highest -> lowest):
+  # 1) external environment
+  # 2) model profile
+  # 3) model-kind defaults
+  # 4) global llama.cpp defaults
+
+  # 2) model profile
+  # shellcheck disable=SC1091
+  . "$model_file"
+
+  # 3) model-kind defaults
   case "$m" in
     Qwen3)
       # shellcheck disable=SC1091
@@ -68,8 +79,9 @@ load_model_defaults() {
       ;;
   esac
 
+  # 4) global defaults
   # shellcheck disable=SC1091
-  . "$model_file"
+  . "$SCRIPT_DIR/defaults/llama-defaults.sh"
 }
 
 model_name=""
@@ -89,7 +101,36 @@ fi
 ensure_runtime_dirs
 load_model_defaults "$model_name"
 
+require_non_empty() {
+  local name="$1"
+  local value="${!name-}"
+  if [[ -z "$value" ]]; then
+    echo "Missing required setting: $name" >&2
+    exit 2
+  fi
+}
+
+validate_model_settings() {
+  local common=(MODEL_PROFILE MODEL MODEL_KIND PORT HOST THREADS THREADS_BATCH CTX_SIZE GPU_LAYERS BATCH_SIZE UBATCH_SIZE)
+  local v
+  for v in "${common[@]}"; do
+    require_non_empty "$v"
+  done
+
+  case "$MODEL_KIND" in
+    llm)
+      if [[ "${USE_CUSTOM_TEMPLATE:-0}" == "1" ]]; then
+        require_non_empty CHAT_TEMPLATE
+      fi
+      ;;
+    embedding)
+      require_non_empty POOLING
+      ;;
+  esac
+}
+
 THREADS_BATCH="${THREADS_BATCH:-$THREADS}"
+validate_model_settings
 pid_name="llama-$MODEL_PROFILE"
 
 status_model() {
