@@ -1,22 +1,22 @@
 # shellcheck shell=bash
-# Model-specific defaults for Qwen3 (applied before model-kind defaults).
+# Model-specific defaults for Qwen3.5 (applied before model-kind defaults).
 # Fill only when still unset so external env can override.
 
 # Identity/profile
 MODEL_TYPE="${MODEL_TYPE:-llm}"
-MODEL_PROFILE="${MODEL_PROFILE:-Qwen3VL}"
+MODEL_PROFILE="${MODEL_PROFILE:-Qwen3_5}"
 
 # Model artifacts
-MODEL="${MODEL:-$HOME/LLM_Repository/Qwen3-VL-32B-Gemini-Heretic-Uncensored-Thinking-GGUF/Qwen3-VL-32B-Gemini-Heretic-Uncensored-Thinking.Q8_0.gguf}"
-MMPROJ="${MMPROJ:-$HOME/LLM_Repository/Qwen3-VL-32B-Gemini-Heretic-Uncensored-Thinking-GGUF/Qwen3-VL-32B-Gemini-Heretic-Uncensored-Thinking.mmproj-Q8_0.gguf}"
-PORT="${PORT:-11434}"
+MODEL="${MODEL:-$HOME/LLM_Repository/Qwen3.5-35B-A3B-GGUF/Qwen3.5-35B-A3B-Q8_0.gguf}"
+MMPROJ="${MMPROJ:-$HOME/LLM_Repository/Qwen3.5-35B-A3B-GGUF/mmproj-BF16.gguf}"
+PORT="${PORT:-11436}"
 
 # Runtime/network
 HOST="${HOST:-0.0.0.0}"
 THREADS="${THREADS:-$(default_threads)}"
 THREADS_BATCH="${THREADS_BATCH:-$THREADS}"
 
-# llama.cpp sizing (Qwen-tuned)
+# llama.cpp sizing (Qwen3.5-tuned defaults)
 CTX_SIZE="${CTX_SIZE:-49152}"
 GPU_LAYERS="${GPU_LAYERS:-99}"
 BATCH_SIZE="${BATCH_SIZE:-768}"
@@ -29,9 +29,12 @@ USE_NO_WEBUI="${USE_NO_WEBUI:-1}"
 
 # Prompt/template settings
 USE_CUSTOM_TEMPLATE="${USE_CUSTOM_TEMPLATE:-1}"
-QWEN3_TEMPLATE_MODE="${QWEN3_TEMPLATE_MODE:-stable}"
+QWEN35_TEMPLATE_MODE="${QWEN35_TEMPLATE_MODE:-stable}"
 if [[ -z "${CHAT_TEMPLATE:-}" ]]; then
-  case "$QWEN3_TEMPLATE_MODE" in
+  case "$QWEN35_TEMPLATE_MODE" in
+    new)
+      CHAT_TEMPLATE="/Users/miafour/projects/agent-work/scripts/templates/Qwen3.5-chatml-tools.jinja"
+      ;;
     stable|*)
       CHAT_TEMPLATE="/Users/miafour/projects/agent-work/scripts/templates/Qwen3-VL-chatml-tools.jinja"
       ;;
@@ -40,8 +43,8 @@ fi
 VERBOSE_PROMPT="${VERBOSE_PROMPT:-0}"
 
 # Sampling presets (overridable by env)
-QWEN3_PRESET="${QWEN3_PRESET:-thinking-general}"
-case "$QWEN3_PRESET" in
+QWEN35_PRESET="${QWEN35_PRESET:-thinking-general}"
+case "$QWEN35_PRESET" in
   thinking-coding)
     TEMP="${TEMP:-0.6}"
     TOP_P="${TOP_P:-0.95}"
@@ -51,7 +54,7 @@ case "$QWEN3_PRESET" in
     REPEAT_PENALTY="${REPEAT_PENALTY:-1.0}"
     ;;
   thinking-general|*)
-    TEMP="${TEMP:-1.0}"
+    TEMP="${TEMP:-0.9}"
     TOP_P="${TOP_P:-0.95}"
     TOP_K="${TOP_K:-20}"
     MIN_P="${MIN_P:-0.0}"

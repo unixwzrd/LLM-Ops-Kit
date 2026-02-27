@@ -3,7 +3,7 @@
 # Fill only when still unset so external env can override.
 
 # Identity/profile
-MODEL_KIND="${MODEL_KIND:-embedding}"
+MODEL_TYPE="${MODEL_TYPE:-embedding}"
 MODEL_PROFILE="${MODEL_PROFILE:-bge-small-en}"
 
 # Model artifacts

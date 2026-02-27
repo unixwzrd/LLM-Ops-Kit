@@ -2,7 +2,7 @@
 # Embedding-kind defaults (template-style; fill only when still unset).
 
 # Identity/profile
-MODEL_KIND="${MODEL_KIND:-embedding}"
+MODEL_TYPE="${MODEL_TYPE:-embedding}"
 MODEL_PROFILE="${MODEL_PROFILE:-embedding-generic}"
 
 # Model artifacts

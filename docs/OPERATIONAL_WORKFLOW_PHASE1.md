@@ -25,9 +25,10 @@ Primary operator commands (from `~/bin`):
 
 - Start all: `~/bin/openclaw-stack start all`
 - Start llm only: `~/bin/Qwen3 start`
+- Start Qwen3.5 llm: `~/bin/Qwen3.5 start`
 - Start embedding only: `~/bin/BGEen start`
 - Start proxy only: `~/bin/proxy start`
-- Stop model directly: `~/bin/Qwen3 stop` / `~/bin/BGEen stop`
+- Stop model directly: `~/bin/Qwen3 stop` / `~/bin/Qwen3.5 stop` / `~/bin/BGEen stop`
 - Stack status: `~/bin/openclaw-stack status`
 - Deploy symlinks: `~/bin/deploy-runtime-links.sh`
 - Verify links: `~/bin/verify-runtime-links.sh`

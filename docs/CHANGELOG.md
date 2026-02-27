@@ -8,6 +8,26 @@ All notable changes to agent-work will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### 2026-02-26 — Qwen3.5 integration + launcher symlink migration
+
+- **Scope:** `agent-work`, `.openclaw`
+- **Category:** `runtime`, `models`, `deployment`
+- **What changed:**
+  - Added `Qwen3.5` launcher support to `modelctl` (`start|stop|restart|status|settings`) with model-profile resolution.
+  - Added `agent-work/scripts/models/Qwen3.5.sh` profile with:
+    - stable/new template switching (`QWEN35_TEMPLATE_MODE`),
+    - sampling presets (`QWEN35_PRESET=thinking-general|thinking-coding`),
+    - env-first override semantics.
+  - Added `Qwen3.5` launcher symlink target in runtime link deploy/verify tooling.
+  - Standardized launcher policy: use symlinks for command aliases (no hard links) for Git-safe behavior.
+  - Added a placeholder Qwen3.5 model entry under `models.providers.llamacpp.models[]` in `openclaw.json`.
+- **Why:**
+  - Enable side-by-side Qwen3.5 bring-up without destabilizing the current Qwen3 path.
+  - Keep launcher alias behavior portable and repository-safe across hosts.
+- **Behavior notes:**
+  - Placeholder model id must be finalized after first successful `Qwen3.5 start` and runtime model id confirmation.
+  - `agents.defaults.model.primary` remains on current Qwen3 model until explicit cutover.
+
 ### 2026-02-24 — Context system first-pass finalized (workspace-owned)
 
 - **Scope:** `OpenClaw-workspace`, `agent-work`

@@ -1,8 +1,10 @@
 # shellcheck shell=bash
 # LLM-kind defaults (template-style; fill only when still unset).
+# Precedence is handled by modelctl load order:
+# external env -> model profile -> these model-kind defaults -> llama defaults.
 
 # Identity/profile
-MODEL_KIND="${MODEL_KIND:-llm}"
+MODEL_TYPE="${MODEL_TYPE:-llm}"
 MODEL_PROFILE="${MODEL_PROFILE:-llm-generic}"
 
 # Model artifacts
@@ -30,3 +32,15 @@ USE_NO_WEBUI="${USE_NO_WEBUI:-1}"
 USE_CUSTOM_TEMPLATE="${USE_CUSTOM_TEMPLATE:-0}"
 CHAT_TEMPLATE="${CHAT_TEMPLATE:-}"
 VERBOSE_PROMPT="${VERBOSE_PROMPT:-0}"
+
+# Generic sampling defaults for LLMs (model profiles may override)
+TEMP="${TEMP:-}"
+TOP_P="${TOP_P:-}"
+TOP_K="${TOP_K:-}"
+MIN_P="${MIN_P:-}"
+PRESENCE_PENALTY="${PRESENCE_PENALTY:-}"
+REPEAT_PENALTY="${REPEAT_PENALTY:-}"
+
+# Optional generic knobs for model profiles
+LLM_TEMPLATE_MODE="${LLM_TEMPLATE_MODE:-stable}"
+LLM_PRESET="${LLM_PRESET:-default}"

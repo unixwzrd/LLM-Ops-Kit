@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MANIFEST_FILE="${MANIFEST_FILE:-$SCRIPT_DIR/runtime-links.manifest}"
+
 BIN_DIR="${BIN_DIR:-$HOME/bin}"
 REPO_DIR="${REPO_DIR:-$HOME/projects/agent-work}"
+
+if [[ ! -f "$MANIFEST_FILE" ]]; then
+  echo "Manifest not found: $MANIFEST_FILE" >&2
+  exit 2
+fi
 
 fail=0
 
@@ -30,15 +38,11 @@ check_one() {
   fi
 }
 
-check_one "$BIN_DIR/gateway" "$REPO_DIR/scripts/gateway"
-check_one "$BIN_DIR/proxy" "$REPO_DIR/scripts/proxy"
-check_one "$BIN_DIR/openclaw-stack" "$REPO_DIR/scripts/openclaw-stack"
-check_one "$BIN_DIR/openclaw-report" "$REPO_DIR/scripts/openclaw-report.sh"
-check_one "$BIN_DIR/sync-agent-work" "$REPO_DIR/scripts/sync-agent-work.sh"
-check_one "$BIN_DIR/openai-proxy-tap" "$REPO_DIR/bin/openai-proxy-tap"
-check_one "$BIN_DIR/Qwen3" "$REPO_DIR/scripts/Qwen3"
-check_one "$BIN_DIR/BGEen" "$REPO_DIR/scripts/BGEen"
-check_one "$BIN_DIR/node-hygiene" "$REPO_DIR/bin/node-hygiene.sh"
+while IFS='|' read -r target_rel src_rel; do
+  [[ -z "${target_rel:-}" ]] && continue
+  [[ "$target_rel" =~ ^[[:space:]]*# ]] && continue
+  check_one "$BIN_DIR/$target_rel" "$REPO_DIR/$src_rel"
+done < "$MANIFEST_FILE"
 
 for old in \
   "$BIN_DIR/openclaw-start.sh" "$BIN_DIR/sync-agent-work.sh" "$BIN_DIR/node-hygiene.sh" \

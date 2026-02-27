@@ -32,6 +32,7 @@ resolve_model_from_invocation() {
   bn="$(basename "$0")"
   case "$bn" in
     Qwen3) echo "Qwen3" ;;
+    Qwen3.5) echo "Qwen3.5" ;;
     BGEen) echo "BGEen" ;;
     *) echo "Qwen3" ;;
   esac
@@ -76,7 +77,7 @@ load_model_defaults() {
 
   # 3) model-kind defaults
   case "$m" in
-    Qwen3)
+    Qwen3|Qwen3.5)
       # shellcheck disable=SC1091
       . "$SCRIPT_DIR/defaults/llm-defaults.sh"
       ;;
@@ -105,13 +106,13 @@ require_non_empty() {
 }
 
 validate_model_settings() {
-  local common=(MODEL_PROFILE MODEL MODEL_KIND PORT HOST THREADS THREADS_BATCH CTX_SIZE GPU_LAYERS BATCH_SIZE UBATCH_SIZE)
+  local common=(MODEL_PROFILE MODEL MODEL_TYPE PORT HOST THREADS THREADS_BATCH CTX_SIZE GPU_LAYERS BATCH_SIZE UBATCH_SIZE)
   local v
   for v in "${common[@]}"; do
     require_non_empty "$v"
   done
 
-  case "$MODEL_KIND" in
+  case "$MODEL_TYPE" in
     llm)
       if [[ "${USE_CUSTOM_TEMPLATE:-0}" == "1" ]]; then
         require_non_empty CHAT_TEMPLATE
@@ -126,7 +127,7 @@ validate_model_settings() {
 print_model_settings() {
   echo "modelctl settings ($model_name)"
   echo "  MODEL_PROFILE=$MODEL_PROFILE"
-  echo "  MODEL_KIND=$MODEL_KIND"
+  echo "  MODEL_TYPE=$MODEL_TYPE"
   echo "  MODEL=$MODEL"
   [[ -n "${MMPROJ:-}" ]] && echo "  MMPROJ=$MMPROJ"
   echo "  PORT=$PORT"
@@ -137,17 +138,23 @@ print_model_settings() {
   echo "  GPU_LAYERS=$GPU_LAYERS"
   echo "  BATCH_SIZE=$BATCH_SIZE"
   echo "  UBATCH_SIZE=$UBATCH_SIZE"
+  echo "  TEMP=${TEMP:-}"
+  echo "  TOP_P=${TOP_P:-}"
+  echo "  TOP_K=${TOP_K:-}"
+  echo "  MIN_P=${MIN_P:-}"
+  echo "  PRESENCE_PENALTY=${PRESENCE_PENALTY:-}"
+  echo "  REPEAT_PENALTY=${REPEAT_PENALTY:-}"
   echo "  USE_NO_WEBUI=${USE_NO_WEBUI:-0}"
   echo "  USE_NO_MMAP=${USE_NO_MMAP:-0}"
   echo "  USE_MLOCK=${USE_MLOCK:-0}"
   echo "  VERBOSE_PROMPT=${VERBOSE_PROMPT:-0}"
-  if [[ "$MODEL_KIND" == "embedding" ]]; then
+  if [[ "$MODEL_TYPE" == "embedding" ]]; then
     echo "  POOLING=${POOLING:-}"
     if [[ "${MODEL_PROFILE:-}" == "bge-small-en" && "${CTX_SIZE:-0}" -gt 512 ]]; then
       echo "  WARNING=bge-small-en effective context is 512; higher CTX_SIZE may be ignored by runtime"
     fi
   fi
-  if [[ "$MODEL_KIND" == "llm" ]]; then
+  if [[ "$MODEL_TYPE" == "llm" ]]; then
     echo "  USE_CUSTOM_TEMPLATE=${USE_CUSTOM_TEMPLATE:-0}"
     if [[ "${USE_CUSTOM_TEMPLATE:-0}" == "1" ]]; then
       echo "  CHAT_TEMPLATE=${CHAT_TEMPLATE:-}"
@@ -162,7 +169,7 @@ resolve_args "${1:-}" "${2:-}"
 if ! is_action "$action"; then
   echo "Invalid action: $action" >&2
   echo "Usage: $(basename "$0") [start|stop|restart|status|settings]" >&2
-  echo "   or: modelctl [Qwen3|BGEen] [start|stop|restart|status|settings]" >&2
+  echo "   or: modelctl [Qwen3|Qwen3.5|BGEen] [start|stop|restart|status|settings]" >&2
   exit 2
 fi
 
@@ -207,8 +214,9 @@ start_model() {
   MODE_FLAGS=()
   DEBUG_FLAGS=()
   RUNTIME_FLAGS=()
+  SAMPLING_FLAGS=()
 
-  if [[ "$MODEL_KIND" == "llm" ]]; then
+  if [[ "$MODEL_TYPE" == "llm" ]]; then
     if [[ -n "${MMPROJ:-}" && -f "$MMPROJ" ]]; then
       MM_FLAGS+=(--mmproj "$MMPROJ")
     fi
@@ -228,6 +236,13 @@ start_model() {
     if [[ "${USE_NO_WEBUI:-1}" == "1" ]]; then
       RUNTIME_FLAGS+=(--no-webui)
     fi
+
+    [[ -n "${TEMP:-}" ]] && SAMPLING_FLAGS+=(--temp "$TEMP")
+    [[ -n "${TOP_P:-}" ]] && SAMPLING_FLAGS+=(--top-p "$TOP_P")
+    [[ -n "${TOP_K:-}" ]] && SAMPLING_FLAGS+=(--top-k "$TOP_K")
+    [[ -n "${MIN_P:-}" ]] && SAMPLING_FLAGS+=(--min-p "$MIN_P")
+    [[ -n "${PRESENCE_PENALTY:-}" ]] && SAMPLING_FLAGS+=(--presence-penalty "$PRESENCE_PENALTY")
+    [[ -n "${REPEAT_PENALTY:-}" ]] && SAMPLING_FLAGS+=(--repeat-penalty "$REPEAT_PENALTY")
   else
     MODE_FLAGS+=(--embedding --pooling "$POOLING" --mmap)
     if [[ "${USE_NO_WEBUI:-1}" == "1" ]]; then
@@ -246,6 +261,7 @@ start_model() {
     --host "$HOST" \
     --threads "$THREADS" \
     --threads-batch "$THREADS_BATCH" \
+    "${SAMPLING_FLAGS[@]}" \
     "${RUNTIME_FLAGS[@]}" \
     "${TEMPLATE_FLAGS[@]}" \
     "${DEBUG_FLAGS[@]}" \

@@ -152,11 +152,10 @@ Tool policy:
 - Do not call `tts` unless explicitly asked for voice/audio.
 - Final output: normal assistant text only.
 - Do not emit pseudo-tags (`<system>`, `</system>`) or execution preambles (e.g., "Executing web_search...").
-- Include `Reasoning:` only if the user explicitly requests reasoning.
+- Do not include reasoning for tool calls.
 - For web-search answers, provide concise bullets with source links.
 When not calling tools:
 - Give a direct assistant answer in normal text.
-- If the last tool was `web_search`, include concise bullets with links from the returned results.
 <|im_end|>
 {%- endif -%}
 

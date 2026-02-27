@@ -6,9 +6,17 @@ if [[ "${1:-}" == "--sync" ]]; then
   MODE="sync"
 fi
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MANIFEST_FILE="${MANIFEST_FILE:-$SCRIPT_DIR/runtime-links.manifest}"
+
 BIN_DIR="${BIN_DIR:-$HOME/bin}"
 REPO_DIR="${REPO_DIR:-$HOME/projects/agent-work}"
 mkdir -p "$BIN_DIR"
+
+if [[ ! -f "$MANIFEST_FILE" ]]; then
+  echo "Manifest not found: $MANIFEST_FILE" >&2
+  exit 2
+fi
 
 link_one() {
   local target="$1"
@@ -23,15 +31,18 @@ link_one() {
   fi
 }
 
-link_one "$BIN_DIR/gateway" "$REPO_DIR/scripts/gateway"
-link_one "$BIN_DIR/proxy" "$REPO_DIR/scripts/proxy"
-link_one "$BIN_DIR/openclaw-stack" "$REPO_DIR/scripts/openclaw-stack"
-link_one "$BIN_DIR/openclaw-report" "$REPO_DIR/scripts/openclaw-report.sh"
-link_one "$BIN_DIR/sync-agent-work" "$REPO_DIR/scripts/sync-agent-work.sh"
-link_one "$BIN_DIR/openai-proxy-tap" "$REPO_DIR/bin/openai-proxy-tap"
-link_one "$BIN_DIR/Qwen3" "$REPO_DIR/scripts/Qwen3"
-link_one "$BIN_DIR/BGEen" "$REPO_DIR/scripts/BGEen"
-link_one "$BIN_DIR/node-hygiene" "$REPO_DIR/bin/node-hygiene.sh"
+while IFS='|' read -r target_rel src_rel; do
+  [[ -z "${target_rel:-}" ]] && continue
+  [[ "$target_rel" =~ ^[[:space:]]*# ]] && continue
+
+  target="$BIN_DIR/$target_rel"
+  src="$REPO_DIR/$src_rel"
+  if [[ ! -e "$src" ]]; then
+    echo "SKIP_MISSING_SOURCE: $target -> $src" >&2
+    continue
+  fi
+  link_one "$target" "$src"
+done < "$MANIFEST_FILE"
 
 # Remove deprecated names in BIN_DIR only.
 for old in \
