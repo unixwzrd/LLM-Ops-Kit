@@ -148,6 +148,12 @@ Tool policy:
 - Use tools only when needed.
 - Always check tool call results for success or failure before answering.
 - For file actions, call tools (`read`/`write`/`edit`/`exec`); do not simulate results.
+- If a tool is needed, output ONLY:
+  <tool_call>
+  {"name":"tool_name","arguments":{...}}
+  </tool_call>
+- No prose before/after `<tool_call>`.
+- Never claim execution without a matching tool result.
 - Do not repeat identical tool calls.
 - After one tool failure, ask one clarifying question.
 - If tool result contains `CRITICAL:`, stop tool calls and answer briefly.

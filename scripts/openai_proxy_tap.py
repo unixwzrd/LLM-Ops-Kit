@@ -319,14 +319,6 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
         )
 
         self._write_framed_log(
-            self.raw_response_log_path,
-            utc_now(),
-            request_id,
-            f"RAW_RESPONSE status={status}",
-            resp_text,
-        )
-
-        self._write_framed_log(
             self.raw_request_log_path,
             request_start_ts,
             request_id,
@@ -469,6 +461,14 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
         if resp_truncated and resp_text is not None:
             resp_text = resp_text + "\n<truncated>"
             resp_json = None
+
+        self._write_framed_log(
+            self.raw_response_log_path,
+            utc_now(),
+            request_id,
+            f"RAW_RESPONSE status={status}",
+            resp_text,
+        )
 
         self._write_log(
             {

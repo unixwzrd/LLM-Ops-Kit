@@ -189,12 +189,15 @@ status_model() {
   if pid="$(read_pid "$pid_name" 2>/dev/null)"; then
     if is_pid_running "$pid"; then
       echo "$pid_name: running pid=$pid log=$model_log_file"
+      print_model_settings
       return 0
     fi
     echo "$pid_name: stale pid=$pid log=$model_log_file"
+    print_model_settings
     return 1
   fi
   echo "$pid_name: stopped log=$model_log_file"
+  print_model_settings
   return 1
 }
 
