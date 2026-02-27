@@ -3,6 +3,17 @@
 **Created**: 2026-02-20
 **Updated**: 2026-02-26
 
+- [Operational Workflow (Phase 1)](#operational-workflow-phase-1)
+  - [Repo Boundary Rules](#repo-boundary-rules)
+  - [Context Bootstrapping Flow](#context-bootstrapping-flow)
+  - [Script Operations](#script-operations)
+  - [Deployment Reference](#deployment-reference)
+  - [Commit Cadence](#commit-cadence)
+  - [Backup Mode](#backup-mode)
+  - [Reporting](#reporting)
+  - [Remote Policy](#remote-policy)
+  - [Review Cadence](#review-cadence)
+  - [Changelog Discipline](#changelog-discipline)
 
 ## Repo Boundary Rules
 

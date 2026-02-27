@@ -3,6 +3,22 @@
 **Created**: 2026-02-22
 **Updated**: 2026-02-26
 
+- [OpenAI Proxy Tap Runbook](#openai-proxy-tap-runbook)
+  - [Purpose](#purpose)
+  - [Start Proxy (Default)](#start-proxy-default)
+  - [Start Proxy With Rendered Prompt Logging](#start-proxy-with-rendered-prompt-logging)
+  - [Strict Flush Mode](#strict-flush-mode)
+  - [Direct Logs (No jq)](#direct-logs-no-jq)
+  - [jq Parse Pattern (Important)](#jq-parse-pattern-important)
+  - [Live Traffic View](#live-traffic-view)
+  - [Role / Tool Summary View](#role--tool-summary-view)
+  - [Rendered Prompt (Human Readable)](#rendered-prompt-human-readable)
+  - [Rendered Prompt (Only Body)](#rendered-prompt-only-body)
+  - [Extract Latest Rendered Prompt To File](#extract-latest-rendered-prompt-to-file)
+  - [Framed Raw Request Stream](#framed-raw-request-stream)
+  - [Full Pretty Request/Response Blocks](#full-pretty-requestresponse-blocks)
+  - [Troubleshooting](#troubleshooting)
+  - [Clean Restart + 3-Request Validation](#clean-restart--3-request-validation)
 
 ## Purpose
 

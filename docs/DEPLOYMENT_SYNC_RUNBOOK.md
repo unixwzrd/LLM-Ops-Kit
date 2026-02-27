@@ -3,6 +3,21 @@
 **Created**: 2026-02-24
 **Updated**: 2026-02-26
 
+- [Deployment + Sync Runbook](#deployment--sync-runbook)
+  - [Purpose](#purpose)
+  - [Preconditions](#preconditions)
+  - [1) Sync Code](#1-sync-code)
+  - [2) Runtime Link Manifest](#2-runtime-link-manifest)
+  - [3) Deploy Runtime Links on Remote](#3-deploy-runtime-links-on-remote)
+  - [4) Verify Runtime Links on Remote](#4-verify-runtime-links-on-remote)
+  - [5) Runtime Commands (Action-Based)](#5-runtime-commands-action-based)
+  - [6) Key Notes](#6-key-notes)
+  - [7) SSH Agent Safety](#7-ssh-agent-safety)
+  - [8) Troubleshooting](#8-troubleshooting)
+    - [A) `declare -A: invalid option`](#a-declare--a-invalid-option)
+    - [B) `mkpath: Operation not supported`](#b-mkpath-operation-not-supported)
+    - [C) Password prompts unexpectedly](#c-password-prompts-unexpectedly)
+  - [9) Post-Compaction Audit Drift Check](#9-post-compaction-audit-drift-check)
 
 ## Purpose
 
@@ -119,3 +134,28 @@ Destination path is invalid for that host. Use home-relative target:
 ### C) Password prompts unexpectedly
 
 New shell likely missing loaded key. Re-run `ssh-agent` + `ssh-add` with TTL.
+
+## 9) Post-Compaction Audit Drift Check
+
+If OpenClaw injects a warning like `Post-Compaction Audit`, extract the missing required startup-file patterns from logs:
+
+```bash
+# Gateway log (canonical)
+rg -n "Post-Compaction Audit|required startup files were not read|  - " ~/.openclaw/logs/gateway.log
+
+# Rendered proxy prompt/response stream (optional)
+rg -n "Post-Compaction Audit|required startup files were not read|  - " ~/.openclaw/logs/openai-proxy.rendered.log
+
+# Compact view: only missing file/pattern lines
+rg -n "Post-Compaction Audit|required startup files were not read|  - " ~/.openclaw/logs/gateway.log \
+  | sed -n '/Post-Compaction Audit/,+6p'
+```
+
+Current OpenClaw runtime default required reads (as of 2026-02-27) include:
+
+- `WORKFLOW_AUTO.md`
+- `memory/\\d{4}-\\d{2}-\\d{2}\\.md`
+
+Recommended compatibility fix:
+
+- Keep a lightweight `~/OpenClaw-workspace/WORKFLOW_AUTO.md` stub so compaction audits do not spam chat.

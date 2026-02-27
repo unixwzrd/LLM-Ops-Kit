@@ -3,6 +3,18 @@
 **Created**: 2026-02-26
 **Updated**: 2026-02-26
 
+- [Adding a New Model Profile](#adding-a-new-model-profile)
+  - [Goal](#goal)
+  - [1) Start from a template (recommended)](#1-start-from-a-template-recommended)
+  - [2) Set required model profile values](#2-set-required-model-profile-values)
+  - [3) Add invocation mapping in modelctl](#3-add-invocation-mapping-in-modelctl)
+  - [4) Create launcher symlink](#4-create-launcher-symlink)
+  - [5) Auto-generate runtime link manifest](#5-auto-generate-runtime-link-manifest)
+  - [6) Deploy and verify links](#6-deploy-and-verify-links)
+  - [7) Template workflow](#7-template-workflow)
+  - [8) Validate profile before start](#8-validate-profile-before-start)
+  - [9) Optional: add provider model entry in `.openclaw/openclaw.json`](#9-optional-add-provider-model-entry-in-openclawopenclawjson)
+
 ## Goal
 
 Add a new model command (example: `MyModel`) using existing `modelctl` architecture.

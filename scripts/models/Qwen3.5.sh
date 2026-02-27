@@ -17,7 +17,8 @@ THREADS="${THREADS:-$(default_threads)}"
 THREADS_BATCH="${THREADS_BATCH:-$THREADS}"
 
 # llama.cpp sizing (Qwen3.5-tuned defaults)
-CTX_SIZE="${CTX_SIZE:-49152}"
+#CTX_SIZE="${CTX_SIZE:-49152}"
+CTX_SIZE="${CTX_SIZE:-65536}"
 GPU_LAYERS="${GPU_LAYERS:-99}"
 BATCH_SIZE="${BATCH_SIZE:-768}"
 UBATCH_SIZE="${UBATCH_SIZE:-512}"
@@ -29,10 +30,14 @@ DIRECT_IO="${DIRECT_IO:-1}"
 USE_NO_WEBUI="${USE_NO_WEBUI:-1}"
 
 # Prompt/template settings
+VERBOSE_PROMPT="${VERBOSE_PROMPT:-0}"
 USE_CUSTOM_TEMPLATE="${USE_CUSTOM_TEMPLATE:-1}"
 QWEN35_TEMPLATE_MODE="${QWEN35_TEMPLATE_MODE:-stable}"
 if [[ -z "${CHAT_TEMPLATE:-}" ]]; then
   case "$QWEN35_TEMPLATE_MODE" in
+    std)
+      CHAT_TEMPLATE="/Users/miafour/projects/agent-work/scripts/templates/Qwen3.5-std-chatml-tools.jinja"
+      ;;
     new)
       CHAT_TEMPLATE="/Users/miafour/projects/agent-work/scripts/templates/Qwen3.5-chatml-tools.jinja"
       ;;
@@ -41,7 +46,11 @@ if [[ -z "${CHAT_TEMPLATE:-}" ]]; then
       ;;
   esac
 fi
-VERBOSE_PROMPT="${VERBOSE_PROMPT:-0}"
+
+# !!!!! TEMP DEBUG OVERRIDE (REMOVE AFTER TOOL-CALL VALIDATION) !!!!!
+# Force baseline tool-calling template regardless of mode/env to isolate template issues.
+# TODO(remove): Delete this override block once tool calls are stable again.
+CHAT_TEMPLATE="/Users/miafour/projects/agent-work/scripts/templates/Qwen3.5-toolcall-baseline.jinja"
 
 # Sampling presets (overridable by env)
 QWEN35_PRESET="${QWEN35_PRESET:-thinking-general}"

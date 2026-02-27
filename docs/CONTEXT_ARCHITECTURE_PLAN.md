@@ -3,6 +3,16 @@
 **Created**: 2026-02-24
 **Updated**: 2026-02-26
 
+- [Context Architecture Plan](#context-architecture-plan)
+  - [Goal](#goal)
+  - [Scope](#scope)
+  - [Canonical Routing Model](#canonical-routing-model)
+  - [Bootstrap Model](#bootstrap-model)
+  - [Context File Layout (Current)](#context-file-layout-current)
+  - [Privacy and Access Model](#privacy-and-access-model)
+  - [Prune-Time Refresh Model](#prune-time-refresh-model)
+  - [Migration Notes](#migration-notes)
+  - [Validation Checklist](#validation-checklist)
 
 ## Goal
 

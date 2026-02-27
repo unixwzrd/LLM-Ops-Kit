@@ -3,6 +3,15 @@
 **Created**: 2026-02-20
 **Updated**: 2026-02-26
 
+- [Contract: `scripts/backup/export-sanitized.sh` (Design Only)](#contract-scriptsbackupexport-sanitizedsh-design-only)
+  - [Status](#status)
+  - [Goal](#goal)
+  - [Inputs](#inputs)
+  - [Output](#output)
+  - [Exclude by Default](#exclude-by-default)
+  - [Include by Default](#include-by-default)
+  - [Non-Goals (Phase 1)](#non-goals-phase-1)
+
 ## Status
 
 Design contract only (not implemented in phase 1).

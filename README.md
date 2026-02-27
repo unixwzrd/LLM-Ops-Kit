@@ -10,6 +10,22 @@ Operational toolkit for running, deploying, and maintaining a local OpenClaw sta
 
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-informational)](#) [![Shell](https://img.shields.io/badge/Shell-bash-blue)](#) [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
+- [OpenClaw-Ops-Kit](#openclaw-ops-kit)
+  - [Why This Repo Exists](#why-this-repo-exists)
+  - [Requirements](#requirements)
+  - [Quick Start](#quick-start)
+  - [Runtime Command Surface](#runtime-command-surface)
+  - [Link Management (Single Source of Truth)](#link-management-single-source-of-truth)
+  - [Model Profiles](#model-profiles)
+  - [Packaging Status](#packaging-status)
+  - [Documentation Map](#documentation-map)
+  - [Repository Scope](#repository-scope)
+  - [Contributing](#contributing)
+  - [Support This Work](#support-this-work)
+  - [Contact](#contact)
+  - [License](#license)
+
+
 ## Why This Repo Exists
 
 `OpenClaw-Ops-Kit` is the operator layer around a local OpenClaw install:
@@ -113,7 +129,7 @@ A future optional path is to add `pyproject.toml` and package wrappers for insta
 - [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) — symptom-driven fixes
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — component and runtime flow overview
 - [`docs/GLOSSARY.md`](docs/GLOSSARY.md) — core terms used across docs
-- [`docs/SAFE_PUBLISH_CHECKLIST.md`](docs/SAFE_PUBLISH_CHECKLIST.md) — pre-publish safety checks
+- [`docs/SAFE_PUBLISH_CHECKLIST.md`](docs/internal/SAFE_PUBLISH_CHECKLIST.md) — pre-publish safety checks
 - [`docs/scripts/README.md`](docs/scripts/README.md) — per-command script guides
 
 ## Repository Scope

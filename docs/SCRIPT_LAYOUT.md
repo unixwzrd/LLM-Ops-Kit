@@ -3,7 +3,6 @@
 **Created**: 2026-02-20
 **Updated**: 2026-02-26
 
-
 Canonical script home:
 
 - `~/projects/agent-work/scripts`

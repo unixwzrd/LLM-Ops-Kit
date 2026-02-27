@@ -3,6 +3,16 @@
 **Created**: 2026-02-26
 **Updated**: 2026-02-26
 
+- [modelctl Guide](#modelctl-guide)
+  - [Purpose](#purpose)
+  - [Commands](#commands)
+  - [Precedence Order (highest -\> lowest)](#precedence-order-highest---lowest)
+  - [How model type is selected](#how-model-type-is-selected)
+  - [Template behavior](#template-behavior)
+  - [Sampling behavior](#sampling-behavior)
+  - [Validation rules](#validation-rules)
+  - [Where logs/pids live](#where-logspids-live)
+
 ## Purpose
 
 `modelctl` is the canonical launcher used by runtime commands like `Qwen3`, `Qwen3.5`, and `BGEen`.

@@ -3,6 +3,15 @@
 **Created**: 2026-02-26
 **Updated**: 2026-02-26
 
+- [SSH Setup Runbook](#ssh-setup-runbook)
+  - [Goal](#goal)
+  - [1) Create a dedicated deploy key (local)](#1-create-a-dedicated-deploy-key-local)
+  - [2) Load key with TTL](#2-load-key-with-ttl)
+  - [3) Install public key on remote](#3-install-public-key-on-remote)
+  - [4) Verify key auth](#4-verify-key-auth)
+  - [5) Deploy + verify runtime links (remote bash 5)](#5-deploy--verify-runtime-links-remote-bash-5)
+  - [6) Remove key from agent after deployment](#6-remove-key-from-agent-after-deployment)
+  - [Troubleshooting](#troubleshooting)
 
 ## Goal
 

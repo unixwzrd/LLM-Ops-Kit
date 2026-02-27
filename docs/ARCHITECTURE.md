@@ -3,6 +3,12 @@
 **Created**: 2026-02-26
 **Updated**: 2026-02-26
 
+- [Architecture Overview](#architecture-overview)
+  - [Components](#components)
+  - [Flow](#flow)
+  - [Script architecture](#script-architecture)
+  - [Deployment model](#deployment-model)
+
 ## Components
 
 - OpenClaw runtime (`gateway`)

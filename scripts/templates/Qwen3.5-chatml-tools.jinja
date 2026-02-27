@@ -112,9 +112,9 @@
 {%- endmacro -%}
 
 {%- if system_prompt -%}
-    <|im_start|>system
-    {{ system_prompt }}
-    <|im_end|>
+<|im_start|>system
+{{ system_prompt }}
+<|im_end|>
 {%- endif -%}
 
 {%- set ns_tool = namespace(total=0) -%}
@@ -137,32 +137,38 @@
 
 {%- if tools and (tools | length) > 0 -%}
 <|im_start|>system
-Make tool calls when needed.
-Available tools:
-    {%- for t in tools %}
-        {%- set fn = t.function if t.function is defined else t %}
-        - {{ fn.name }}
-    {%- endfor %}
+# Tools
 
-Tool policy:
-- Use tools only when needed.
-- Always check tool call results for success or failure before answering.
-- For file actions, call tools (`read`/`write`/`edit`/`exec`); do not simulate results.
-- If a tool is needed, output ONLY:
-  <tool_call>
-  {"name":"tool_name","arguments":{...}}
-  </tool_call>
-- No prose before/after `<tool_call>`.
-- Never claim execution without a matching tool result.
-- Do not repeat identical tool calls.
-- After one tool failure, ask one clarifying question.
-- If tool result contains `CRITICAL:`, stop tool calls and answer briefly.
-- Call `tts` only when explicitly asked for voice/audio.
-- No think or reasoning text for tool calls.
-- Final answers are plain assistant text (no pseudo-tags).
-- For web_search answers, use concise bullets with source links.
-When not calling tools:
-- Give a direct assistant answer in normal text.
+You have access to the following functions:
+
+<tools>
+    {%- for t in tools %}
+{{ "\n" }}{{ t | tojson }}
+    {%- endfor %}
+{{ "\n" }}</tools>
+
+If you choose to call a function ONLY reply in the following format with NO suffix:
+
+<tool_call>
+<function=example_function_name>
+<parameter=example_parameter_1>
+value_1
+</parameter>
+<parameter=example_parameter_2>
+This is the value for the second parameter
+that can span
+multiple lines
+</parameter>
+</function>
+</tool_call>
+
+<IMPORTANT>
+Reminder:
+- Function calls MUST follow the specified format: an inner <function=...></function> block must be nested within <tool_call></tool_call> XML tags
+- Required parameters MUST be specified
+- You may provide optional reasoning for your function call in natural language BEFORE the function call, but NOT after
+- If there is no function call available, answer the question like normal with your current knowledge and do not tell the user about function calls
+</IMPORTANT>
 <|im_end|>
 {%- endif -%}
 
@@ -177,7 +183,7 @@ When not calling tools:
             {%- endif -%}
         {%- endfor -%}
         {%- if m.content or (INCLUDE_TOOL_CALL_HISTORY and ns.has_non_tts) -%}
-            <|im_start|>assistant
+<|im_start|>assistant
             {%- if m.content %}
                 {{ render_content(m.content, 'assistant') }}
             {%- endif -%}
@@ -191,30 +197,30 @@ When not calling tools:
                     {%- endif -%}
                 {%- endfor -%}
             {%- endif -%}
-            <|im_end|>
+<|im_end|>
         {%- endif -%}
     {%- elif m.role == 'tool' -%}
         {%- set tool_text = render_content(m.content, 'tool') -%}
         {%- if not ('[[audio_as_voice]]' in tool_text or 'MEDIA:/tmp/openclaw/tts-' in tool_text) -%}
             {%- set ns_seen.tool = ns_seen.tool + 1 -%}
             {%- if ns_seen.tool > (ns_tool.total - TOOL_HISTORY_LIMIT) -%}
-                <|im_start|>tool
-                {{ tool_text[:TOOL_CONTENT_MAX] }}
+<|im_start|>tool
+{{ tool_text[:TOOL_CONTENT_MAX] }}
                 {%- if tool_text|length > TOOL_CONTENT_MAX %}
                 [tool content truncated for context safety]
                 {%- endif %}
-                <|im_end|>
+<|im_end|>
             {%- endif -%}
         {%- endif -%}
     {%- else -%}
         {%- if m.content is not none -%}
-            <|im_start|>{{ m.role }}
-            {{ render_content(m.content, m.role) }}
-            <|im_end|>
+<|im_start|>{{ m.role }}
+{{ render_content(m.content, m.role) }}
+<|im_end|>
         {%- endif -%}
     {%- endif -%}
 {%- endfor -%}
 
 {%- if add_generation_prompt | default(true) -%}
-    <|im_start|>assistant
+<|im_start|>assistant
 {%- endif -%}
