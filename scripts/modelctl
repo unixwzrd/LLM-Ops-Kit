@@ -147,6 +147,7 @@ print_model_settings() {
   echo "  USE_NO_WEBUI=${USE_NO_WEBUI:-0}"
   echo "  USE_NO_MMAP=${USE_NO_MMAP:-0}"
   echo "  USE_MLOCK=${USE_MLOCK:-0}"
+  echo "  DIRECT_IO=${DIRECT_IO:-0}"
   echo "  VERBOSE_PROMPT=${VERBOSE_PROMPT:-0}"
   if [[ "$MODEL_TYPE" == "embedding" ]]; then
     echo "  POOLING=${POOLING:-}"
@@ -236,6 +237,13 @@ start_model() {
     if [[ "${USE_NO_WEBUI:-1}" == "1" ]]; then
       RUNTIME_FLAGS+=(--no-webui)
     fi
+    if [[ "${DIRECT_IO:-0}" == "1" ]]; then
+      if /usr/local/bin/llama-server --help 2>&1 | rg -q -- '--direct-io'; then
+        RUNTIME_FLAGS+=(--direct-io)
+      else
+        echo "WARNING: DIRECT_IO=1 but llama-server does not support --direct-io; skipping."
+      fi
+    fi
 
     [[ -n "${TEMP:-}" ]] && SAMPLING_FLAGS+=(--temp "$TEMP")
     [[ -n "${TOP_P:-}" ]] && SAMPLING_FLAGS+=(--top-p "$TOP_P")
@@ -247,6 +255,13 @@ start_model() {
     MODE_FLAGS+=(--embedding --pooling "$POOLING" --mmap)
     if [[ "${USE_NO_WEBUI:-1}" == "1" ]]; then
       RUNTIME_FLAGS+=(--no-webui)
+    fi
+    if [[ "${DIRECT_IO:-0}" == "1" ]]; then
+      if /usr/local/bin/llama-server --help 2>&1 | rg -q -- '--direct-io'; then
+        RUNTIME_FLAGS+=(--direct-io)
+      else
+        echo "WARNING: DIRECT_IO=1 but llama-server does not support --direct-io; skipping."
+      fi
     fi
   fi
 

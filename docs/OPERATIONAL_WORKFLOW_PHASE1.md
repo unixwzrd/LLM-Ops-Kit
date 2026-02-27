@@ -1,5 +1,9 @@
 # Operational Workflow (Phase 1)
 
+**Created**: 2026-02-20
+**Updated**: 2026-02-26
+
+
 ## Repo Boundary Rules
 
 - `.openclaw`: local-only, no remote push.

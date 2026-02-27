@@ -9,7 +9,7 @@ MODEL_PROFILE="${MODEL_PROFILE:-Qwen3_5}"
 # Model artifacts
 MODEL="${MODEL:-$HOME/LLM_Repository/Qwen3.5-35B-A3B-GGUF/Qwen3.5-35B-A3B-Q8_0.gguf}"
 MMPROJ="${MMPROJ:-$HOME/LLM_Repository/Qwen3.5-35B-A3B-GGUF/mmproj-BF16.gguf}"
-PORT="${PORT:-11436}"
+PORT="${PORT:-11434}"
 
 # Runtime/network
 HOST="${HOST:-0.0.0.0}"
@@ -25,6 +25,7 @@ UBATCH_SIZE="${UBATCH_SIZE:-512}"
 # Runtime feature flags
 USE_MLOCK="${USE_MLOCK:-1}"
 USE_NO_MMAP="${USE_NO_MMAP:-1}"
+DIRECT_IO="${DIRECT_IO:-1}"
 USE_NO_WEBUI="${USE_NO_WEBUI:-1}"
 
 # Prompt/template settings

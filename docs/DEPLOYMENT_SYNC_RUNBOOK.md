@@ -1,5 +1,9 @@
 # Deployment + Sync Runbook
 
+**Created**: 2026-02-24
+**Updated**: 2026-02-26
+
+
 ## Purpose
 
 Deploy `agent-work` changes safely to another host and keep runtime commands consistent using user-local links (`$HOME/bin`) only.
@@ -25,7 +29,15 @@ Equivalent explicit form:
 rsync -avz --delete ~/projects/agent-work/ <host>:~/projects/agent-work/
 ```
 
-## 2) Deploy Runtime Links on Remote
+## 2) Runtime Link Manifest
+
+Link definitions are now centralized in:
+
+`~/projects/agent-work/scripts/runtime-links.manifest`
+
+The manifest is auto-generated from launcher symlinks via `scripts/generate-manifest` (also run by `sync-agent-work`). Deploy and verify consume this file.
+
+## 3) Deploy Runtime Links on Remote
 
 Use explicit remote bash path:
 
@@ -33,13 +45,13 @@ Use explicit remote bash path:
 ssh <host> '/usr/local/bin/bash ~/projects/agent-work/scripts/deploy-runtime-links.sh'
 ```
 
-## 3) Verify Runtime Links on Remote
+## 4) Verify Runtime Links on Remote
 
 ```bash
 ssh <host> '/usr/local/bin/bash ~/projects/agent-work/scripts/verify-runtime-links.sh'
 ```
 
-## 4) Runtime Commands (Action-Based)
+## 5) Runtime Commands (Action-Based)
 
 All commands are extensionless and action-driven.
 
@@ -47,6 +59,7 @@ All commands are extensionless and action-driven.
 ~/bin/gateway [start|stop|restart|status]
 ~/bin/proxy [start|stop|restart|status]
 ~/bin/Qwen3 [start|stop|restart|status]
+~/bin/Qwen3.5 [start|stop|restart|status]
 ~/bin/BGEen [start|stop|restart|status]
 ~/bin/openclaw-stack [start|stop|restart|status] [all|gateway|llm|embedding|proxy|models]
 ~/bin/openclaw-report
@@ -62,13 +75,13 @@ Typical bring-up order:
 ~/bin/BGEen start
 ```
 
-## 5) Key Notes
+## 6) Key Notes
 
 - Link management is intentionally limited to `$HOME/bin` for host portability.
 - No `/Volumes/...` assumptions in deploy/verify scripts.
 - If remote default bash is too old, run scripts with `/usr/local/bin/bash` explicitly.
 
-## 6) SSH Agent Safety
+## 7) SSH Agent Safety
 
 Load deploy key for short window only:
 
@@ -85,9 +98,10 @@ ssh-add -d ~/.ssh/id_ed25519_misfour_deploy
 ssh-add -D
 ```
 
-## 7) Troubleshooting
+## 8) Troubleshooting
 
 ### A) `declare -A: invalid option`
+
 Run scripts with remote bash 5:
 
 ```bash
@@ -95,6 +109,7 @@ ssh <host> '/usr/local/bin/bash ~/projects/agent-work/scripts/verify-runtime-lin
 ```
 
 ### B) `mkpath: Operation not supported`
+
 Destination path is invalid for that host. Use home-relative target:
 
 ```bash
@@ -102,4 +117,5 @@ Destination path is invalid for that host. Use home-relative target:
 ```
 
 ### C) Password prompts unexpectedly
+
 New shell likely missing loaded key. Re-run `ssh-agent` + `ssh-add` with TTL.

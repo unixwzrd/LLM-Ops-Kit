@@ -555,27 +555,6 @@ tools/*
 **/secrets*
 identity/device-auth.json
 
-# OpenClaw runtime/state hygiene (privacy-first)
-# Keep curated config/docs/scripts tracked; ignore volatile/auth/session state.
-agents/*/agent/auth-profiles.json
-agents/*/sessions/*.jsonl
-agents/*/sessions/*.jsonl.bak-*
-agents/*/sessions/sessions.json
-agents/*/sessions/sessions.json.bak-*
-credentials/*.json
-devices/paired.json
-identity/device.json
-identity/device-auth.json
-cron/*.bak
-telegram/update-offset-*.json
-update-check.json
-openclaw.json.bak*
-memory/*.sqlite
-memory/*.sqlite-*
-agents/*/qmd/
-backups/node-home-project-20260220-033113/
-devices/paired.json
-agents/main/agent/auth-profiles.json
-agents/main/sessions/sessions.json
-devices/paired.json
-telegram/update-offset-default.json
+docs/internal/
+docs/reports/
+*.local.md

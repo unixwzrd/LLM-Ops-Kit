@@ -1,5 +1,9 @@
 # OpenAI Proxy Tap Runbook
 
+**Created**: 2026-02-22
+**Updated**: 2026-02-26
+
+
 ## Purpose
 
 Capture what OpenClaw sends to the model with enough observability to debug prompt shaping, tool-call flow, retries, and timeouts.

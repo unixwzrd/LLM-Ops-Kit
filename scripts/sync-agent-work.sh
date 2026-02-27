@@ -13,6 +13,7 @@ LOCAL_DIR="${SYNC_LOCAL_DIR:-$HOME/projects/agent-work/}"
 DELETE_MODE=0
 DRY_RUN=0
 NO_AGENT=0
+NO_MANIFEST=0
 QUIET=0
 
 usage() {
@@ -29,6 +30,7 @@ Options:
   --delete                 Enable rsync --delete
   --dry-run                Enable rsync --dry-run
   --no-agent               Don't auto-start/load ssh-agent
+  --no-manifest            Skip runtime-links.manifest auto-generation
   --quiet                  Less output
   -h, --help               Show this help
 
@@ -53,6 +55,7 @@ while [[ $# -gt 0 ]]; do
     --delete) DELETE_MODE=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     --no-agent) NO_AGENT=1; shift ;;
+    --no-manifest) NO_MANIFEST=1; shift ;;
     --quiet) QUIET=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage; exit 2 ;;
@@ -60,6 +63,17 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -d "$LOCAL_DIR" ]] || { echo "Local dir missing: $LOCAL_DIR" >&2; exit 1; }
+
+if [[ "$NO_MANIFEST" -eq 0 ]]; then
+  generator="$LOCAL_DIR/scripts/generate-manifest"
+  if [[ -x "$generator" ]]; then
+    log "Refreshing runtime-links.manifest from launcher symlinks"
+    "$generator"
+  else
+    log "Skipping manifest refresh (generator missing): $generator"
+  fi
+fi
+
 [[ -f "$KEY_PATH" ]] || { echo "SSH key missing: $KEY_PATH" >&2; exit 1; }
 
 AGENT_STARTED=0

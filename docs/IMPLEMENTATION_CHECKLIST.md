@@ -1,5 +1,9 @@
 # Implementation Checklist
 
+**Created**: 2026-02-24
+**Updated**: 2026-02-26
+
+
 Use this checklist to control change scope and avoid drift while refactoring context + runtime scripts.
 
 ## Phase 0 - Freeze Window

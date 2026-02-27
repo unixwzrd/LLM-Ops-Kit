@@ -1,5 +1,9 @@
 # Local Commit Conventions
 
+**Created**: 2026-02-20
+**Updated**: 2026-02-26
+
+
 Use short prefix tags for local history readability:
 
 - `hygiene:` ignore rules, tracking policy, scrub actions

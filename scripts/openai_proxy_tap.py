@@ -25,7 +25,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
 
 try:
@@ -207,6 +207,7 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
     chat_template_error: str | None = None
     raw_request_log_path: Path | None = None
     rendered_prompt_log_path: Path | None = None
+    raw_response_log_path: Path | None = None
 
     protocol_version = "HTTP/1.1"
 
@@ -289,7 +290,11 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
             rendered_prompt_error = self.chat_template_error
 
         request_text_log = req_text
-        if request_text_log is not None and len(request_text_log.encode("utf-8", errors="ignore")) > self.max_log_bytes:
+        if (
+            self.max_log_bytes > 0
+            and request_text_log is not None
+            and len(request_text_log.encode("utf-8", errors="ignore")) > self.max_log_bytes
+        ):
             request_text_log = request_text_log[: self.max_log_bytes] + "\n<truncated>"
 
         # Immediate event so you can see the request while upstream is still processing.
@@ -311,6 +316,14 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
                 "rendered_prompt_error": rendered_prompt_error,
                 "request_rewrite": request_rewrite,
             }
+        )
+
+        self._write_framed_log(
+            self.raw_response_log_path,
+            utc_now(),
+            request_id,
+            f"RAW_RESPONSE status={status}",
+            resp_text,
         )
 
         self._write_framed_log(
@@ -353,6 +366,9 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
         def _capture_chunk(chunk: bytes) -> None:
             nonlocal resp_truncated
             if resp_truncated:
+                return
+            if self.max_log_bytes <= 0:
+                resp_capture.extend(chunk)
                 return
             budget = self.max_log_bytes - len(resp_capture)
             if budget <= 0:
@@ -500,34 +516,68 @@ class ForkingHTTPServer(socketserver.ForkingMixIn, HTTPServer):
     allow_reuse_address = True
 
 
+def normalize_upstream(raw: str) -> tuple[str, int]:
+    value = (raw or "").strip()
+    if not value:
+        raise ValueError("upstream is required")
+
+    if "://" not in value:
+        value = f"http://{value}"
+
+    parsed = urlparse(value)
+    if parsed.scheme not in {"http", "https"}:
+        raise ValueError("upstream scheme must be http or https")
+    if not parsed.hostname or parsed.port is None:
+        raise ValueError("upstream must include host:port")
+    if parsed.query or parsed.fragment:
+        raise ValueError("upstream must not include query/fragment")
+
+    path = parsed.path.rstrip("/")
+    normalized = f"{parsed.scheme}://{parsed.netloc}{path}"
+    return normalized, int(parsed.port)
+
+
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="OpenAI-compatible reverse proxy tap")
     p.add_argument("--listen-host", default="127.0.0.1")
-    p.add_argument("--listen-port", type=int, default=18080)
-    p.add_argument("--upstream", required=True, help="Upstream base URL, e.g. http://10.0.0.67:11434")
-    p.add_argument("--log", required=True, help="NDJSON log file path")
-    p.add_argument("--timeout", type=float, default=120.0)
-    p.add_argument("--max-log-bytes", type=int, default=200000)
+    p.add_argument("--listen-port", "--port", dest="listen_port", type=int, help="Listen port (default: upstream port)")
+    p.add_argument("--upstream", required=True, help="Upstream host:port or URL, e.g. 10.0.0.67:11434")
+    p.add_argument("--log", default="~/.openclaw/logs/openai-proxy.ndjson", help="NDJSON log file path")
+    p.add_argument("--timeout", type=float, default=900.0)
+    p.add_argument("--max-log-bytes", type=int, default=0, help="Per-request capture cap in bytes; 0 means unlimited")
     p.add_argument("--stream-chunk-size", type=int, default=65536)
     p.add_argument("--chat-template", help="Optional Jinja chat template path to render/log final prompt text.")
     p.add_argument("--chat-template-max-chars", type=int, default=200000)
-    p.add_argument("--raw-request-log", help="Optional plain-text framed log path for raw request_text per request_start")
-    p.add_argument("--rendered-prompt-log", help="Optional plain-text framed log path for rendered_prompt per request_start")
+    p.add_argument("--raw-request-log", default="~/.openclaw/logs/openai-proxy.requests.log", help="Optional plain-text framed log path for raw request_text per request_start")
+    p.add_argument("--rendered-prompt-log", default="~/.openclaw/logs/openai-proxy.rendered.log", help="Optional plain-text framed log path for rendered_prompt per request_start")
+    p.add_argument("--raw-response-log", help="Optional plain-text framed log path for response body per request_end")
     p.set_defaults(log_fsync=True)
     p.add_argument("--log-fsync", dest="log_fsync", action="store_true", help="Force fsync after each log line write (default: on)")
     p.add_argument("--no-log-fsync", dest="log_fsync", action="store_false", help="Disable fsync after each log line write")
     p.add_argument(
         "--latest-image-only",
         action="store_true",
+        default=True,
         help="Keep image_url parts only on the latest user message that contains one.",
+    )
+    p.add_argument(
+        "--no-latest-image-only",
+        dest="latest_image_only",
+        action="store_false",
+        help="Disable latest-image-only filtering.",
     )
     return p.parse_args()
 
 
 def main() -> int:
     args = parse_args()
+    try:
+        upstream_base, upstream_port = normalize_upstream(args.upstream)
+    except ValueError as e:
+        raise SystemExit(f"Invalid --upstream: {e}")
+    listen_port = int(args.listen_port) if args.listen_port is not None else upstream_port
 
-    ProxyTapHandler.upstream_base = args.upstream
+    ProxyTapHandler.upstream_base = upstream_base
     ProxyTapHandler.log_path = Path(os.path.expanduser(args.log))
     ProxyTapHandler.max_log_bytes = int(args.max_log_bytes)
     ProxyTapHandler.timeout_sec = float(args.timeout)
@@ -540,6 +590,7 @@ def main() -> int:
     ProxyTapHandler.chat_template_error = None
     ProxyTapHandler.raw_request_log_path = Path(os.path.expanduser(args.raw_request_log)) if args.raw_request_log else None
     ProxyTapHandler.rendered_prompt_log_path = Path(os.path.expanduser(args.rendered_prompt_log)) if args.rendered_prompt_log else None
+    ProxyTapHandler.raw_response_log_path = Path(os.path.expanduser(args.raw_response_log)) if args.raw_response_log else None
 
     if args.chat_template:
         if jinja2 is None:
@@ -558,10 +609,10 @@ def main() -> int:
             except Exception as e:
                 ProxyTapHandler.chat_template_error = f"TemplateLoadError: {e}"
 
-    server = ForkingHTTPServer((args.listen_host, args.listen_port), ProxyTapHandler)
+    server = ForkingHTTPServer((args.listen_host, listen_port), ProxyTapHandler)
     print(
-        f"openai-proxy-tap listening on http://{args.listen_host}:{args.listen_port} "
-        f"-> {args.upstream} (forking, log: {ProxyTapHandler.log_path}, raw_log={ProxyTapHandler.raw_request_log_path}, rendered_log={ProxyTapHandler.rendered_prompt_log_path}, latest_image_only={ProxyTapHandler.latest_image_only}, log_fsync={ProxyTapHandler.log_fsync}, stream_chunk_size={ProxyTapHandler.stream_chunk_size}, chat_template={ProxyTapHandler.chat_template_path})",
+        f"openai-proxy-tap listening on http://{args.listen_host}:{listen_port} "
+        f"-> {upstream_base} (forking, log: {ProxyTapHandler.log_path}, raw_log={ProxyTapHandler.raw_request_log_path}, rendered_log={ProxyTapHandler.rendered_prompt_log_path}, raw_response_log={ProxyTapHandler.raw_response_log_path}, latest_image_only={ProxyTapHandler.latest_image_only}, log_fsync={ProxyTapHandler.log_fsync}, stream_chunk_size={ProxyTapHandler.stream_chunk_size}, max_log_bytes={ProxyTapHandler.max_log_bytes}, chat_template={ProxyTapHandler.chat_template_path})",
         flush=True,
     )
 

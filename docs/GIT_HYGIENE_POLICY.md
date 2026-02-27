@@ -1,5 +1,9 @@
 # Git Hygiene Policy (Phase 1)
 
+**Created**: 2026-02-20
+**Updated**: 2026-02-26
+
+
 ## Purpose
 Balance rollback/recovery with privacy/security while agent behavior is still evolving.
 

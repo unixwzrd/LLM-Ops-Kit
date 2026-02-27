@@ -1,5 +1,9 @@
 # Context Architecture Plan
 
+**Created**: 2026-02-24
+**Updated**: 2026-02-26
+
+
 ## Goal
 
 Provide deterministic, channel-keyed context bootstrapping with strict private-scope isolation while keeping prompt size stable as contexts grow.

@@ -23,6 +23,7 @@ UBATCH_SIZE="${UBATCH_SIZE:-512}"
 # Embedding-specific
 POOLING="${POOLING:-mean}"
 USE_NO_MMAP="${USE_NO_MMAP:-0}"
+DIRECT_IO="${DIRECT_IO:-0}"
 USE_NO_WEBUI="${USE_NO_WEBUI:-1}"
 
 # Prompt/template settings (typically unused for embeddings)

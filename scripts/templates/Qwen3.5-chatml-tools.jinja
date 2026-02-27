@@ -145,15 +145,16 @@ Available tools:
     {%- endfor %}
 
 Tool policy:
-- Do not repeat the same tool call with identical arguments.
-- After a useful tool result, answer directly unless the user asked for another action.
-- After one tool failure, do not blind-retry; ask one clarifying question.
-- If a tool result contains `CRITICAL:` loop/circuit-breaker text, stop tool calls and answer briefly.
-- Do not call `tts` unless explicitly asked for voice/audio.
-- Final output: normal assistant text only.
-- Do not emit pseudo-tags (`<system>`, `</system>`) or execution preambles (e.g., "Executing web_search...").
-- Do not include reasoning for tool calls.
-- For web-search answers, provide concise bullets with source links.
+- Use tools only when needed.
+- Always check tool call results for success or failure before answering.
+- For file actions, call tools (`read`/`write`/`edit`/`exec`); do not simulate results.
+- Do not repeat identical tool calls.
+- After one tool failure, ask one clarifying question.
+- If tool result contains `CRITICAL:`, stop tool calls and answer briefly.
+- Call `tts` only when explicitly asked for voice/audio.
+- No think or reasoning text for tool calls.
+- Final answers are plain assistant text (no pseudo-tags).
+- For web_search answers, use concise bullets with source links.
 When not calling tools:
 - Give a direct assistant answer in normal text.
 <|im_end|>

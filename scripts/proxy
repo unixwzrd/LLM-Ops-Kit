@@ -12,6 +12,30 @@ SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
 . "$SCRIPT_DIR/lib/common.sh"
 
 action="${1:-status}"
+shift || true
+
+usage() {
+  cat <<USAGE
+Usage: proxy [start|stop|restart|status] [options]
+
+Options:
+  start/restart: all options are passed through directly to openai-proxy-tap.
+  stop: use --force for SIGKILL.
+  -h, --help: show this help.
+
+Examples:
+  proxy start
+  proxy restart --upstream http://10.0.0.67:11434
+  proxy restart --listen-port 11434 --upstream http://10.0.0.67:11434
+USAGE
+}
+
+if [[ "$action" == "-h" || "$action" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+extra_args=("$@")
 
 start_proxy() {
   load_shell_env
@@ -25,15 +49,14 @@ start_proxy() {
   LOG_OUT="$OPENCLAW_LOG_DIR/openai-proxy-tap.log"
   LOG_ERR="$OPENCLAW_LOG_DIR/openai-proxy-tap.err.log"
 
-  nohup /Users/miafour/projects/agent-work/bin/openai-proxy-tap > "$LOG_OUT" 2> "$LOG_ERR" &
+  nohup /Users/miafour/projects/agent-work/bin/openai-proxy-tap "${extra_args[@]}" > "$LOG_OUT" 2> "$LOG_ERR" &
   pid="$!"
   write_pid proxy "$pid"
   echo "proxy: started pid=$pid"
 }
 
 stop_proxy() {
-  force="${2:-}"
-  if [[ "$force" == "--force" ]]; then
+  if [[ " ${extra_args[*]} " == *" --force "* ]]; then
     pf="$(pid_file_for proxy)"
     if [[ -f "$pf" ]]; then
       pid="$(cat "$pf")"
@@ -53,7 +76,78 @@ stop_proxy() {
 status_proxy() {
   if pid="$(read_pid proxy 2>/dev/null)"; then
     if is_pid_running "$pid"; then
+      cmd="$(ps -o command= -p "$pid" 2>/dev/null || true)"
       echo "proxy: running pid=$pid"
+      if [[ -n "$cmd" ]]; then
+        parsed="$(python3 - "$cmd" <<'PY'
+import shlex
+import sys
+import urllib.parse
+import urllib.request
+
+cmd = sys.argv[1] if len(sys.argv) > 1 else ""
+parts = shlex.split(cmd)
+
+def get(name):
+    for i, p in enumerate(parts):
+        if p == name and i + 1 < len(parts):
+            return parts[i + 1]
+        if p.startswith(name + "="):
+            return p.split("=", 1)[1]
+    return ""
+
+listen_host = get("--listen-host")
+listen_port = get("--listen-port") or get("--port")
+upstream = get("--upstream")
+log = get("--log")
+tmpl = get("--chat-template")
+raw_req = get("--raw-request-log")
+rendered = get("--rendered-prompt-log")
+raw_resp = get("--raw-response-log")
+
+if not listen_host:
+    listen_host = "127.0.0.1"
+
+if upstream and not listen_port:
+    u = upstream if "://" in upstream else "http://" + upstream
+    try:
+        p = urllib.parse.urlparse(u)
+        listen_port = str(p.port or "")
+    except Exception:
+        pass
+if not log:
+    log = "~/.openclaw/logs/openai-proxy.ndjson"
+if not raw_req:
+    raw_req = "~/.openclaw/logs/openai-proxy.requests.log"
+if not rendered:
+    rendered = "~/.openclaw/logs/openai-proxy.rendered.log"
+
+health = "unknown"
+health_detail = ""
+if listen_port:
+    try:
+        with urllib.request.urlopen(f"http://{listen_host}:{listen_port}/v1/models", timeout=2.0) as r:
+            health = "ok" if 200 <= int(r.status) < 300 else "down"
+            health_detail = f"http_status={int(r.status)}"
+    except Exception as e:
+        health = "down"
+        health_detail = str(e)
+
+print(f"listen_host={listen_host}")
+print(f"listen_port={listen_port or '<from-upstream/default>'}")
+print(f"upstream={upstream or '<unset>'}")
+print(f"log={log}")
+print(f"chat_template={tmpl or '<none/default>'}")
+print(f"raw_request_log={raw_req}")
+print(f"rendered_prompt_log={rendered}")
+print(f"raw_response_log={raw_resp or '<off>'}")
+print(f"health={health}")
+if health_detail:
+    print(f"health_detail={health_detail}")
+PY
+)" || true
+        printf '%s\n' "$parsed" | sed 's/^/  /'
+      fi
       return 0
     fi
     echo "proxy: stale pid=$pid"
@@ -65,8 +159,11 @@ status_proxy() {
 
 case "$action" in
   start) start_proxy ;;
-  stop) stop_proxy "$@" ;;
-  restart) stop_proxy "$@" || true; start_proxy ;;
+  stop) stop_proxy ;;
+  restart) stop_proxy || true; start_proxy ;;
   status) status_proxy ;;
-  *) echo "Usage: proxy [start|stop|restart|status] [--force]" >&2; exit 2 ;;
+  *)
+    usage
+    exit 2
+    ;;
 esac

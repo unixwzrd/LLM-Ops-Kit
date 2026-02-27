@@ -26,6 +26,7 @@ UBATCH_SIZE="${UBATCH_SIZE:-512}"
 # Runtime feature flags
 USE_MLOCK="${USE_MLOCK:-1}"
 USE_NO_MMAP="${USE_NO_MMAP:-1}"
+DIRECT_IO="${DIRECT_IO:-0}"
 USE_NO_WEBUI="${USE_NO_WEBUI:-1}"
 
 # Prompt/template settings
