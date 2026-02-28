@@ -229,18 +229,27 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
             if self.log_fsync:
                 os.fsync(f.fileno())
 
-    def _write_framed_log(self, path: Path | None, ts: str, request_id: str, label: str, body: str | None) -> None:
+    def _write_framed_log(
+        self,
+        path: Path | None,
+        ts_start: str,
+        request_id: str,
+        label: str,
+        body: str | None,
+        ts_end: str | None = None,
+    ) -> None:
         if path is None:
             return
         path.parent.mkdir(parents=True, exist_ok=True)
         text = body or ""
+        end_ts = ts_end or ts_start
         with path.open("a", encoding="utf-8", buffering=1) as f:
-            f.write(f"{ts}\t{request_id}\t{label}\n")
-            f.write("================ REQUEST START ================\n")
+            f.write(f"{ts_start}\t{request_id}\t{label}\n")
+            f.write(f"=== {label} START {ts_start} ===\n")
             f.write(text)
             if not text.endswith("\n"):
                 f.write("\n")
-            f.write("================= REQUEST END =================\n\n")
+            f.write(f"=== {label} END {end_ts} ===\n\n")
             f.flush()
             if self.log_fsync:
                 os.fsync(f.fileno())
@@ -325,13 +334,21 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
             "RAW_REQUEST",
             request_text_log,
         )
-        if self.chat_template_path:
+        if self.chat_template_path and rendered_prompt is not None:
             self._write_framed_log(
                 self.rendered_prompt_log_path,
                 request_start_ts,
                 request_id,
                 "RENDERED_PROMPT",
-                rendered_prompt if rendered_prompt is not None else rendered_prompt_error,
+                rendered_prompt,
+            )
+        elif self.chat_template_path and rendered_prompt_error:
+            self._write_framed_log(
+                self.rendered_prompt_log_path,
+                request_start_ts,
+                request_id,
+                "TEMPLATE_ERROR",
+                rendered_prompt_error,
             )
 
         fwd_headers: dict[str, str] = {}
@@ -462,18 +479,20 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
             resp_text = resp_text + "\n<truncated>"
             resp_json = None
 
+        response_end_ts = utc_now()
         self._write_framed_log(
             self.raw_response_log_path,
-            utc_now(),
+            request_start_ts,
             request_id,
             f"RAW_RESPONSE status={status}",
             resp_text,
+            ts_end=response_end_ts,
         )
 
         self._write_log(
             {
                 "event": "request_end",
-                "ts": utc_now(),
+                "ts": response_end_ts,
                 "duration_ms": int((time.time() - started) * 1000),
                 "request_id": request_id,
                 "pid": os.getpid(),
@@ -548,7 +567,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--stream-chunk-size", type=int, default=65536)
     p.add_argument("--chat-template", help="Optional Jinja chat template path to render/log final prompt text.")
     p.add_argument("--chat-template-max-chars", type=int, default=200000)
-    p.add_argument("--raw-request-log", default="~/.openclaw/logs/openai-proxy.requests.log", help="Optional plain-text framed log path for raw request_text per request_start")
+    p.add_argument("--raw-log", help="Optional combined plain-text framed log path (request + response in sequence).")
+    p.add_argument("--raw-request-log", help="Optional plain-text framed log path for raw request_text per request_start")
     p.add_argument("--rendered-prompt-log", default="~/.openclaw/logs/openai-proxy.rendered.log", help="Optional plain-text framed log path for rendered_prompt per request_start")
     p.add_argument("--raw-response-log", help="Optional plain-text framed log path for response body per request_end")
     p.set_defaults(log_fsync=True)
@@ -588,9 +608,26 @@ def main() -> int:
     ProxyTapHandler.chat_template_max_chars = int(args.chat_template_max_chars)
     ProxyTapHandler.chat_template_renderer = None
     ProxyTapHandler.chat_template_error = None
-    ProxyTapHandler.raw_request_log_path = Path(os.path.expanduser(args.raw_request_log)) if args.raw_request_log else None
+    raw_log_path = Path(os.path.expanduser(args.raw_log)) if args.raw_log else None
+    raw_request_log_path = Path(os.path.expanduser(args.raw_request_log)) if args.raw_request_log else None
+    raw_response_log_path = Path(os.path.expanduser(args.raw_response_log)) if args.raw_response_log else None
+
+    # Default behavior: keep request/response framed logs together in one sequential file.
+    if raw_request_log_path is None and raw_response_log_path is None and raw_log_path is None:
+        raw_request_log_path = Path(os.path.expanduser("~/.openclaw/logs/openai-proxy.raw.log"))
+        raw_response_log_path = raw_request_log_path
+    else:
+        if raw_log_path is not None:
+            if raw_request_log_path is None:
+                raw_request_log_path = raw_log_path
+            if raw_response_log_path is None:
+                raw_response_log_path = raw_log_path
+        if raw_request_log_path is not None and raw_response_log_path is None:
+            raw_response_log_path = raw_request_log_path
+
+    ProxyTapHandler.raw_request_log_path = raw_request_log_path
     ProxyTapHandler.rendered_prompt_log_path = Path(os.path.expanduser(args.rendered_prompt_log)) if args.rendered_prompt_log else None
-    ProxyTapHandler.raw_response_log_path = Path(os.path.expanduser(args.raw_response_log)) if args.raw_response_log else None
+    ProxyTapHandler.raw_response_log_path = raw_response_log_path
 
     if args.chat_template:
         if jinja2 is None:

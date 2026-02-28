@@ -1,7 +1,8 @@
+
 # OpenAI Proxy Tap Runbook
 
 **Created**: 2026-02-22
-**Updated**: 2026-02-26
+**Updated**: 2026-02-28
 
 - [OpenAI Proxy Tap Runbook](#openai-proxy-tap-runbook)
   - [Purpose](#purpose)
@@ -16,6 +17,7 @@
   - [Rendered Prompt (Only Body)](#rendered-prompt-only-body)
   - [Extract Latest Rendered Prompt To File](#extract-latest-rendered-prompt-to-file)
   - [Framed Raw Request Stream](#framed-raw-request-stream)
+  - [Combined Raw File (Recommended)](#combined-raw-file-recommended)
   - [Full Pretty Request/Response Blocks](#full-pretty-requestresponse-blocks)
   - [Troubleshooting](#troubleshooting)
   - [Clean Restart + 3-Request Validation](#clean-restart--3-request-validation)
@@ -32,11 +34,11 @@ Capture what OpenClaw sends to the model with enough observability to debug prom
 
 Default wrapper values (`~/bin/openai-proxy-tap`):
 
-- `UPSTREAM=http://10.0.0.67:11434`
+- `UPSTREAM=http://10.0..67:11434`
 - `LISTEN_HOST=127.0.0.1`
 - `LISTEN_PORT=18080`
 - `LOG_PATH=~/.openclaw/logs/openai-proxy.ndjson`
-- `RAW_REQUEST_LOG=~/.openclaw/logs/openai-proxy.requests.log`
+- `RAW_LOG=~/.openclaw/logs/openai-proxy.raw.log` (combined request + response)
 - `RENDERED_PROMPT_LOG=~/.openclaw/logs/openai-proxy.rendered.log`
 - `LATEST_IMAGE_ONLY=1`
 - `LOG_FSYNC=0`
@@ -44,7 +46,7 @@ Default wrapper values (`~/bin/openai-proxy-tap`):
 Sample output:
 
 ```text
-[openai-proxy-tap] listening on 127.0.0.1:18080 -> http://10.0.0.67:11434
+openai-proxy-tap listening on http://127.0.0.1:18080 -> http://10.0.0.67:11434 ...
 ```
 
 ## Start Proxy With Rendered Prompt Logging
@@ -53,11 +55,7 @@ Sample output:
 ~/bin/openai-proxy-tap --chat-template ~/projects/agent-work/scripts/templates/chatml-tools.jinja
 ```
 
-Sample output:
-
-```text
-[openai-proxy-tap] chat template loaded: /Users/miafour/projects/agent-work/scripts/templates/chatml-tools.jinja
-```
+Note: template-load status is reflected in NDJSON fields (`rendered_prompt` / `rendered_prompt_error`).
 
 ## Strict Flush Mode
 
@@ -65,24 +63,20 @@ Sample output:
 LOG_FSYNC=1 ~/bin/openai-proxy-tap
 ```
 
-Sample output:
-
-```text
-[openai-proxy-tap] fsync enabled
-```
+No special banner is guaranteed for fsync mode; verify by expected log durability behavior.
 
 ## Direct Logs (No jq)
 
 ```bash
-tail -F ~/.openclaw/logs/openai-proxy.requests.log
+tail -F ~/.openclaw/logs/openai-proxy.raw.log
 ```
 
 Sample output:
 
 ```text
-=== REQUEST START 2026-02-23T23:57:36.210Z ===
+=== RAW_REQUEST START 2026-02-23T23:57:36.210Z ===
 {"model":"Qwen3...","messages":[...],"tools":[...]}
-=== REQUEST END ===
+=== RAW_REQUEST END 2026-02-23T23:57:36.210Z ===
 ```
 
 ```bash
@@ -92,11 +86,11 @@ tail -F ~/.openclaw/logs/openai-proxy.rendered.log
 Sample output:
 
 ```text
-=== RENDERED PROMPT START 2026-02-23T23:57:36.210Z ===
+=== RENDERED_PROMPT START 2026-02-23T23:57:36.210Z ===
 <|im_start|>system
 ...
 <|im_start|>assistant
-=== RENDERED PROMPT END ===
+=== RENDERED_PROMPT END 2026-02-23T23:57:36.210Z ===
 ```
 
 ## jq Parse Pattern (Important)
@@ -152,15 +146,16 @@ Sample output:
 tail -F ~/.openclaw/logs/openai-proxy.ndjson | jq --unbuffered -r '
   (fromjson? // .)
   | select(.event=="request_start" and .path=="/v1/chat/completions")
-  | [
-      .ts,
-      "=== RENDERED PROMPT ===",
-      (.rendered_prompt // ""),
-      "=== TEMPLATE ERROR ===",
-      (.rendered_prompt_error // ""),
-      ""
-    ]
-  | join("\n")'
+  | .ts as $ts
+  | if (.rendered_prompt // "") != "" then
+      [$ts, "=== RENDERED_PROMPT ===", .rendered_prompt, ""]
+    elif (.rendered_prompt_error // "") != "" then
+      [$ts, "=== TEMPLATE_ERROR ===", .rendered_prompt_error, ""]
+    else
+      [$ts, "=== RENDERED_PROMPT ===", "<empty>", ""]
+    end
+  | join("\n")
+'
 ```
 
 Sample output:
@@ -171,7 +166,6 @@ Sample output:
 <|im_start|>system
 ...
 <|im_start|>assistant
-=== TEMPLATE ERROR ===
 ```
 
 ## Rendered Prompt (Only Body)
@@ -226,6 +220,24 @@ tail -F ~/.openclaw/logs/openai-proxy.ndjson | jq --unbuffered -r '
       ""
     ]
   | join("\n")'
+```
+
+## Combined Raw File (Recommended)
+
+```bash
+tail -F ~/.openclaw/logs/openai-proxy.raw.log
+```
+
+Sample output:
+
+```text
+=== RAW_REQUEST START 2026-02-28T01:23:45.000000+00:00 ===
+{"model":"...","messages":[...]}
+=== RAW_REQUEST END 2026-02-28T01:23:45.000000+00:00 ===
+
+=== RAW_RESPONSE status=200 START 2026-02-28T01:23:45.000000+00:00 ===
+data: {...}
+=== RAW_RESPONSE status=200 END 2026-02-28T01:23:46.732000+00:00 ===
 ```
 
 Sample output:

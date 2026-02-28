@@ -14,6 +14,15 @@ SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
 action="${1:-status}"
 shift || true
 
+# Accept GNU-style action aliases (e.g. `proxy --status`).
+case "$action" in
+  --status) action="status" ;;
+  --start) action="start" ;;
+  --stop) action="stop" ;;
+  --restart) action="restart" ;;
+  --help|-h) action="--help" ;;
+esac
+
 usage() {
   cat <<USAGE
 Usage: proxy [start|stop|restart|status] [options]
@@ -37,6 +46,156 @@ fi
 
 extra_args=("$@")
 
+arg_value() {
+  # Usage: arg_value --name [--alt-name]
+  local want1="$1"
+  local want2="${2:-}"
+  local i arg next
+  for ((i = 0; i < ${#extra_args[@]}; i++)); do
+    arg="${extra_args[$i]}"
+    next="${extra_args[$((i + 1))]:-}"
+    case "$arg" in
+      "$want1"|"$want2")
+        printf '%s\n' "$next"
+        return 0
+        ;;
+      "$want1"=*|"$want2"=*)
+        printf '%s\n' "${arg#*=}"
+        return 0
+        ;;
+    esac
+  done
+  return 1
+}
+
+runtime_file() {
+  printf '%s/%s\n' "$OPENCLAW_RUN_DIR" "$1"
+}
+
+read_runtime() {
+  local name="$1"
+  local f
+  f="$(runtime_file "$name")"
+  [[ -f "$f" ]] || return 1
+  cat "$f"
+}
+
+write_runtime() {
+  local name="$1"
+  local value="$2"
+  printf '%s\n' "$value" > "$(runtime_file "$name")"
+}
+
+clear_live_runtime() {
+  rm -f \
+    "$(runtime_file proxy-live-listen-host)" \
+    "$(runtime_file proxy-live-listen-port)" \
+    "$(runtime_file proxy-live-upstream)" \
+    "$(runtime_file proxy-live-log)" \
+    "$(runtime_file proxy-live-chat-template)" \
+    "$(runtime_file proxy-live-raw-request-log)" \
+    "$(runtime_file proxy-live-rendered-prompt-log)" \
+    "$(runtime_file proxy-live-raw-response-log)"
+}
+
+extract_port_from_upstream() {
+  # Accepts forms like:
+  # - 10.0.0.67:11434
+  # - http://10.0.0.67:11434
+  # - http://user:pass@10.0.0.67:11434/v1
+  # - http://[::1]:11434/v1
+  local upstream="$1"
+  [[ -n "$upstream" ]] || return 0
+
+  local s hostport port=""
+  s="${upstream#*://}"    # strip scheme if present
+  hostport="${s%%/*}"     # strip path
+  hostport="${hostport%%\?*}"
+  hostport="${hostport%%#*}"
+  hostport="${hostport##*@}" # strip userinfo if present
+
+  if [[ "$hostport" =~ ^\[[^]]+\]:([0-9]+)$ ]]; then
+    port="${BASH_REMATCH[1]}"
+  elif [[ "$hostport" =~ :([0-9]+)$ ]]; then
+    port="${BASH_REMATCH[1]}"
+  fi
+
+  if [[ "$port" =~ ^[0-9]+$ ]]; then
+    printf '%s\n' "$port"
+  fi
+}
+
+resolve_listen_port() {
+  # Priority:
+  # 1) explicit --listen-port/--port in CLI args
+  # 2) persisted proxy-listen-port runtime file
+  # 3) upstream port in --upstream
+  local i arg next
+  for ((i = 0; i < ${#extra_args[@]}; i++)); do
+    arg="${extra_args[$i]}"
+    next="${extra_args[$((i + 1))]:-}"
+    case "$arg" in
+      --listen-port|--port)
+        if [[ "$next" =~ ^[0-9]+$ ]]; then
+          printf '%s\n' "$next"
+          return 0
+        fi
+        ;;
+      --listen-port=*|--port=*)
+        printf '%s\n' "${arg#*=}"
+        return 0
+        ;;
+    esac
+  done
+
+  local persisted_port="$OPENCLAW_RUN_DIR/proxy-listen-port"
+  if [[ -f "$persisted_port" ]]; then
+    local p
+    p="$(tr -d '[:space:]' < "$persisted_port" || true)"
+    if [[ "$p" =~ ^[0-9]+$ ]]; then
+      printf '%s\n' "$p"
+      return 0
+    fi
+  fi
+
+  for ((i = 0; i < ${#extra_args[@]}; i++)); do
+    arg="${extra_args[$i]}"
+    next="${extra_args[$((i + 1))]:-}"
+    case "$arg" in
+      --upstream)
+        if [[ -n "$next" ]]; then
+          extract_port_from_upstream "$next"
+          return 0
+        fi
+        ;;
+      --upstream=*)
+        extract_port_from_upstream "${arg#*=}"
+        return 0
+        ;;
+    esac
+  done
+}
+
+kill_port_listener() {
+  local port="$1"
+  [[ "$port" =~ ^[0-9]+$ ]] || return 0
+  command -v lsof >/dev/null 2>&1 || return 0
+
+  local pids
+  pids="$(lsof -nP -t -iTCP:"$port" -sTCP:LISTEN 2>/dev/null | tr '\n' ' ' || true)"
+  [[ -n "${pids// }" ]] || return 0
+
+  echo "proxy: killing listener(s) on port $port: $pids"
+  # shellcheck disable=SC2086
+  kill $pids >/dev/null 2>&1 || true
+  sleep 1
+  pids="$(lsof -nP -t -iTCP:"$port" -sTCP:LISTEN 2>/dev/null | tr '\n' ' ' || true)"
+  if [[ -n "${pids// }" ]]; then
+    # shellcheck disable=SC2086
+    kill -9 $pids >/dev/null 2>&1 || true
+  fi
+}
+
 start_proxy() {
   load_shell_env
   ensure_runtime_dirs
@@ -51,11 +210,49 @@ start_proxy() {
 
   nohup /Users/miafour/projects/agent-work/bin/openai-proxy-tap "${extra_args[@]}" > "$LOG_OUT" 2> "$LOG_ERR" &
   pid="$!"
+  sleep 0.4
+  if ! is_pid_running "$pid"; then
+    echo "proxy: failed to start (pid exited). recent stderr:"
+    tail -n 20 "$LOG_ERR" 2>/dev/null || true
+    return 1
+  fi
   write_pid proxy "$pid"
+  # Persist effective live settings for status output.
+  local listen_host listen_port upstream log tmpl raw_req rendered raw_resp
+  listen_host="$(arg_value --listen-host 2>/dev/null || true)"
+  listen_host="${listen_host:-127.0.0.1}"
+
+  listen_port="$(arg_value --listen-port --port 2>/dev/null || true)"
+  upstream="$(arg_value --upstream 2>/dev/null || true)"
+  if [[ -z "$listen_port" && -n "$upstream" ]]; then
+    listen_port="$(extract_port_from_upstream "$upstream" || true)"
+  fi
+
+  log="$(arg_value --log 2>/dev/null || true)"
+  log="${log:-~/.openclaw/logs/openai-proxy.ndjson}"
+  tmpl="$(arg_value --chat-template 2>/dev/null || true)"
+  raw_req="$(arg_value --raw-request-log 2>/dev/null || true)"
+  raw_req="${raw_req:-~/.openclaw/logs/openai-proxy.raw.log}"
+  rendered="$(arg_value --rendered-prompt-log 2>/dev/null || true)"
+  rendered="${rendered:-~/.openclaw/logs/openai-proxy.rendered.log}"
+  raw_resp="$(arg_value --raw-response-log 2>/dev/null || true)"
+  raw_resp="${raw_resp:-$raw_req}"
+
+  write_runtime proxy-live-listen-host "$listen_host"
+  write_runtime proxy-live-listen-port "${listen_port:-}"
+  write_runtime proxy-live-upstream "${upstream:-}"
+  write_runtime proxy-live-log "$log"
+  write_runtime proxy-live-chat-template "${tmpl:-}"
+  write_runtime proxy-live-raw-request-log "$raw_req"
+  write_runtime proxy-live-rendered-prompt-log "$rendered"
+  write_runtime proxy-live-raw-response-log "${raw_resp:-}"
+
   echo "proxy: started pid=$pid"
 }
 
 stop_proxy() {
+  local target_port
+  target_port="$(resolve_listen_port || true)"
   if [[ " ${extra_args[*]} " == *" --force "* ]]; then
     pf="$(pid_file_for proxy)"
     if [[ -f "$pf" ]]; then
@@ -71,82 +268,66 @@ stop_proxy() {
   else
     stop_by_name proxy
   fi
+  if [[ -n "${target_port:-}" ]]; then
+    kill_port_listener "$target_port"
+  fi
+  clear_live_runtime
 }
 
 status_proxy() {
   if pid="$(read_pid proxy 2>/dev/null)"; then
     if is_pid_running "$pid"; then
-      cmd="$(ps -o command= -p "$pid" 2>/dev/null || true)"
       echo "proxy: running pid=$pid"
-      if [[ -n "$cmd" ]]; then
-        parsed="$(python3 - "$cmd" <<'PY'
-import shlex
-import sys
-import urllib.parse
-import urllib.request
+      local listen_host listen_port upstream log tmpl raw_req rendered raw_resp
+      listen_host="$(read_runtime proxy-live-listen-host 2>/dev/null || true)"
+      listen_port="$(read_runtime proxy-live-listen-port 2>/dev/null || true)"
+      upstream="$(read_runtime proxy-live-upstream 2>/dev/null || true)"
+      log="$(read_runtime proxy-live-log 2>/dev/null || true)"
+      tmpl="$(read_runtime proxy-live-chat-template 2>/dev/null || true)"
+      raw_req="$(read_runtime proxy-live-raw-request-log 2>/dev/null || true)"
+      rendered="$(read_runtime proxy-live-rendered-prompt-log 2>/dev/null || true)"
+      raw_resp="$(read_runtime proxy-live-raw-response-log 2>/dev/null || true)"
 
-cmd = sys.argv[1] if len(sys.argv) > 1 else ""
-parts = shlex.split(cmd)
+      listen_host="${listen_host:-127.0.0.1}"
+      log="${log:-~/.openclaw/logs/openai-proxy.ndjson}"
+      raw_req="${raw_req:-~/.openclaw/logs/openai-proxy.raw.log}"
+      rendered="${rendered:-~/.openclaw/logs/openai-proxy.rendered.log}"
+      raw_resp="${raw_resp:-$raw_req}"
 
-def get(name):
-    for i, p in enumerate(parts):
-        if p == name and i + 1 < len(parts):
-            return parts[i + 1]
-        if p.startswith(name + "="):
-            return p.split("=", 1)[1]
-    return ""
+      local health="unknown" health_detail=""
+      if [[ -n "$listen_port" ]]; then
+        if command -v curl >/dev/null 2>&1; then
+          local code
+          code="$(curl -sS -o /dev/null -w "%{http_code}" --max-time 2 "http://${listen_host}:${listen_port}/v1/models" 2>/tmp/proxy_status_err.$$ || true)"
+          if [[ "$code" =~ ^[0-9]{3}$ ]]; then
+            if [[ "$code" -ge 200 && "$code" -lt 300 ]]; then
+              health="ok"
+            else
+              health="down"
+            fi
+            health_detail="http_status=$code"
+          else
+            health="down"
+            health_detail="$(cat /tmp/proxy_status_err.$$ 2>/dev/null || true)"
+          fi
+          rm -f /tmp/proxy_status_err.$$ >/dev/null 2>&1 || true
+        else
+          health="unknown"
+          health_detail="curl not found"
+        fi
+      fi
 
-listen_host = get("--listen-host")
-listen_port = get("--listen-port") or get("--port")
-upstream = get("--upstream")
-log = get("--log")
-tmpl = get("--chat-template")
-raw_req = get("--raw-request-log")
-rendered = get("--rendered-prompt-log")
-raw_resp = get("--raw-response-log")
-
-if not listen_host:
-    listen_host = "127.0.0.1"
-
-if upstream and not listen_port:
-    u = upstream if "://" in upstream else "http://" + upstream
-    try:
-        p = urllib.parse.urlparse(u)
-        listen_port = str(p.port or "")
-    except Exception:
-        pass
-if not log:
-    log = "~/.openclaw/logs/openai-proxy.ndjson"
-if not raw_req:
-    raw_req = "~/.openclaw/logs/openai-proxy.requests.log"
-if not rendered:
-    rendered = "~/.openclaw/logs/openai-proxy.rendered.log"
-
-health = "unknown"
-health_detail = ""
-if listen_port:
-    try:
-        with urllib.request.urlopen(f"http://{listen_host}:{listen_port}/v1/models", timeout=2.0) as r:
-            health = "ok" if 200 <= int(r.status) < 300 else "down"
-            health_detail = f"http_status={int(r.status)}"
-    except Exception as e:
-        health = "down"
-        health_detail = str(e)
-
-print(f"listen_host={listen_host}")
-print(f"listen_port={listen_port or '<from-upstream/default>'}")
-print(f"upstream={upstream or '<unset>'}")
-print(f"log={log}")
-print(f"chat_template={tmpl or '<none/default>'}")
-print(f"raw_request_log={raw_req}")
-print(f"rendered_prompt_log={rendered}")
-print(f"raw_response_log={raw_resp or '<off>'}")
-print(f"health={health}")
-if health_detail:
-    print(f"health_detail={health_detail}")
-PY
-)" || true
-        printf '%s\n' "$parsed" | sed 's/^/  /'
+      echo "  listen_host=$listen_host"
+      echo "  listen_port=${listen_port:-<from-upstream/default>}"
+      echo "  upstream=${upstream:-<unset>}"
+      echo "  log=$log"
+      echo "  chat_template=${tmpl:-<none/default>}"
+      echo "  raw_request_log=$raw_req"
+      echo "  rendered_prompt_log=$rendered"
+      echo "  raw_response_log=${raw_resp:-<off>}"
+      echo "  health=$health"
+      if [[ -n "$health_detail" ]]; then
+        echo "  health_detail=$health_detail"
       fi
       return 0
     fi

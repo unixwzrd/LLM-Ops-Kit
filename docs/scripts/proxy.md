@@ -1,35 +1,43 @@
 # proxy
 
 **Created**: 2026-02-26
-**Updated**: 2026-02-27
+**Updated**: 2026-02-28
 
 ## Purpose
+
 Manage proxy tap lifecycle for request/response visibility.
 
 ## Design
-- Thin launcher only.
-- No persisted config state.
-- Wrapper does not inject operational defaults.
-- Defaults come from `bin/openai-proxy-tap` / `scripts/openai_proxy_tap.py`.
-- `start`/`restart` pass options through directly to `openai-proxy-tap` with no wrapper-level validation.
+
+- `start`/`restart` pass options through to `openai-proxy-tap`.
+- Wrapper persists live runtime metadata under `~/.openclaw/run/proxy-live-*` for human-readable `status`.
+- Wrapper can kill stale/orphan listeners on the target listen port during `stop`/`restart`.
+- Wrapper checks startup health and fails fast if proxy exits immediately (for example, bind conflicts).
+- Defaults still come from `bin/openai-proxy-tap` / `scripts/openai_proxy_tap.py` unless overridden via CLI.
 
 ## Syntax
+
 ```bash
-~/bin/proxy [start|stop|restart|status] [--listen-host <host>] [--port <port>|--listen-port <port>] --upstream <host:port|url> [--chat-template <path>] [--no-chat-template] [--raw-response-log <path>] [--force]
+~/bin/proxy [start|stop|restart|status] [options...]
+~/bin/proxy [--start|--stop|--restart|--status] [options...]
 ```
 
 ## Examples
+
 ```bash
 ~/bin/proxy restart --upstream 10.0.0.67:11434
 ~/bin/proxy restart --port 18081 --upstream 10.0.0.67:11434
 ~/bin/proxy restart --upstream 10.0.0.67:11434 --chat-template ~/projects/agent-work/scripts/templates/Qwen3.5-chatml-tools.jinja
-~/bin/proxy restart --upstream 10.0.0.67:11434 --raw-response-log ~/.openclaw/logs/openai-proxy.responses.log
+~/bin/proxy restart --upstream 10.0.0.67:11434 --raw-log ~/.openclaw/logs/openai-proxy.raw.log
+~/bin/proxy restart --upstream 10.0.0.67:11434 --raw-request-log ~/.openclaw/logs/openai-proxy.requests.log --raw-response-log ~/.openclaw/logs/openai-proxy.responses.log
 ```
 
 ## Notes
+
 - Use `status` to check process state (`running/stopped/stale`).
-- For full runtime args, inspect process list (`ps`) and logs.
+- `status` reads persisted live settings from `~/.openclaw/run/proxy-live-*` and reports health via `/v1/models`.
 - `--upstream` is required.
 - If `--port`/`--listen-port` is omitted, proxy listens on the same port as upstream.
 - Default bind is `127.0.0.1` unless you pass `--listen-host`.
-- `status` now reports parsed live runtime details from the running proxy process.
+- `stop --force` uses SIGKILL for the pid-file process.
+- Default framed raw logging is combined into `~/.openclaw/logs/openai-proxy.raw.log` unless explicitly split.

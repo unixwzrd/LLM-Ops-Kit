@@ -3,6 +3,17 @@
 {%- set TOOL_HISTORY_LIMIT = 4 -%}
 {%- set INCLUDE_TOOL_CALL_HISTORY = false -%}
 
+{%- macro strip_think_blocks(text) -%}
+    {%- if text is not string -%}
+        {{ text }}
+    {%- elif '<think>' in text and '</think>' in text -%}
+        {# Keep only post-think assistant text in history. #}
+        {{ text.split('</think>')[-1].lstrip('\n') }}
+    {%- else -%}
+        {{ text }}
+    {%- endif -%}
+{%- endmacro -%}
+
 {%- macro clean_user_text(t) -%}
     {%- if t is string and 'Conversation info (untrusted metadata):' in t -%}
         {%- set parts = t.split('\n\n') -%}
@@ -23,7 +34,7 @@
         {%- elif role == 'user' -%}
             {{ clean_user_text(c) }}
         {%- elif role == 'assistant' -%}
-            {{ c | replace('<system>', '') | replace('</system>', '') }}
+            {{ strip_think_blocks(c) | replace('<system>', '') | replace('</system>', '') }}
         {%- else -%}
             {{ c }}
         {%- endif -%}
@@ -38,7 +49,7 @@
             {%- elif role == 'user' -%}
                 {{ clean_user_text(c.text) }}
             {%- elif role == 'assistant' -%}
-                {{ c.text | replace('<system>', '') | replace('</system>', '') }}
+                {{ strip_think_blocks(c.text) | replace('<system>', '') | replace('</system>', '') }}
             {%- else -%}
                 {{ c.text }}
             {%- endif -%}
@@ -50,7 +61,7 @@
             {%- elif role == 'user' -%}
                 {{ clean_user_text(c.text) }}
             {%- elif role == 'assistant' -%}
-                {{ c.text | replace('<system>', '') | replace('</system>', '') }}
+                {{ strip_think_blocks(c.text) | replace('<system>', '') | replace('</system>', '') }}
             {%- else -%}
                 {{ c.text }}
             {%- endif -%}
@@ -70,7 +81,7 @@
                     {%- elif role == 'user' -%}
                         {{ clean_user_text(part.text) }}
                     {%- elif role == 'assistant' -%}
-                        {{ part.text | replace('<system>', '') | replace('</system>', '') }}
+                        {{ strip_think_blocks(part.text) | replace('<system>', '') | replace('</system>', '') }}
                     {%- else -%}
                         {{ part.text }}
                     {%- endif -%}
@@ -82,7 +93,7 @@
                     {%- elif role == 'user' -%}
                         {{ clean_user_text(part.text) }}
                     {%- elif role == 'assistant' -%}
-                        {{ part.text | replace('<system>', '') | replace('</system>', '') }}
+                        {{ strip_think_blocks(part.text) | replace('<system>', '') | replace('</system>', '') }}
                     {%- else -%}
                         {{ part.text }}
                     {%- endif -%}
@@ -95,7 +106,7 @@
                 {%- elif role == 'user' -%}
                     {{ clean_user_text(part) }}
                 {%- elif role == 'assistant' -%}
-                    {{ part | replace('<system>', '') | replace('</system>', '') }}
+                    {{ strip_think_blocks(part) | replace('<system>', '') | replace('</system>', '') }}
                 {%- else -%}
                     {{ part }}
                 {%- endif -%}
