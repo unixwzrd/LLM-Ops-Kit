@@ -79,21 +79,25 @@ load_model_defaults() {
     llm)
       # shellcheck disable=SC1091
       . "$SCRIPT_DIR/defaults/llm-defaults.sh"
+      # shellcheck disable=SC1091
+      . "$SCRIPT_DIR/defaults/llama-defaults.sh"
       ;;
     embedding)
       # shellcheck disable=SC1091
       . "$SCRIPT_DIR/defaults/embedding-defaults.sh"
+      # shellcheck disable=SC1091
+      . "$SCRIPT_DIR/defaults/llama-defaults.sh"
+      ;;
+    tts)
+      # shellcheck disable=SC1091
+      . "$SCRIPT_DIR/defaults/tts-defaults.sh"
       ;;
     *)
       echo "Unknown or missing MODEL_TYPE in $model_file: ${MODEL_TYPE:-<unset>}" >&2
-      echo "Set MODEL_TYPE to llm or embedding in the model profile." >&2
+      echo "Set MODEL_TYPE to llm, embedding, or tts in the model profile." >&2
       exit 2
       ;;
   esac
-
-  # 4) global defaults
-  # shellcheck disable=SC1091
-  . "$SCRIPT_DIR/defaults/llama-defaults.sh"
 }
 
 require_non_empty() {
@@ -106,20 +110,31 @@ require_non_empty() {
 }
 
 validate_model_settings() {
-  local common=(MODEL_PROFILE MODEL MODEL_TYPE PORT HOST THREADS THREADS_BATCH CTX_SIZE GPU_LAYERS BATCH_SIZE UBATCH_SIZE)
+  local common_runtime=(MODEL_PROFILE MODEL MODEL_TYPE PORT HOST)
+  local common_llama=(THREADS THREADS_BATCH CTX_SIZE GPU_LAYERS BATCH_SIZE UBATCH_SIZE)
   local v
-  for v in "${common[@]}"; do
+  for v in "${common_runtime[@]}"; do
     require_non_empty "$v"
   done
 
   case "$MODEL_TYPE" in
     llm)
+      for v in "${common_llama[@]}"; do
+        require_non_empty "$v"
+      done
       if [[ "${USE_CUSTOM_TEMPLATE:-0}" == "1" ]]; then
         require_non_empty CHAT_TEMPLATE
       fi
       ;;
     embedding)
+      for v in "${common_llama[@]}"; do
+        require_non_empty "$v"
+      done
       require_non_empty POOLING
+      ;;
+    tts)
+      require_non_empty TTS_PYTHON_BIN
+      require_non_empty TTS_SERVER_MODULE
       ;;
   esac
 }
@@ -132,23 +147,25 @@ print_model_settings() {
   [[ -n "${MMPROJ:-}" ]] && echo "  MMPROJ=$MMPROJ"
   echo "  PORT=$PORT"
   echo "  HOST=$HOST"
-  echo "  THREADS=$THREADS"
-  echo "  THREADS_BATCH=$THREADS_BATCH"
-  echo "  CTX_SIZE=$CTX_SIZE"
-  echo "  GPU_LAYERS=$GPU_LAYERS"
-  echo "  BATCH_SIZE=$BATCH_SIZE"
-  echo "  UBATCH_SIZE=$UBATCH_SIZE"
-  echo "  TEMP=${TEMP:-}"
-  echo "  TOP_P=${TOP_P:-}"
-  echo "  TOP_K=${TOP_K:-}"
-  echo "  MIN_P=${MIN_P:-}"
-  echo "  PRESENCE_PENALTY=${PRESENCE_PENALTY:-}"
-  echo "  REPEAT_PENALTY=${REPEAT_PENALTY:-}"
-  echo "  USE_NO_WEBUI=${USE_NO_WEBUI:-0}"
-  echo "  USE_NO_MMAP=${USE_NO_MMAP:-0}"
-  echo "  USE_MLOCK=${USE_MLOCK:-0}"
-  echo "  DIRECT_IO=${DIRECT_IO:-0}"
-  echo "  VERBOSE_PROMPT=${VERBOSE_PROMPT:-0}"
+  if [[ "$MODEL_TYPE" == "llm" || "$MODEL_TYPE" == "embedding" ]]; then
+    echo "  THREADS=$THREADS"
+    echo "  THREADS_BATCH=$THREADS_BATCH"
+    echo "  CTX_SIZE=$CTX_SIZE"
+    echo "  GPU_LAYERS=$GPU_LAYERS"
+    echo "  BATCH_SIZE=$BATCH_SIZE"
+    echo "  UBATCH_SIZE=$UBATCH_SIZE"
+    echo "  TEMP=${TEMP:-}"
+    echo "  TOP_P=${TOP_P:-}"
+    echo "  TOP_K=${TOP_K:-}"
+    echo "  MIN_P=${MIN_P:-}"
+    echo "  PRESENCE_PENALTY=${PRESENCE_PENALTY:-}"
+    echo "  REPEAT_PENALTY=${REPEAT_PENALTY:-}"
+    echo "  USE_NO_WEBUI=${USE_NO_WEBUI:-0}"
+    echo "  USE_NO_MMAP=${USE_NO_MMAP:-0}"
+    echo "  USE_MLOCK=${USE_MLOCK:-0}"
+    echo "  DIRECT_IO=${DIRECT_IO:-0}"
+    echo "  VERBOSE_PROMPT=${VERBOSE_PROMPT:-0}"
+  fi
   if [[ "$MODEL_TYPE" == "embedding" ]]; then
     echo "  POOLING=${POOLING:-}"
     if [[ "${MODEL_PROFILE:-}" == "bge-small-en" && "${CTX_SIZE:-0}" -gt 512 ]]; then
@@ -160,6 +177,12 @@ print_model_settings() {
     if [[ "${USE_CUSTOM_TEMPLATE:-0}" == "1" ]]; then
       echo "  CHAT_TEMPLATE=${CHAT_TEMPLATE:-}"
     fi
+  fi
+  if [[ "$MODEL_TYPE" == "tts" ]]; then
+    echo "  TTS_PYTHON_BIN=${TTS_PYTHON_BIN:-}"
+    echo "  TTS_SERVER_MODULE=${TTS_SERVER_MODULE:-}"
+    echo "  TTS_API_KEY=${TTS_API_KEY:+<set>}"
+    echo "  TTS_SERVER_ARGS=${TTS_SERVER_ARGS:-}"
   fi
 }
 
@@ -180,10 +203,17 @@ fi
 ensure_runtime_dirs
 load_model_defaults "$model_name"
 
-THREADS_BATCH="${THREADS_BATCH:-$THREADS}"
+if [[ "$MODEL_TYPE" == "llm" || "$MODEL_TYPE" == "embedding" ]]; then
+  THREADS_BATCH="${THREADS_BATCH:-$THREADS}"
+fi
 validate_model_settings
-pid_name="llama-$MODEL_PROFILE"
-model_log_file="$OPENCLAW_LOG_DIR/llama-server-$MODEL_PROFILE.log"
+if [[ "$MODEL_TYPE" == "tts" ]]; then
+  pid_name="tts-$MODEL_PROFILE"
+  model_log_file="$OPENCLAW_LOG_DIR/tts-server-$MODEL_PROFILE.log"
+else
+  pid_name="llama-$MODEL_PROFILE"
+  model_log_file="$OPENCLAW_LOG_DIR/llama-server-$MODEL_PROFILE.log"
+fi
 
 status_model() {
   if pid="$(read_pid "$pid_name" 2>/dev/null)"; then
@@ -209,7 +239,11 @@ start_model() {
     return 0
   fi
 
-  [[ -f "$MODEL" ]] || { echo "Model not found: $MODEL" >&2; exit 1; }
+  if [[ "$MODEL_TYPE" == "llm" || "$MODEL_TYPE" == "embedding" ]]; then
+    [[ -f "$MODEL" ]] || { echo "Model not found: $MODEL" >&2; exit 1; }
+  else
+    [[ -e "$MODEL" ]] || { echo "TTS model path not found: $MODEL" >&2; exit 1; }
+  fi
 
   LOG_FILE="$model_log_file"
   EXTRA_ARGS=()
@@ -254,7 +288,7 @@ start_model() {
     [[ -n "${MIN_P:-}" ]] && SAMPLING_FLAGS+=(--min-p "$MIN_P")
     [[ -n "${PRESENCE_PENALTY:-}" ]] && SAMPLING_FLAGS+=(--presence-penalty "$PRESENCE_PENALTY")
     [[ -n "${REPEAT_PENALTY:-}" ]] && SAMPLING_FLAGS+=(--repeat-penalty "$REPEAT_PENALTY")
-  else
+  elif [[ "$MODEL_TYPE" == "embedding" ]]; then
     MODE_FLAGS+=(--embedding --pooling "$POOLING" --mmap)
     if [[ "${USE_NO_WEBUI:-1}" == "1" ]]; then
       RUNTIME_FLAGS+=(--no-webui)
@@ -266,28 +300,38 @@ start_model() {
         echo "WARNING: DIRECT_IO=1 but llama-server does not support --direct-io; skipping."
       fi
     fi
+    nohup /usr/local/bin/llama-server \
+      --model "$MODEL" \
+      "${MM_FLAGS[@]}" \
+      --ctx-size "$CTX_SIZE" \
+      --gpu-layers "$GPU_LAYERS" \
+      --batch-size "$BATCH_SIZE" \
+      --ubatch-size "$UBATCH_SIZE" \
+      --port "$PORT" \
+      --host "$HOST" \
+      --threads "$THREADS" \
+      --threads-batch "$THREADS_BATCH" \
+      "${SAMPLING_FLAGS[@]}" \
+      "${RUNTIME_FLAGS[@]}" \
+      "${TEMPLATE_FLAGS[@]}" \
+      "${DEBUG_FLAGS[@]}" \
+      --log-timestamps \
+      --log-file "$LOG_FILE" \
+      "${MODE_FLAGS[@]}" \
+      "${EXTRA_ARGS[@]}" \
+      > "$LOG_FILE" 2>&1 &
+  elif [[ "$MODEL_TYPE" == "tts" ]]; then
+    tts_cmd=( "$TTS_PYTHON_BIN" -m "$TTS_SERVER_MODULE" --host "$HOST" --port "$PORT" )
+    if [[ -n "${TTS_API_KEY:-}" ]]; then
+      tts_cmd+=( --api-key "$TTS_API_KEY" )
+    fi
+    if [[ -n "${TTS_SERVER_ARGS:-}" ]]; then
+      # shellcheck disable=SC2206
+      extra=( $TTS_SERVER_ARGS )
+      tts_cmd+=( "${extra[@]}" )
+    fi
+    nohup "${tts_cmd[@]}" > "$LOG_FILE" 2>&1 &
   fi
-
-  nohup /usr/local/bin/llama-server \
-    --model "$MODEL" \
-    "${MM_FLAGS[@]}" \
-    --ctx-size "$CTX_SIZE" \
-    --gpu-layers "$GPU_LAYERS" \
-    --batch-size "$BATCH_SIZE" \
-    --ubatch-size "$UBATCH_SIZE" \
-    --port "$PORT" \
-    --host "$HOST" \
-    --threads "$THREADS" \
-    --threads-batch "$THREADS_BATCH" \
-    "${SAMPLING_FLAGS[@]}" \
-    "${RUNTIME_FLAGS[@]}" \
-    "${TEMPLATE_FLAGS[@]}" \
-    "${DEBUG_FLAGS[@]}" \
-    --log-timestamps \
-    --log-file "$LOG_FILE" \
-    "${MODE_FLAGS[@]}" \
-    "${EXTRA_ARGS[@]}" \
-    > "$LOG_FILE" 2>&1 &
 
   pid="$!"
   write_pid "$pid_name" "$pid"

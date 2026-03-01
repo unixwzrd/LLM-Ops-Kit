@@ -1,7 +1,7 @@
 # modelctl Guide
 
 **Created**: 2026-02-26
-**Updated**: 2026-02-28
+**Updated**: 2026-03-01
 
 - [modelctl Guide](#modelctl-guide)
   - [Purpose](#purpose)
@@ -30,8 +30,8 @@ Any launcher name is supported as long as `scripts/models/<Launcher>.sh` exists.
 
 1. External environment variables (already exported)
 2. Model profile defaults (`scripts/models/<Profile>.sh`)
-3. Model-type defaults (`scripts/defaults/llm-defaults.sh` or `scripts/defaults/embedding-defaults.sh`)
-4. Global llama defaults (`scripts/defaults/llama-defaults.sh`)
+3. Model-type defaults (`scripts/defaults/llm-defaults.sh`, `scripts/defaults/embedding-defaults.sh`, or `scripts/defaults/tts-defaults.sh`)
+4. Global llama defaults (`scripts/defaults/llama-defaults.sh`) for llama-based model types only
 
 This works because defaults use `VAR="${VAR:-...}"` and do not overwrite values already set.
 
@@ -39,6 +39,7 @@ This works because defaults use `VAR="${VAR:-...}"` and do not overwrite values 
 
 - `MODEL_TYPE=llm` uses LLM path (template/sampling flags, optional `MMPROJ`).
 - `MODEL_TYPE=embedding` uses embedding path (`--embedding`, `--pooling`).
+- `MODEL_TYPE=tts` uses MLX Audio server path (`python -m mlx_audio.server`).
 
 ## Template behavior
 
@@ -71,10 +72,13 @@ Model profiles can implement preset selectors (for example `QWEN35_PRESET`) that
 - Common: `MODEL_PROFILE`, `MODEL`, `MODEL_TYPE`, `PORT`, `HOST`, `THREADS`, `THREADS_BATCH`, `CTX_SIZE`, `GPU_LAYERS`, `BATCH_SIZE`, `UBATCH_SIZE`
 - LLM with template enabled: `CHAT_TEMPLATE`
 - Embedding: `POOLING`
+- TTS: `TTS_PYTHON_BIN`, `TTS_SERVER_MODULE`
 
 ## Where logs/pids live
 
-- PID name: `llama-$MODEL_PROFILE`
-- Log file: `$OPENCLAW_LOG_DIR/llama-server-$MODEL_PROFILE.log`
+- LLM/embedding PID name: `llama-$MODEL_PROFILE`
+- LLM/embedding log file: `$OPENCLAW_LOG_DIR/llama-server-$MODEL_PROFILE.log`
+- TTS PID name: `tts-$MODEL_PROFILE`
+- TTS log file: `$OPENCLAW_LOG_DIR/tts-server-$MODEL_PROFILE.log`
 
 Use `status` to see active pid and log path.

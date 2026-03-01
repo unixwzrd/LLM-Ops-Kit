@@ -1,7 +1,7 @@
 # OpenClaw-Ops-Toolkit
 
 **Created**: 2026-02-20
-**Updated**: 2026-02-28
+**Updated**: 2026-03-01
 
 
 Operational toolkit for running, deploying, and maintaining a local OpenClaw stack across hosts.
@@ -30,7 +30,7 @@ Operational toolkit for running, deploying, and maintaining a local OpenClaw sta
 
 `OpenClaw-Ops-Toolkit` is the operator layer around a local OpenClaw install:
 
-- Unified startup/shutdown/status scripts for gateway, proxy, LLM, and embeddings
+- Unified startup/shutdown/status scripts for gateway, proxy, TTS, LLM, and embeddings
 - Model profile management (`Qwen3`, `Qwen3.5`, `BGEen`) via one launcher architecture
 - Deployment helpers for cross-host sync and runtime link management
 - Practical runbooks and changelog-driven operations
@@ -70,10 +70,12 @@ This repo is intentionally focused on **operations and reproducibility**, not ra
 ```bash
 ~/bin/gateway [start|stop|restart|status]
 ~/bin/proxy [start|stop|restart|status]
+~/bin/tts [start|stop|restart|status]
+~/bin/Qwen3TTS [start|stop|restart|status|settings]
 ~/bin/Qwen3 [start|stop|restart|status|settings]
 ~/bin/Qwen3.5 [start|stop|restart|status|settings]
 ~/bin/BGEen [start|stop|restart|status|settings]
-~/bin/openclaw-stack [start|stop|restart|status] [all|gateway|llm|embedding|proxy|models]
+~/bin/openclaw-stack [start|stop|restart|status] [all|gateway|llm|embedding|tts|proxy|models]
 ~/bin/openclaw-report
 ```
 
@@ -102,6 +104,7 @@ Current profiles:
 - `Qwen3` (LLM)
 - `Qwen3.5` (LLM, preset + template mode support)
 - `BGEen` (embeddings)
+- `Qwen3TTS` (TTS via MLX Audio server)
 
 The launcher resolves profile defaults and prints active runtime settings with:
 

@@ -9,6 +9,7 @@ MANIFEST_FILE="${MANIFEST_FILE:-$SCRIPT_DIR/runtime-links.manifest}"
 STATIC_ENTRIES=(
   "gateway|scripts/gateway"
   "proxy|scripts/proxy"
+  "tts|scripts/tts"
   "openclaw-stack|scripts/openclaw-stack"
   "openclaw-report|scripts/openclaw-report.sh"
   "sync-ops-scripts|scripts/sync-ops-scripts.sh"

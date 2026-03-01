@@ -1,7 +1,7 @@
 # Adding a New Model Profile
 
 **Created**: 2026-02-26
-**Updated**: 2026-02-26
+**Updated**: 2026-03-01
 
 - [Adding a New Model Profile](#adding-a-new-model-profile)
   - [Goal](#goal)
@@ -38,7 +38,7 @@ Then edit only model-specific values.
 
 Set at minimum:
 
-- `MODEL_TYPE` (`llm` or `embedding`)
+- `MODEL_TYPE` (`llm`, `embedding`, or `tts`)
 - `MODEL_PROFILE`
 - `MODEL`
 - `PORT`
@@ -54,6 +54,11 @@ LLM-only:
 Embedding-only:
 
 - `POOLING`
+
+TTS-only:
+
+- `TTS_PYTHON_BIN` (example `python3`)
+- `TTS_SERVER_MODULE` (example `mlx_audio.server`)
 
 ## 3) Launcher creation (automatic)
 

@@ -1,7 +1,7 @@
 # Operational Workflow (Phase 1)
 
 **Created**: 2026-02-20
-**Updated**: 2026-02-26
+**Updated**: 2026-03-01
 
 - [Operational Workflow (Phase 1)](#operational-workflow-phase-1)
   - [Repo Boundary Rules](#repo-boundary-rules)
@@ -42,6 +42,7 @@ Primary operator commands (from `~/bin`):
 - Start llm only: `~/bin/Qwen3 start`
 - Start Qwen3.5 llm: `~/bin/Qwen3.5 start`
 - Start embedding only: `~/bin/BGEen start`
+- Start TTS server: `~/bin/tts start` (or `~/bin/Qwen3TTS start`)
 - Start proxy only: `~/bin/proxy start`
 - Stop model directly: `~/bin/Qwen3 stop` / `~/bin/Qwen3.5 stop` / `~/bin/BGEen stop`
 - Stack status: `~/bin/openclaw-stack status`

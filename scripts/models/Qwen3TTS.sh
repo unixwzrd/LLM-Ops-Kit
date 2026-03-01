@@ -1,0 +1,21 @@
+# shellcheck shell=bash
+# Model-specific defaults for Qwen3 TTS (applied before model-type defaults).
+# Fill only when still unset so external env can override.
+
+# Identity/profile
+MODEL_TYPE="${MODEL_TYPE:-tts}"
+MODEL_PROFILE="${MODEL_PROFILE:-Qwen3TTS}"
+
+# Canonical model location (used by clients for /v1/audio/speech "model" value)
+MODEL="${MODEL:-$HOME/LLM_Repository/TTS/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit}"
+
+# Runtime/network
+HOST="${HOST:-127.0.0.1}"
+PORT="${PORT:-18081}"
+
+# TTS server runtime
+TTS_PYTHON_BIN="${TTS_PYTHON_BIN:-python3}"
+TTS_SERVER_MODULE="${TTS_SERVER_MODULE:-mlx_audio.server}"
+TTS_API_KEY="${TTS_API_KEY:-}"
+TTS_SERVER_ARGS="${TTS_SERVER_ARGS:-}"
+

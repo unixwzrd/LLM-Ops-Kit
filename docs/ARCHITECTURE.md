@@ -1,7 +1,7 @@
 # Architecture Overview
 
 **Created**: 2026-02-26
-**Updated**: 2026-02-26
+**Updated**: 2026-03-01
 
 - [Architecture Overview](#architecture-overview)
   - [Components](#components)
@@ -13,6 +13,7 @@
 
 - OpenClaw runtime (`gateway`)
 - OpenAI proxy tap (`proxy`)
+- TTS service (`tts` via `mlx_audio.server`)
 - LLM service (`Qwen3` / `Qwen3.5` via `llama-server`)
 - Embedding service (`BGEen` via `llama-server --embedding`)
 - Operator scripts (`OpenClaw-Ops-Toolkit/scripts`)
