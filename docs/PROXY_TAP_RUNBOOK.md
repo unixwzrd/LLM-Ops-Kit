@@ -9,7 +9,7 @@
   - [Start Proxy (Default)](#start-proxy-default)
   - [Start Proxy With Rendered Prompt Logging](#start-proxy-with-rendered-prompt-logging)
   - [Strict Flush Mode](#strict-flush-mode)
-  - [Local Example (Current Operator Setup)](#local-example-current-operator-setup)
+  - [Local Example (Template)](#local-example-template)
   - [Direct Logs (No jq)](#direct-logs-no-jq)
   - [jq Parse Pattern (Important)](#jq-parse-pattern-important)
   - [Live Traffic View](#live-traffic-view)
