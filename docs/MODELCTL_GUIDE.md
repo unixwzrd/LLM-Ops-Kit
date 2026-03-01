@@ -1,7 +1,7 @@
 # modelctl Guide
 
 **Created**: 2026-02-26
-**Updated**: 2026-02-26
+**Updated**: 2026-02-28
 
 - [modelctl Guide](#modelctl-guide)
   - [Purpose](#purpose)
@@ -16,13 +16,12 @@
 ## Purpose
 
 `modelctl` is the canonical launcher used by runtime commands like `Qwen3`, `Qwen3.5`, and `BGEen`.
+Any launcher name is supported as long as `scripts/models/<Launcher>.sh` exists.
 
 ## Commands
 
 ```bash
-~/bin/Qwen3 [start|stop|restart|status|settings]
-~/bin/Qwen3.5 [start|stop|restart|status|settings]
-~/bin/BGEen [start|stop|restart|status|settings]
+~/bin/<ModelProfile> [start|stop|restart|status|settings]
 ```
 
 ## Precedence Order (highest -> lowest)

@@ -1,7 +1,7 @@
 # proxy
 
 **Created**: 2026-02-26
-**Updated**: 2026-02-28
+**Updated**: 2026-03-01
 
 ## Purpose
 
@@ -25,11 +25,11 @@ Manage proxy tap lifecycle for request/response visibility.
 ## Examples
 
 ```bash
-~/bin/proxy restart --upstream 10.0.0.67:11434
-~/bin/proxy restart --port 18081 --upstream 10.0.0.67:11434
-~/bin/proxy restart --upstream 10.0.0.67:11434 --chat-template ~/projects/agent-work/scripts/templates/Qwen3.5-chatml-tools.jinja
-~/bin/proxy restart --upstream 10.0.0.67:11434 --raw-log ~/.openclaw/logs/openai-proxy.raw.log
-~/bin/proxy restart --upstream 10.0.0.67:11434 --raw-request-log ~/.openclaw/logs/openai-proxy.requests.log --raw-response-log ~/.openclaw/logs/openai-proxy.responses.log
+~/bin/proxy restart --upstream <upstream-host>:<upstream-port>
+~/bin/proxy restart --port <listen-port> --upstream <upstream-host>:<upstream-port>
+~/bin/proxy restart --upstream <upstream-host>:<upstream-port> --chat-template ~/projects/OpenClaw-Ops-Toolkit/scripts/templates/Qwen3.5-chatml-tools.jinja
+~/bin/proxy restart --upstream <upstream-host>:<upstream-port> --raw-log ~/.openclaw/logs/openai-proxy.raw.log
+~/bin/proxy restart --upstream <upstream-host>:<upstream-port> --raw-request-log ~/.openclaw/logs/openai-proxy.requests.log --raw-response-log ~/.openclaw/logs/openai-proxy.responses.log
 ```
 
 ## Notes

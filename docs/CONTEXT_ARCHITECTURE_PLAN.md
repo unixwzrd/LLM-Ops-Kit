@@ -21,7 +21,7 @@ Provide deterministic, channel-keyed context bootstrapping with strict private-s
 ## Scope
 
 - `OpenClaw-workspace`: canonical context routing, context metadata, context constraints, private knowledge files.
-- `agent-work`: operational/runtime scripts and backend operator documentation.
+- `OpenClaw-Ops-Toolkit`: operational/runtime scripts and backend operator documentation.
 
 ## Canonical Routing Model
 

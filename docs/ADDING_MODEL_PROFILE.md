@@ -7,13 +7,12 @@
   - [Goal](#goal)
   - [1) Start from a template (recommended)](#1-start-from-a-template-recommended)
   - [2) Set required model profile values](#2-set-required-model-profile-values)
-  - [3) Add invocation mapping in modelctl](#3-add-invocation-mapping-in-modelctl)
-  - [4) Create launcher symlink](#4-create-launcher-symlink)
-  - [5) Auto-generate runtime link manifest](#5-auto-generate-runtime-link-manifest)
-  - [6) Deploy and verify links](#6-deploy-and-verify-links)
-  - [7) Template workflow](#7-template-workflow)
-  - [8) Validate profile before start](#8-validate-profile-before-start)
-  - [9) Optional: add provider model entry in `.openclaw/openclaw.json`](#9-optional-add-provider-model-entry-in-openclawopenclawjson)
+  - [3) Launcher creation (automatic)](#3-launcher-creation-automatic)
+  - [4) Auto-generate runtime link manifest](#4-auto-generate-runtime-link-manifest)
+  - [5) Deploy and verify links](#5-deploy-and-verify-links)
+  - [6) Template workflow](#6-template-workflow)
+  - [7) Validate profile before start](#7-validate-profile-before-start)
+  - [8) Optional: add provider model entry in `.openclaw/openclaw.json`](#8-optional-add-provider-model-entry-in-openclawopenclawjson)
 
 ## Goal
 
@@ -56,33 +55,23 @@ Embedding-only:
 
 - `POOLING`
 
-## 3) Add invocation mapping in modelctl
+## 3) Launcher creation (automatic)
 
-Update `scripts/modelctl`:
+You do not need to hardcode model names in `modelctl`.
 
-- `resolve_model_from_invocation()`
-- `load_model_defaults()` case mapping for your profile name
-- usage/help text if needed
+`scripts/generate-manifest` now auto-creates `scripts/<Profile>` launchers for each `scripts/models/<Profile>.sh` file (as symlinks to `modelctl`).
 
-## 4) Create launcher symlink
-
-Create command launcher in `scripts/`:
-
-```bash
-ln -sfn modelctl ~/projects/agent-work/scripts/MyModel
-```
-
-## 5) Auto-generate runtime link manifest
+## 4) Auto-generate runtime link manifest
 
 Runtime link manifest is generated from launcher symlinks:
 
 ```bash
-~/projects/agent-work/scripts/generate-manifest
+~/projects/OpenClaw-Ops-Toolkit/scripts/generate-manifest
 ```
 
-`sync-agent-work` also runs this automatically before rsync (unless `--no-manifest` is used).
+`sync-ops-scripts` also runs this automatically before rsync (unless `--no-manifest` is used).
 
-## 6) Deploy and verify links
+## 5) Deploy and verify links
 
 ```bash
 ~/bin/deploy-runtime-links.sh
@@ -92,11 +81,11 @@ Runtime link manifest is generated from launcher symlinks:
 Remote:
 
 ```bash
-ssh <host> '/usr/local/bin/bash ~/projects/agent-work/scripts/deploy-runtime-links.sh'
-ssh <host> '/usr/local/bin/bash ~/projects/agent-work/scripts/verify-runtime-links.sh'
+ssh <host> '/usr/local/bin/bash ~/projects/OpenClaw-Ops-Toolkit/scripts/deploy-runtime-links.sh'
+ssh <host> '/usr/local/bin/bash ~/projects/OpenClaw-Ops-Toolkit/scripts/verify-runtime-links.sh'
 ```
 
-## 7) Template workflow
+## 6) Template workflow
 
 If reusing stable template:
 
@@ -110,7 +99,7 @@ If creating a new template:
 4. Set `CHAT_TEMPLATE` in your model profile
 5. Validate with `~/bin/MyModel settings`
 
-## 8) Validate profile before start
+## 7) Validate profile before start
 
 ```bash
 ~/bin/MyModel settings
@@ -118,7 +107,7 @@ If creating a new template:
 ~/bin/MyModel status
 ```
 
-## 9) Optional: add provider model entry in `.openclaw/openclaw.json`
+## 8) Optional: add provider model entry in `.openclaw/openclaw.json`
 
 - Add model entry under appropriate provider.
 - Start with placeholder id if runtime id is unknown.

@@ -1,7 +1,7 @@
-# OpenClaw-Ops-Kit
+# OpenClaw-Ops-Toolkit
 
 **Created**: 2026-02-20
-**Updated**: 2026-02-26
+**Updated**: 2026-02-28
 
 
 Operational toolkit for running, deploying, and maintaining a local OpenClaw stack across hosts.
@@ -10,7 +10,7 @@ Operational toolkit for running, deploying, and maintaining a local OpenClaw sta
 
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-informational)](#) [![Shell](https://img.shields.io/badge/Shell-bash-blue)](#) [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-- [OpenClaw-Ops-Kit](#openclaw-ops-kit)
+- [OpenClaw-Ops-Toolkit](#openclaw-ops-toolkit)
   - [Why This Repo Exists](#why-this-repo-exists)
   - [Requirements](#requirements)
   - [Quick Start](#quick-start)
@@ -28,7 +28,7 @@ Operational toolkit for running, deploying, and maintaining a local OpenClaw sta
 
 ## Why This Repo Exists
 
-`OpenClaw-Ops-Kit` is the operator layer around a local OpenClaw install:
+`OpenClaw-Ops-Toolkit` is the operator layer around a local OpenClaw install:
 
 - Unified startup/shutdown/status scripts for gateway, proxy, LLM, and embeddings
 - Model profile management (`Qwen3`, `Qwen3.5`, `BGEen`) via one launcher architecture
@@ -50,13 +50,13 @@ This repo is intentionally focused on **operations and reproducibility**, not ra
 
 ```bash
 # 1) Sync repo to target host (if needed)
-~/bin/sync-agent-work --delete
+~/bin/sync-ops-scripts --delete
 
 # 2) Deploy runtime commands into ~/bin
-/usr/local/bin/bash ~/projects/agent-work/scripts/deploy-runtime-links.sh
+/usr/local/bin/bash ~/projects/OpenClaw-Ops-Toolkit/scripts/deploy-runtime-links.sh
 
 # 3) Verify links
-/usr/local/bin/bash ~/projects/agent-work/scripts/verify-runtime-links.sh
+/usr/local/bin/bash ~/projects/OpenClaw-Ops-Toolkit/scripts/verify-runtime-links.sh
 
 # 4) Start services
 ~/bin/gateway start
@@ -88,7 +88,7 @@ Both scripts consume this same manifest:
 - `scripts/deploy-runtime-links.sh`
 - `scripts/verify-runtime-links.sh`
 
-New model launchers are discovered from `scripts/` symlinks to `modelctl`. Regenerate with `scripts/generate-manifest` (also run automatically by `sync-agent-work`).
+New model launchers are discovered from `scripts/` symlinks to `modelctl`. Regenerate with `scripts/generate-manifest` (also run automatically by `sync-ops-scripts`).
 
 ## Model Profiles
 
@@ -125,12 +125,15 @@ A future optional path is to add `pyproject.toml` and package wrappers for insta
 - [`docs/CONTEXT_ARCHITECTURE_PLAN.md`](docs/CONTEXT_ARCHITECTURE_PLAN.md) — context routing/system design
 - [`docs/CHANGELOG.md`](docs/CHANGELOG.md) — chronological operational changes
 - [`docs/QUICKSTART.md`](docs/QUICKSTART.md) — fast path setup and startup
+- [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) — environment overrides and host/path defaults
 - [`docs/SSH_SETUP_RUNBOOK.md`](docs/SSH_SETUP_RUNBOOK.md) — SSH key setup and deployment auth flow
 - [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) — symptom-driven fixes
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — component and runtime flow overview
 - [`docs/GLOSSARY.md`](docs/GLOSSARY.md) — core terms used across docs
-- [`docs/SAFE_PUBLISH_CHECKLIST.md`](docs/internal/SAFE_PUBLISH_CHECKLIST.md) — pre-publish safety checks
+- [`docs/SAFE_PUBLISH_CHECKLIST.md`](docs/SAFE_PUBLISH_CHECKLIST.md) — public pre-publish safety checks
 - [`docs/scripts/README.md`](docs/scripts/README.md) — per-command script guides
+
+Internal planning/docs are kept under `docs/internal/` and are not required for runtime operation.
 
 ## Repository Scope
 

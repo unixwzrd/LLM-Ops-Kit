@@ -15,7 +15,7 @@
 - OpenAI proxy tap (`proxy`)
 - LLM service (`Qwen3` / `Qwen3.5` via `llama-server`)
 - Embedding service (`BGEen` via `llama-server --embedding`)
-- Operator scripts (`agent-work/scripts`)
+- Operator scripts (`OpenClaw-Ops-Toolkit/scripts`)
 
 ## Flow
 
@@ -34,6 +34,6 @@
 
 ## Deployment model
 
-- Source of truth: `~/projects/agent-work`
+- Source of truth: `~/projects/OpenClaw-Ops-Toolkit`
 - Runtime command surface: `~/bin`
-- Cross-host updates via `sync-agent-work` + deploy/verify link scripts.
+- Cross-host updates via `sync-ops-scripts` + deploy/verify link scripts.

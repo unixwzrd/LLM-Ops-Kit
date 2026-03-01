@@ -19,7 +19,7 @@
 
 - `.openclaw`: local-only, no remote push.
 - `OpenClaw-workspace`: local-only, no remote push.
-- `agent-work`: canonical docs/planning/operations repository; only potential remote candidate later.
+- `OpenClaw-Ops-Toolkit`: canonical docs/planning/operations repository; only potential remote candidate later.
 
 ## Context Bootstrapping Flow
 
@@ -34,7 +34,7 @@
 
 Canonical scripts live under:
 
-- `~/projects/agent-work/scripts`
+- `~/projects/OpenClaw-Ops-Toolkit/scripts`
 
 Primary operator commands (from `~/bin`):
 
@@ -48,7 +48,7 @@ Primary operator commands (from `~/bin`):
 - Deploy symlinks: `~/bin/deploy-runtime-links.sh`
 - Verify links: `~/bin/verify-runtime-links.sh`
 - Runtime report: `~/bin/openclaw-report`
-- Sync repo to remote host: `~/bin/sync-agent-work`
+- Sync repo to remote host: `~/bin/sync-ops-scripts`
 
 ## Deployment Reference
 
@@ -68,7 +68,7 @@ Primary operator commands (from `~/bin`):
 ## Reporting
 
 - Keep generating sanitized reports under:
-  - `~/projects/agent-work/docs/reports/YYYY-MM-DD.md`
+  - `~/projects/OpenClaw-Ops-Toolkit/docs/reports/YYYY-MM-DD.md`
 
 ## Remote Policy
 

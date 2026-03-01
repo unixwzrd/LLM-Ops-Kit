@@ -1,7 +1,7 @@
 # Deployment + Sync Runbook
 
 **Created**: 2026-02-24
-**Updated**: 2026-02-26
+**Updated**: 2026-02-28
 
 - [Deployment + Sync Runbook](#deployment--sync-runbook)
   - [Purpose](#purpose)
@@ -21,49 +21,62 @@
 
 ## Purpose
 
-Deploy `agent-work` changes safely to another host and keep runtime commands consistent using user-local links (`$HOME/bin`) only.
+Deploy `OpenClaw-Ops-Toolkit` changes safely to another host and keep runtime commands consistent using user-local links (`$HOME/bin`) only.
 
 ## Preconditions
 
-- Source repo: `~/projects/agent-work`
-- Remote repo path target: `~/projects/agent-work`
+- Source repo: `~/projects/OpenClaw-Ops-Toolkit`
+- Remote repo path target: `~/projects/OpenClaw-Ops-Toolkit`
 - Remote host reachable via SSH
 - Remote has `/usr/local/bin/bash` (for scripts using bash features beyond macOS default bash 3)
 
 ## 1) Sync Code
 
-From local machine:
+From local machine (recommended, one command):
 
 ```bash
-~/bin/sync-agent-work --delete
+~/bin/sync-ops-scripts --delete
 ```
+
+This now performs:
+
+1. Manifest refresh (`scripts/generate-manifest`)
+2. `rsync` transfer
+3. Remote link deploy (`deploy-runtime-links.sh`)
+4. Remote link verify (`verify-runtime-links.sh`)
 
 Equivalent explicit form:
 
 ```bash
-rsync -avz --delete ~/projects/agent-work/ <host>:~/projects/agent-work/
+rsync -avz --delete ~/projects/OpenClaw-Ops-Toolkit/ <host>:~/projects/OpenClaw-Ops-Toolkit/
+```
+
+If you only want transfer (skip deploy+verify):
+
+```bash
+~/bin/sync-ops-scripts --delete --no-links
 ```
 
 ## 2) Runtime Link Manifest
 
 Link definitions are now centralized in:
 
-`~/projects/agent-work/scripts/runtime-links.manifest`
+`~/projects/OpenClaw-Ops-Toolkit/scripts/runtime-links.manifest`
 
-The manifest is auto-generated from launcher symlinks via `scripts/generate-manifest` (also run by `sync-agent-work`). Deploy and verify consume this file.
+The manifest is auto-generated from launcher symlinks via `scripts/generate-manifest` (also run by `sync-ops-scripts`). Deploy and verify consume this file.
 
 ## 3) Deploy Runtime Links on Remote
 
 Use explicit remote bash path:
 
 ```bash
-ssh <host> '/usr/local/bin/bash ~/projects/agent-work/scripts/deploy-runtime-links.sh'
+ssh <host> '/usr/local/bin/bash ~/projects/OpenClaw-Ops-Toolkit/scripts/deploy-runtime-links.sh'
 ```
 
 ## 4) Verify Runtime Links on Remote
 
 ```bash
-ssh <host> '/usr/local/bin/bash ~/projects/agent-work/scripts/verify-runtime-links.sh'
+ssh <host> '/usr/local/bin/bash ~/projects/OpenClaw-Ops-Toolkit/scripts/verify-runtime-links.sh'
 ```
 
 ## 5) Runtime Commands (Action-Based)
@@ -120,7 +133,7 @@ ssh-add -D
 Run scripts with remote bash 5:
 
 ```bash
-ssh <host> '/usr/local/bin/bash ~/projects/agent-work/scripts/verify-runtime-links.sh'
+ssh <host> '/usr/local/bin/bash ~/projects/OpenClaw-Ops-Toolkit/scripts/verify-runtime-links.sh'
 ```
 
 ### B) `mkpath: Operation not supported`
@@ -128,7 +141,7 @@ ssh <host> '/usr/local/bin/bash ~/projects/agent-work/scripts/verify-runtime-lin
 Destination path is invalid for that host. Use home-relative target:
 
 ```bash
-<host>:~/projects/agent-work/
+<host>:~/projects/OpenClaw-Ops-Toolkit/
 ```
 
 ### C) Password prompts unexpectedly

@@ -1,8 +1,13 @@
 # Quickstart (10 Minutes)
 
 **Created**: 2026-02-26
-**Updated**: 2026-02-26
+**Updated**: 2026-02-28
 
+- [Quickstart (10 Minutes)](#quickstart-10-minutes)
+  - [Requirements](#requirements)
+  - [Local bring-up](#local-bring-up)
+  - [Remote sync + deploy](#remote-sync--deploy)
+  - [Common checks](#common-checks)
 
 ## Requirements
 
@@ -10,6 +15,8 @@
 - `llama-server` at `/usr/local/bin/llama-server`
 - Bash 4+ available as `/usr/local/bin/bash` on remote hosts
 - `ssh`, `rsync`, `jq`
+
+See `docs/CONFIGURATION.md` for environment overrides before first run.
 
 ## Local bring-up
 
@@ -25,9 +32,9 @@
 ## Remote sync + deploy
 
 ```bash
-~/bin/sync-agent-work --delete
-ssh <host> '/usr/local/bin/bash ~/projects/agent-work/scripts/deploy-runtime-links.sh'
-ssh <host> '/usr/local/bin/bash ~/projects/agent-work/scripts/verify-runtime-links.sh'
+~/bin/sync-ops-scripts --delete
+ssh <host> '/usr/local/bin/bash ~/projects/OpenClaw-Ops-Toolkit/scripts/deploy-runtime-links.sh'
+ssh <host> '/usr/local/bin/bash ~/projects/OpenClaw-Ops-Toolkit/scripts/verify-runtime-links.sh'
 ```
 
 ## Common checks

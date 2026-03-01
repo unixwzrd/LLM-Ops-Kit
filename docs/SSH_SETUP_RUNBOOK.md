@@ -1,10 +1,13 @@
 # SSH Setup Runbook
 
 **Created**: 2026-02-26
-**Updated**: 2026-02-26
+**Updated**: 2026-02-28
 
 - [SSH Setup Runbook](#ssh-setup-runbook)
   - [Goal](#goal)
+  - [Related Docs](#related-docs)
+  - [Fast Path Script](#fast-path-script)
+  - [Web UI SSH Tunnel](#web-ui-ssh-tunnel)
   - [1) Create a dedicated deploy key (local)](#1-create-a-dedicated-deploy-key-local)
   - [2) Load key with TTL](#2-load-key-with-ttl)
   - [3) Install public key on remote](#3-install-public-key-on-remote)
@@ -15,7 +18,42 @@
 
 ## Goal
 
-Set up secure SSH-based deployment for `OpenClaw-Ops-Kit` using short-lived agent credentials.
+Set up secure SSH-based deployment for `OpenClaw-Ops-Toolkit` using short-lived agent credentials.
+
+## Related Docs
+
+- Main index: [`../README.md`](../README.md)
+- Configuration: [`CONFIGURATION.md`](./CONFIGURATION.md)
+- Deployment flow: [`DEPLOYMENT_SYNC_RUNBOOK.md`](./DEPLOYMENT_SYNC_RUNBOOK.md)
+
+## Fast Path Script
+
+Use the helper script for key creation/load and optional remote key install:
+
+```bash
+~/projects/OpenClaw-Ops-Toolkit/scripts/setup-ssh-deploy-key.sh --help
+~/projects/OpenClaw-Ops-Toolkit/scripts/setup-ssh-deploy-key.sh --host <host> --user <user> --install-remote
+```
+
+## Web UI SSH Tunnel
+
+To access a remote OpenClaw web UI running on `127.0.0.1:18789`, forward it to your local machine:
+
+```bash
+ssh -L 18789:127.0.0.1:18789 <user>@<host>
+```
+
+Then open:
+
+```text
+http://127.0.0.1:18789
+```
+
+Operator-local convenience alias example:
+
+```bash
+alias oc_vm='ssh -L 18789:127.0.0.1:18789 unixwzrd@10.0.0.202'
+```
 
 ## 1) Create a dedicated deploy key (local)
 
@@ -54,8 +92,8 @@ ssh <host> 'echo SSH_OK'
 ## 5) Deploy + verify runtime links (remote bash 5)
 
 ```bash
-ssh <host> '/usr/local/bin/bash ~/projects/agent-work/scripts/deploy-runtime-links.sh'
-ssh <host> '/usr/local/bin/bash ~/projects/agent-work/scripts/verify-runtime-links.sh'
+ssh <host> '/usr/local/bin/bash ~/projects/OpenClaw-Ops-Toolkit/scripts/deploy-runtime-links.sh'
+ssh <host> '/usr/local/bin/bash ~/projects/OpenClaw-Ops-Toolkit/scripts/verify-runtime-links.sh'
 ```
 
 ## 6) Remove key from agent after deployment
@@ -70,4 +108,4 @@ ssh-add -D
 
 - `declare -A: invalid option`: run scripts with `/usr/local/bin/bash`.
 - Password prompts persist: verify `authorized_keys` ownership/permissions and correct remote username.
-- `mkpath: Operation not supported`: target path invalid on remote; use `~/projects/agent-work`.
+- `mkpath: Operation not supported`: target path invalid on remote; use `~/projects/OpenClaw-Ops-Toolkit`.

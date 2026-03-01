@@ -11,8 +11,8 @@ Symptoms:
 
 Fix:
 ```bash
-/usr/local/bin/bash ~/projects/agent-work/scripts/deploy-runtime-links.sh
-/usr/local/bin/bash ~/projects/agent-work/scripts/verify-runtime-links.sh
+/usr/local/bin/bash ~/projects/OpenClaw-Ops-Toolkit/scripts/deploy-runtime-links.sh
+/usr/local/bin/bash ~/projects/OpenClaw-Ops-Toolkit/scripts/verify-runtime-links.sh
 ```
 
 ## `declare -A: invalid option`
@@ -22,7 +22,7 @@ Cause:
 
 Fix:
 ```bash
-/usr/local/bin/bash ~/projects/agent-work/scripts/<script>.sh
+/usr/local/bin/bash ~/projects/OpenClaw-Ops-Toolkit/scripts/<script>.sh
 ```
 
 ## `mkpath: Operation not supported`
@@ -31,7 +31,7 @@ Cause:
 - Invalid remote target path.
 
 Fix:
-- Use home-relative destination: `~/projects/agent-work`.
+- Use home-relative destination: `~/projects/OpenClaw-Ops-Toolkit`.
 
 ## Model reports started but behaves stale
 

@@ -555,6 +555,6 @@ tools/*
 **/secrets*
 identity/device-auth.json
 
-docs/internal/
 docs/reports/
 *.local.md
+docs/internal/

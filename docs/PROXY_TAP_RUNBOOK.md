@@ -2,13 +2,14 @@
 # OpenAI Proxy Tap Runbook
 
 **Created**: 2026-02-22
-**Updated**: 2026-02-28
+**Updated**: 2026-03-01
 
 - [OpenAI Proxy Tap Runbook](#openai-proxy-tap-runbook)
   - [Purpose](#purpose)
   - [Start Proxy (Default)](#start-proxy-default)
   - [Start Proxy With Rendered Prompt Logging](#start-proxy-with-rendered-prompt-logging)
   - [Strict Flush Mode](#strict-flush-mode)
+  - [Local Example (Current Operator Setup)](#local-example-current-operator-setup)
   - [Direct Logs (No jq)](#direct-logs-no-jq)
   - [jq Parse Pattern (Important)](#jq-parse-pattern-important)
   - [Live Traffic View](#live-traffic-view)
@@ -34,7 +35,7 @@ Capture what OpenClaw sends to the model with enough observability to debug prom
 
 Default wrapper values (`~/bin/openai-proxy-tap`):
 
-- `UPSTREAM=http://10.0..67:11434`
+- `UPSTREAM=http://<upstream-host>:<upstream-port>`
 - `LISTEN_HOST=127.0.0.1`
 - `LISTEN_PORT=18080`
 - `LOG_PATH=~/.openclaw/logs/openai-proxy.ndjson`
@@ -46,13 +47,13 @@ Default wrapper values (`~/bin/openai-proxy-tap`):
 Sample output:
 
 ```text
-openai-proxy-tap listening on http://127.0.0.1:18080 -> http://10.0.0.67:11434 ...
+openai-proxy-tap listening on http://127.0.0.1:18080 -> http://<upstream-host>:<upstream-port> ...
 ```
 
 ## Start Proxy With Rendered Prompt Logging
 
 ```bash
-~/bin/openai-proxy-tap --chat-template ~/projects/agent-work/scripts/templates/chatml-tools.jinja
+~/bin/openai-proxy-tap --chat-template ~/projects/OpenClaw-Ops-Toolkit/scripts/templates/chatml-tools.jinja
 ```
 
 Note: template-load status is reflected in NDJSON fields (`rendered_prompt` / `rendered_prompt_error`).
@@ -64,6 +65,14 @@ LOG_FSYNC=1 ~/bin/openai-proxy-tap
 ```
 
 No special banner is guaranteed for fsync mode; verify by expected log durability behavior.
+
+## Local Example (Template)
+
+```text
+UPSTREAM=http://<upstream-host>:<upstream-port>
+LISTEN_HOST=127.0.0.1
+LISTEN_PORT=18080
+```
 
 ## Direct Logs (No jq)
 
