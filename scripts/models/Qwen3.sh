@@ -1,6 +1,7 @@
 # shellcheck shell=bash
 # Model-specific defaults for Qwen3 (applied before model-kind defaults).
 # Fill only when still unset so external env can override.
+AGENT_WORK_ROOT="${OPENCLAW_AGENT_WORK_ROOT:-$HOME/projects/OpenClaw-Ops-Toolkit}"
 
 # Identity/profile
 MODEL_TYPE="${MODEL_TYPE:-llm}"
@@ -34,7 +35,7 @@ QWEN3_TEMPLATE_MODE="${QWEN3_TEMPLATE_MODE:-stable}"
 if [[ -z "${CHAT_TEMPLATE:-}" ]]; then
   case "$QWEN3_TEMPLATE_MODE" in
     stable|*)
-      CHAT_TEMPLATE="/Users/miafour/projects/agent-work/scripts/templates/Qwen3-VL-chatml-tools.jinja"
+      CHAT_TEMPLATE="${AGENT_WORK_ROOT}/scripts/templates/Qwen3-VL-chatml-tools.jinja"
       ;;
   esac
 fi

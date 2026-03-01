@@ -1,6 +1,7 @@
 # shellcheck shell=bash
 # Model-specific defaults for Qwen3.5 (applied before model-kind defaults).
 # Fill only when still unset so external env can override.
+AGENT_WORK_ROOT="${OPENCLAW_AGENT_WORK_ROOT:-$HOME/projects/OpenClaw-Ops-Toolkit}"
 
 # Identity/profile
 MODEL_TYPE="${MODEL_TYPE:-llm}"
@@ -20,7 +21,7 @@ THREADS_BATCH="${THREADS_BATCH:-$THREADS}"
 #CTX_SIZE="${CTX_SIZE:-49152}"
 CTX_SIZE="${CTX_SIZE:-65536}"
 GPU_LAYERS="${GPU_LAYERS:-99}"
-BATCH_SIZE="${BATCH_SIZE:-768}"
+BATCH_SIZE="${BATCH_SIZE:-1024}"
 UBATCH_SIZE="${UBATCH_SIZE:-512}"
 
 # Runtime feature flags
@@ -35,14 +36,11 @@ USE_CUSTOM_TEMPLATE="${USE_CUSTOM_TEMPLATE:-1}"
 QWEN35_TEMPLATE_MODE="${QWEN35_TEMPLATE_MODE:-std}"
 if [[ -z "${CHAT_TEMPLATE:-}" ]]; then
   case "$QWEN35_TEMPLATE_MODE" in
-    std)
-      CHAT_TEMPLATE="/Users/miafour/projects/agent-work/scripts/templates/Qwen3.5-std-chatml-tools.jinja"
-      ;;
     new)
-      CHAT_TEMPLATE="/Users/miafour/projects/agent-work/scripts/templates/Qwen3.5-chatml-tools.jinja"
+      CHAT_TEMPLATE="${AGENT_WORK_ROOT}/scripts/templates/Qwen3.5-chatml-tools.jinja"
       ;;
     stable|*)
-      CHAT_TEMPLATE="/Users/miafour/projects/agent-work/scripts/templates/Qwen3.5-std-chatml-tools.jinja"
+      CHAT_TEMPLATE="${AGENT_WORK_ROOT}/scripts/templates/Qwen3.5-std-chatml-tools.jinja"
       ;;
   esac
 fi

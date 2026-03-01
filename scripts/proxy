@@ -14,6 +14,12 @@ SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
 action="${1:-status}"
 shift || true
 
+AGENT_WORK_ROOT="${OPENCLAW_AGENT_WORK_ROOT:-$HOME/projects/OpenClaw-Ops-Toolkit}"
+DEFAULT_UPSTREAM_HOST="${OPENCLAW_UPSTREAM_HOST:-10.0.0.67}"
+DEFAULT_UPSTREAM_PORT="${OPENCLAW_UPSTREAM_PORT:-11434}"
+DEFAULT_LISTEN_PORT="${OPENCLAW_PROXY_LISTEN_PORT:-$DEFAULT_UPSTREAM_PORT}"
+PROXY_TAP_BIN="${OPENCLAW_PROXY_TAP_BIN:-$AGENT_WORK_ROOT/bin/openai-proxy-tap}"
+
 # Accept GNU-style action aliases (e.g. `proxy --status`).
 case "$action" in
   --status) action="status" ;;
@@ -32,10 +38,16 @@ Options:
   stop: use --force for SIGKILL.
   -h, --help: show this help.
 
+Default env-backed values:
+  OPENCLAW_AGENT_WORK_ROOT=${AGENT_WORK_ROOT}
+  OPENCLAW_UPSTREAM_HOST=${DEFAULT_UPSTREAM_HOST}
+  OPENCLAW_UPSTREAM_PORT=${DEFAULT_UPSTREAM_PORT}
+  OPENCLAW_PROXY_LISTEN_PORT=${DEFAULT_LISTEN_PORT}
+
 Examples:
   proxy start
-  proxy restart --upstream http://10.0.0.67:11434
-  proxy restart --listen-port 11434 --upstream http://10.0.0.67:11434
+  proxy restart --upstream http://${DEFAULT_UPSTREAM_HOST}:${DEFAULT_UPSTREAM_PORT}
+  proxy restart --listen-port ${DEFAULT_LISTEN_PORT} --upstream http://${DEFAULT_UPSTREAM_HOST}:${DEFAULT_UPSTREAM_PORT}
 USAGE
 }
 
@@ -100,9 +112,9 @@ clear_live_runtime() {
 
 extract_port_from_upstream() {
   # Accepts forms like:
-  # - 10.0.0.67:11434
-  # - http://10.0.0.67:11434
-  # - http://user:pass@10.0.0.67:11434/v1
+  # - <upstream-host>:<upstream-port>
+  # - http://<upstream-host>:<upstream-port>
+  # - http://user:pass@<upstream-host>:<upstream-port>/v1
   # - http://[::1]:11434/v1
   local upstream="$1"
   [[ -n "$upstream" ]] || return 0
@@ -208,7 +220,7 @@ start_proxy() {
   LOG_OUT="$OPENCLAW_LOG_DIR/openai-proxy-tap.log"
   LOG_ERR="$OPENCLAW_LOG_DIR/openai-proxy-tap.err.log"
 
-  nohup /Users/miafour/projects/agent-work/bin/openai-proxy-tap "${extra_args[@]}" > "$LOG_OUT" 2> "$LOG_ERR" &
+  nohup "$PROXY_TAP_BIN" "${extra_args[@]}" > "$LOG_OUT" 2> "$LOG_ERR" &
   pid="$!"
   sleep 0.4
   if ! is_pid_running "$pid"; then

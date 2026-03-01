@@ -5,7 +5,7 @@ gateway|scripts/gateway
 proxy|scripts/proxy
 openclaw-stack|scripts/openclaw-stack
 openclaw-report|scripts/openclaw-report.sh
-sync-agent-work|scripts/sync-agent-work.sh
+sync-ops-scripts|scripts/sync-ops-scripts.sh
 openai-proxy-tap|bin/openai-proxy-tap
 node-hygiene|bin/node-hygiene.sh
 BGEen|scripts/BGEen

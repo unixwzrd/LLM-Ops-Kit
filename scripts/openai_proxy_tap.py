@@ -4,7 +4,7 @@
 Logs request/response metadata and JSON bodies to NDJSON while proxying traffic.
 
 Typical use:
-  openai-proxy-tap --upstream http://10.0.0.67:11434 --listen-port 18080 \
+  openai-proxy-tap --upstream http://<upstream-host>:<upstream-port> --listen-port 18080 \
     --log ~/.openclaw/logs/openai-proxy.ndjson
 
 Then point OpenClaw llamacpp baseUrl to:
@@ -560,7 +560,7 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="OpenAI-compatible reverse proxy tap")
     p.add_argument("--listen-host", default="127.0.0.1")
     p.add_argument("--listen-port", "--port", dest="listen_port", type=int, help="Listen port (default: upstream port)")
-    p.add_argument("--upstream", required=True, help="Upstream host:port or URL, e.g. 10.0.0.67:11434")
+    p.add_argument("--upstream", required=True, help="Upstream host:port or URL, e.g. <upstream-host>:<upstream-port>")
     p.add_argument("--log", default="~/.openclaw/logs/openai-proxy.ndjson", help="NDJSON log file path")
     p.add_argument("--timeout", type=float, default=900.0)
     p.add_argument("--max-log-bytes", type=int, default=0, help="Per-request capture cap in bytes; 0 means unlimited")

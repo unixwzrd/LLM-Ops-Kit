@@ -30,12 +30,11 @@ normalize_action() {
 resolve_model_from_invocation() {
   local bn
   bn="$(basename "$0")"
-  case "$bn" in
-    Qwen3) echo "Qwen3" ;;
-    Qwen3.5) echo "Qwen3.5" ;;
-    BGEen) echo "BGEen" ;;
-    *) echo "Qwen3" ;;
-  esac
+  if [[ "$bn" == "modelctl" ]]; then
+    echo "Qwen3"
+  else
+    echo "$bn"
+  fi
 }
 
 resolve_args() {
@@ -75,18 +74,19 @@ load_model_defaults() {
   # shellcheck disable=SC1091
   . "$model_file"
 
-  # 3) model-kind defaults
-  case "$m" in
-    Qwen3|Qwen3.5)
+  # 3) model-type defaults
+  case "${MODEL_TYPE:-}" in
+    llm)
       # shellcheck disable=SC1091
       . "$SCRIPT_DIR/defaults/llm-defaults.sh"
       ;;
-    BGEen)
+    embedding)
       # shellcheck disable=SC1091
       . "$SCRIPT_DIR/defaults/embedding-defaults.sh"
       ;;
     *)
-      echo "Unknown model: $m" >&2
+      echo "Unknown or missing MODEL_TYPE in $model_file: ${MODEL_TYPE:-<unset>}" >&2
+      echo "Set MODEL_TYPE to llm or embedding in the model profile." >&2
       exit 2
       ;;
   esac
@@ -170,7 +170,7 @@ resolve_args "${1:-}" "${2:-}"
 if ! is_action "$action"; then
   echo "Invalid action: $action" >&2
   echo "Usage: $(basename "$0") [start|stop|restart|status|settings]" >&2
-  echo "   or: modelctl [Qwen3|Qwen3.5|BGEen] [start|stop|restart|status|settings]" >&2
+  echo "   or: modelctl <model-profile> [start|stop|restart|status|settings]" >&2
   exit 2
 fi
 

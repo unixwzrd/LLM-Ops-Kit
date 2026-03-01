@@ -7,7 +7,7 @@ set -euo pipefail
 
 [[ "${DISABLE_AGENT_WORK_SYNC:-0}" == "1" ]] && exit 0
 
-"$(git rev-parse --show-toplevel)/scripts/sync-agent-work.sh" --quiet || {
+"$(git rev-parse --show-toplevel)/scripts/sync-ops-scripts.sh" --quiet || {
   echo "post-commit sync failed" >&2
   exit 0
 }

@@ -10,7 +10,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MANIFEST_FILE="${MANIFEST_FILE:-$SCRIPT_DIR/runtime-links.manifest}"
 
 BIN_DIR="${BIN_DIR:-$HOME/bin}"
-REPO_DIR="${REPO_DIR:-$HOME/projects/agent-work}"
+REPO_DIR="${REPO_DIR:-$HOME/projects/OpenClaw-Ops-Toolkit}"
 mkdir -p "$BIN_DIR"
 
 if [[ ! -f "$MANIFEST_FILE" ]]; then
@@ -46,9 +46,16 @@ done < "$MANIFEST_FILE"
 
 # Remove deprecated names in BIN_DIR only.
 for old in \
-  "$BIN_DIR/openclaw-start.sh" "$BIN_DIR/sync-agent-work.sh" "$BIN_DIR/node-hygiene.sh" \
+  "$BIN_DIR/openclaw-start.sh" "$BIN_DIR/sync-agent-work" "$BIN_DIR/sync-agent-work.sh" "$BIN_DIR/sync-OpenClaw-Ops-Toolkit" "$BIN_DIR/sync-OpenClaw-Ops-Toolkit.sh" "$BIN_DIR/sync-ops-scripts.sh" "$BIN_DIR/node-hygiene.sh" \
   "$BIN_DIR/openclaw-report.sh" "$BIN_DIR/openclaw-stack.sh" \
   "$BIN_DIR/StartQwen3" "$BIN_DIR/StartBGEen" "$BIN_DIR/StopQwen3" "$BIN_DIR/StopBGEen" \
   "$BIN_DIR/run-openclaw-server.sh" "$BIN_DIR/run-openclaw-embedding.sh"; do
   [ -L "$old" ] && rm -f "$old"
 done
+
+# Remove dead symlinks in BIN_DIR to keep runtime command surface clean.
+while IFS= read -r dead; do
+  [[ -n "$dead" ]] || continue
+  rm -f "$dead"
+  echo "REMOVED_DEADLINK: $dead"
+done < <(find "$BIN_DIR" -maxdepth 1 -type l ! -exec test -e {} \; -print)

@@ -11,10 +11,46 @@ STATIC_ENTRIES=(
   "proxy|scripts/proxy"
   "openclaw-stack|scripts/openclaw-stack"
   "openclaw-report|scripts/openclaw-report.sh"
-  "sync-agent-work|scripts/sync-agent-work.sh"
+  "sync-ops-scripts|scripts/sync-ops-scripts.sh"
   "openai-proxy-tap|bin/openai-proxy-tap"
   "node-hygiene|bin/node-hygiene.sh"
 )
+
+profile_names=()
+while IFS= read -r model_file; do
+  base="$(basename "$model_file")"
+  profile_names+=("${base%.sh}")
+done < <(find "$SCRIPT_DIR/models" -maxdepth 1 -type f -name '*.sh' | sort)
+
+# Ensure each model profile has a launcher symlink in scripts/.
+for name in "${profile_names[@]}"; do
+  launcher="$SCRIPT_DIR/$name"
+  if [[ ! -e "$launcher" ]]; then
+    ln -s modelctl "$launcher"
+    echo "CREATED_LAUNCHER: $launcher -> modelctl"
+    continue
+  fi
+
+  if [[ -L "$launcher" ]]; then
+    target="$(readlink "$launcher")"
+    if [[ "$target" != "modelctl" && "$target" != "$SCRIPT_DIR/modelctl" && "$target" != */modelctl ]]; then
+      echo "SKIP_NON_MODELCTL_LAUNCHER: $launcher -> $target" >&2
+    fi
+  fi
+done
+
+# Remove stale launcher symlinks pointing to modelctl with no matching model profile.
+while IFS= read -r path; do
+  name="$(basename "$path")"
+  target="$(readlink "$path")"
+  if [[ "$target" != "modelctl" && "$target" != "$SCRIPT_DIR/modelctl" && "$target" != */modelctl ]]; then
+    continue
+  fi
+  if [[ ! -f "$SCRIPT_DIR/models/$name.sh" ]]; then
+    rm -f "$path"
+    echo "REMOVED_STALE_LAUNCHER: $path"
+  fi
+done < <(find "$SCRIPT_DIR" -maxdepth 1 -type l | sort)
 
 launcher_names=()
 while IFS= read -r path; do
