@@ -1,7 +1,7 @@
 # modelctl Guide
 
 **Created**: 2026-02-26
-**Updated**: 2026-03-01
+**Updated**: 2026-03-03
 
 - [modelctl Guide](#modelctl-guide)
   - [Purpose](#purpose)
@@ -21,8 +21,21 @@ Any launcher name is supported as long as `scripts/models/<Launcher>.sh` exists.
 ## Commands
 
 ```bash
-~/bin/<ModelProfile> [start|stop|restart|status|settings]
+~/bin/<ModelProfile> [start|stop|restart|status|settings|verify|test]
+~/bin/modelctl list
+~/bin/modelctl status
+~/bin/modelctl status-all
+~/bin/modelctl <ModelProfile> [start|stop|restart|status|settings|verify|test]
 ```
+
+- `list`: show discovered model profiles and their `MODEL_TYPE`.
+- `status`: status across all discovered model profiles.
+- `status-all`: same as `status`, explicit form.
+- `verify`: checks process status and queries `/v1/models` to print reported model IDs.
+- `test`: runs a minimal live request for the model type:
+  - `llm`: `/v1/chat/completions`
+  - `embedding`: `/v1/embeddings`
+  - `tts`: `/v1/audio/speech`
 
 ## Precedence Order (highest -> lowest)
 

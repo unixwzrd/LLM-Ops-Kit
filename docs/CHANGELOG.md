@@ -8,6 +8,28 @@ All notable changes to OpenClaw-Ops-Toolkit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### 2026-03-01 — modelctl verify/test + resilient runtime link flow
+
+- **Scope:** `OpenClaw-Ops-Toolkit/scripts`, `OpenClaw-Ops-Toolkit/docs`
+- **Category:** `runtime`, `deployment`, `documentation`
+- **What changed:**
+  - Added `verify` and `test` actions to `scripts/modelctl` for all model types:
+    - `llm`, `embedding`, `tts`
+  - `verify` now checks process state and queries `/v1/models` to report model IDs.
+  - `test` now runs a type-specific live request:
+    - `llm`: `/v1/chat/completions`
+    - `embedding`: `/v1/embeddings`
+    - `tts`: `/v1/audio/speech` (audio-bytes sanity check)
+  - Fixed launcher start-path regression risk by keeping llama launch path explicit for `llm` and `embedding`.
+  - Refined runtime-link generation/deploy flow:
+    - `generate-manifest` now auto-discovers runtime entry scripts and model launchers.
+    - Added TTS wrapper/launcher self-heal support (`scripts/tts`, `scripts/Qwen3TTS`) where needed.
+    - `deploy-runtime-links.sh` now fails on missing manifest sources (no silent partial deploy).
+    - `sync-ops-scripts.sh` now performs local manifest source precheck and remote manifest regeneration before deploy/verify.
+  - Removed `node-hygiene` from managed runtime command surface.
+- **Why:**
+  - Improve operational confidence: model health checks from one command surface, and deterministic link sync/deploy behavior across hosts.
+
 ### 2026-03-01 — Sunday release gate completion (public push prep)
 
 - **Scope:** `OpenClaw-Ops-Toolkit/docs`, `OpenClaw-Ops-Toolkit/scripts`, `OpenClaw-Ops-Toolkit/.gitignore`

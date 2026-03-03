@@ -44,6 +44,30 @@ while IFS='|' read -r target_rel src_rel; do
   check_one "$BIN_DIR/$target_rel" "$REPO_DIR/$src_rel"
 done < "$MANIFEST_FILE"
 
+# Flag stale managed links no longer represented in manifest.
+manifest_targets_file="$(mktemp)"
+while IFS='|' read -r target_rel src_rel; do
+  [[ -z "${target_rel:-}" ]] && continue
+  [[ "$target_rel" =~ ^[[:space:]]*# ]] && continue
+  printf '%s\n' "$target_rel" >> "$manifest_targets_file"
+done < "$MANIFEST_FILE"
+
+while IFS= read -r link_path; do
+  [[ -n "$link_path" ]] || continue
+  target="$(readlink "$link_path" 2>/dev/null || true)"
+  case "$target" in
+    "$REPO_DIR"/scripts/*|"$REPO_DIR"/bin/*)
+      name="$(basename "$link_path")"
+      if ! grep -qxF "$name" "$manifest_targets_file"; then
+        echo "STALE_MANAGED_LINK: $link_path -> $target"
+        fail=1
+      fi
+      ;;
+  esac
+done < <(find "$BIN_DIR" -maxdepth 1 -type l -print)
+
+rm -f "$manifest_targets_file"
+
 for old in \
   "$BIN_DIR/openclaw-start.sh" "$BIN_DIR/sync-agent-work" "$BIN_DIR/sync-agent-work.sh" "$BIN_DIR/sync-OpenClaw-Ops-Toolkit" "$BIN_DIR/sync-OpenClaw-Ops-Toolkit.sh" "$BIN_DIR/sync-ops-scripts.sh" "$BIN_DIR/node-hygiene.sh" \
   "$BIN_DIR/openclaw-report.sh" "$BIN_DIR/openclaw-stack.sh" \

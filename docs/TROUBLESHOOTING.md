@@ -1,7 +1,13 @@
 # Troubleshooting
 
 **Created**: 2026-02-26
-**Updated**: 2026-02-26
+**Updated**: 2026-03-01
+
+## Interpreter policy
+
+- Bash scripts use `#!/usr/bin/env bash` and are written for Bash 3.2+ compatibility.
+- Python helper scripts use `#!/usr/bin/env python` and require Python 3.9+.
+- Bash 5+ is recommended, but not required for normal operation.
 
 
 ## Link verification shows `MISSING`

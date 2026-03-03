@@ -16,6 +16,13 @@ NO_AGENT=0
 NO_MANIFEST=0
 NO_LINKS=0
 QUIET=0
+STATE_FILE="${OPENCLAW_OPS_STATE_FILE:-$HOME/.openclaw-ops/runtime-state.env}"
+RUNTIME_MODE="${OPENCLAW_RUNTIME_MODE:-repo}" # repo|installed
+INSTALL_PREFIX="${OPENCLAW_OPS_INSTALL_BASE:-$HOME/.openclaw-ops}"
+RUNTIME_MODE_EXPLICIT=0
+INSTALL_PREFIX_EXPLICIT=0
+ENV_RUNTIME_MODE="${OPENCLAW_RUNTIME_MODE:-}"
+ENV_INSTALL_PREFIX="${OPENCLAW_OPS_INSTALL_BASE:-}"
 
 usage() {
   cat <<USAGE
@@ -33,12 +40,16 @@ Options:
   --no-agent               Don't auto-start/load ssh-agent
   --no-manifest            Skip runtime-links.manifest auto-generation
   --no-links               Skip remote deploy+verify link steps after sync
+  --runtime-mode <mode>    Remote runtime mode: repo (default) or installed
+  --install-prefix <path>  Remote install prefix for installed mode
+  --state-file <path>      Local runtime state file (default: ~/.openclaw-ops/runtime-state.env)
   --quiet                  Less output
   -h, --help               Show this help
 
 Env overrides:
   SYNC_HOST, SYNC_USER, SYNC_REMOTE_DIR, SYNC_LOCAL_DIR, SYNC_KEY_PATH, SYNC_KEY_TTL
   OPENCLAW_UPSTREAM_HOST, OPENCLAW_SYNC_USER, OPENCLAW_SYNC_REMOTE_DIR
+  OPENCLAW_RUNTIME_MODE, OPENCLAW_OPS_INSTALL_BASE, OPENCLAW_OPS_STATE_FILE
 USAGE
 }
 
@@ -60,13 +71,40 @@ while [[ $# -gt 0 ]]; do
     --no-agent) NO_AGENT=1; shift ;;
     --no-manifest) NO_MANIFEST=1; shift ;;
     --no-links) NO_LINKS=1; shift ;;
+    --runtime-mode) RUNTIME_MODE="$2"; RUNTIME_MODE_EXPLICIT=1; shift 2 ;;
+    --install-prefix) INSTALL_PREFIX="$2"; INSTALL_PREFIX_EXPLICIT=1; shift 2 ;;
+    --state-file) STATE_FILE="$2"; shift 2 ;;
     --quiet) QUIET=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage; exit 2 ;;
   esac
 done
 
+if [[ "$RUNTIME_MODE_EXPLICIT" -eq 0 && -z "$ENV_RUNTIME_MODE" && -f "$STATE_FILE" ]]; then
+  # shellcheck disable=SC1090
+  . "$STATE_FILE"
+  if [[ "${OPENCLAW_OPS_INSTALL_MODE:-}" == "installed" ]]; then
+    RUNTIME_MODE="installed"
+  fi
+  if [[ "$INSTALL_PREFIX_EXPLICIT" -eq 0 && -z "$ENV_INSTALL_PREFIX" && -n "${OPENCLAW_OPS_INSTALL_BASE:-}" ]]; then
+    INSTALL_PREFIX="$OPENCLAW_OPS_INSTALL_BASE"
+  fi
+fi
+
+case "$RUNTIME_MODE" in
+  repo|installed) ;;
+  *)
+    echo "Invalid --runtime-mode: $RUNTIME_MODE (expected repo or installed)" >&2
+    exit 2
+    ;;
+esac
+
 [[ -d "$LOCAL_DIR" ]] || { echo "Local dir missing: $LOCAL_DIR" >&2; exit 1; }
+log "Using LOCAL_DIR: $LOCAL_DIR"
+log "Using REMOTE_DIR: $REMOTE_DIR"
+log "Using HOST/USER: $HOST / $USER_NAME"
+log "Using RUNTIME_MODE: $RUNTIME_MODE"
+log "Using STATE_FILE: $STATE_FILE"
 
 if [[ "$NO_MANIFEST" -eq 0 ]]; then
   generator="$LOCAL_DIR/scripts/generate-manifest"
@@ -76,6 +114,28 @@ if [[ "$NO_MANIFEST" -eq 0 ]]; then
   else
     log "Skipping manifest refresh (generator missing): $generator"
   fi
+fi
+
+# Preflight: ensure every manifest source exists in LOCAL_DIR before syncing.
+manifest_file="$LOCAL_DIR/scripts/runtime-links.manifest"
+if [[ -f "$manifest_file" ]]; then
+  missing_manifest_sources=0
+  while IFS='|' read -r target_rel src_rel; do
+    [[ -z "${target_rel:-}" ]] && continue
+    [[ "$target_rel" =~ ^[[:space:]]*# ]] && continue
+    src_path="$LOCAL_DIR/$src_rel"
+    if [[ ! -e "$src_path" ]]; then
+      echo "PRECHECK_MISSING_SOURCE: $target_rel -> $src_path" >&2
+      missing_manifest_sources=$((missing_manifest_sources + 1))
+    fi
+  done < "$manifest_file"
+  if [[ "$missing_manifest_sources" -gt 0 ]]; then
+    echo "ERROR: local manifest precheck failed with $missing_manifest_sources missing source(s)." >&2
+    echo "Hint: check SYNC_LOCAL_DIR/OPENCLAW_SYNC_REMOTE_DIR overrides and current repo contents." >&2
+    exit 1
+  fi
+else
+  log "No manifest found for precheck: $manifest_file"
 fi
 
 [[ -f "$KEY_PATH" ]] || { echo "SSH key missing: $KEY_PATH" >&2; exit 1; }
@@ -144,12 +204,23 @@ if [[ "$NO_LINKS" -eq 0 ]]; then
   if [[ "$DRY_RUN" -eq 1 ]]; then
     log "Skipping remote link deploy/verify because --dry-run is enabled"
   else
-    remote_deploy="$REMOTE_DIR_ABS/scripts/deploy-runtime-links.sh"
-    remote_verify="$REMOTE_DIR_ABS/scripts/verify-runtime-links.sh"
-    log "Deploying runtime links on remote"
-    ssh "${SSH_BASE_ARGS[@]}" "$SSH_TARGET" "/usr/local/bin/bash \"$remote_deploy\""
-    log "Verifying runtime links on remote"
-    ssh "${SSH_BASE_ARGS[@]}" "$SSH_TARGET" "/usr/local/bin/bash \"$remote_verify\""
-    log "Remote deploy+verify complete"
+    if [[ "$RUNTIME_MODE" == "installed" ]]; then
+      remote_install="$REMOTE_DIR_ABS/scripts/install-runtime.sh"
+      log "Installing runtime payload on remote (installed mode)"
+      ssh "${SSH_BASE_ARGS[@]}" "$SSH_TARGET" \
+        "/usr/local/bin/bash \"$remote_install\" --source \"$REMOTE_DIR_ABS\" --prefix \"$INSTALL_PREFIX\""
+      log "Remote install+deploy+verify complete (installed mode)"
+    else
+      remote_generate="$REMOTE_DIR_ABS/scripts/generate-manifest"
+      remote_deploy="$REMOTE_DIR_ABS/scripts/deploy-runtime-links.sh"
+      remote_verify="$REMOTE_DIR_ABS/scripts/verify-runtime-links.sh"
+      log "Regenerating runtime manifest on remote"
+      ssh "${SSH_BASE_ARGS[@]}" "$SSH_TARGET" "/usr/local/bin/bash \"$remote_generate\""
+      log "Deploying runtime links on remote"
+      ssh "${SSH_BASE_ARGS[@]}" "$SSH_TARGET" "/usr/local/bin/bash \"$remote_deploy\""
+      log "Verifying runtime links on remote"
+      ssh "${SSH_BASE_ARGS[@]}" "$SSH_TARGET" "/usr/local/bin/bash \"$remote_verify\""
+      log "Remote deploy+verify complete (repo mode)"
+    fi
   fi
 fi

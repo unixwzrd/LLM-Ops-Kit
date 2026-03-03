@@ -1,31 +1,52 @@
 # Configuration Guide
 
 **Created**: 2026-02-28  
-**Updated**: 2026-03-01
+**Updated**: 2026-03-02
 
 - [Configuration Guide](#configuration-guide)
-  - [Purpose](#purpose)
+  - [What This Doc Is For](#what-this-doc-is-for)
+  - [When to Use This Guide](#when-to-use-this-guide)
   - [Related Docs](#related-docs)
-  - [Override Model](#override-model)
+  - [Configuration Precedence](#configuration-precedence)
   - [Core Environment Variables](#core-environment-variables)
   - [Sync Variables](#sync-variables)
   - [Example `.env.local`](#example-envlocal)
   - [Local Example (Current Operator Setup)](#local-example-current-operator-setup)
   - [Remote/Portable Example](#remoteportable-example)
+  - [Optional: Secrets Kit Integration](#optional-secrets-kit-integration)
   - [Bootstrapping](#bootstrapping)
 
-## Purpose
+## What This Doc Is For
 
-Define runtime defaults and environment overrides without requiring script edits.
+This guide is the runtime configuration reference for OpenClaw-Ops-Toolkit.
+
+Use it to:
+
+- Decide which host/port/path values your scripts should use
+- Override defaults without editing scripts
+- Configure sync behavior across local and remote hosts
+- Move sensitive values to an external secrets manager instead of `.env` files
+
+If you are only trying to start services quickly, use [QUICKSTART](/QUICKSTART.md) first.
+
+## When to Use This Guide
+
+Use this file when you are:
+
+- Setting up a new machine or VM
+- Changing upstream LLM/TTS host or ports
+- Migrating repo paths
+- Standardizing settings before publishing docs/scripts
 
 ## Related Docs
 
-- Main index: [`README.md`](../README.md)
-- Quickstart: [`QUICKSTART.md`](./QUICKSTART.md)
-- Sync/deploy workflow: [`DEPLOYMENT_SYNC_RUNBOOK.md`](./DEPLOYMENT_SYNC_RUNBOOK.md)
+- Main index: [`README`](../README.md)
+- Quickstart: [`QUICKSTART`](./QUICKSTART.md)
+- Sync/deploy workflow: [`DEPLOYMENT_SYNC_RUNBOOK`](./DEPLOYMENT_SYNC_RUNBOOK.md)
 - Template env file: [`.env.example`](../.env.example)
+- TTS API setup: [`MLX_AUDIO_TTS_GUIDE`](./MLX_AUDIO_TTS_GUIDE.md)
 
-## Override Model
+## Configuration Precedence
 
 Scripts use this precedence:
 
@@ -86,6 +107,39 @@ export OPENCLAW_UPSTREAM_PORT="<upstream-port>"
 export OPENCLAW_PROXY_LISTEN_HOST="127.0.0.1"
 export OPENCLAW_PROXY_LISTEN_PORT="<listen-port>"
 ```
+
+## Optional: Secrets Kit Integration
+
+If you do not want sensitive values in `.env` files, use `secrets-kit` and export values into the runtime shell.
+
+Project:
+
+- `secrets-kit` (set to your canonical repo URL once published)
+- Example URL: `https://github.com/unixwzrd/secrets-kit`
+
+Example flow:
+
+```bash
+# 1) Install (example from GitHub)
+python3 -m pip install "git+https://github.com/unixwzrd/secrets-kit.git"
+
+# 2) Store values
+secrets-kit set --name OPENCLAW_UPSTREAM_HOST --value 10.0.0.67 --service openclaw --account default
+secrets-kit set --name OPENCLAW_UPSTREAM_PORT --value 11434 --service openclaw --account default
+secrets-kit set --name OPENCLAW_PROXY_LISTEN_HOST --value 127.0.0.1 --service openclaw --account default
+secrets-kit set --name OPENCLAW_PROXY_LISTEN_PORT --value 11434 --service openclaw --account default
+
+# 3) Export at runtime
+eval "$(secrets-kit export --format shell --service openclaw --account default)"
+
+# 4) Start stack with exported settings
+~/bin/openclaw-stack restart all
+```
+
+Notes:
+
+- Keep `.env` for non-sensitive defaults and local convenience.
+- Keep tokens/secrets in `secrets-kit` only.
 
 ## Bootstrapping
 

@@ -13,7 +13,7 @@ SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
 
 is_action() {
   case "$1" in
-    start|stop|restart|status|settings) return 0 ;;
+    start|stop|restart|status|settings|verify|test) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -23,6 +23,7 @@ normalize_action() {
     setttings|setings|settigns) echo "settings" ;;
     staus|statsu) echo "status" ;;
     restar|retsart) echo "restart" ;;
+    verfy|veirfy) echo "verify" ;;
     *) echo "$1" ;;
   esac
 }
@@ -192,12 +193,12 @@ resolve_args "${1:-}" "${2:-}"
 
 if ! is_action "$action"; then
   echo "Invalid action: $action" >&2
-  echo "Usage: $(basename "$0") [start|stop|restart|status|settings]" >&2
-  echo "   or: modelctl <model-profile> [start|stop|restart|status|settings]" >&2
+  echo "Usage: $(basename "$0") [start|stop|restart|status|settings|verify|test]" >&2
+  echo "   or: modelctl <model-profile> [start|stop|restart|status|settings|verify|test]" >&2
   exit 2
 fi
 
-if [[ "$action" == "start" || "$action" == "restart" || "$action" == "settings" ]]; then
+if [[ "$action" == "start" || "$action" == "restart" || "$action" == "settings" || "$action" == "verify" || "$action" == "test" ]]; then
   load_shell_env
 fi
 ensure_runtime_dirs
@@ -300,6 +301,20 @@ start_model() {
         echo "WARNING: DIRECT_IO=1 but llama-server does not support --direct-io; skipping."
       fi
     fi
+  elif [[ "$MODEL_TYPE" == "tts" ]]; then
+    tts_cmd=( "$TTS_PYTHON_BIN" -m "$TTS_SERVER_MODULE" --host "$HOST" --port "$PORT" )
+    if [[ -n "${TTS_API_KEY:-}" ]]; then
+      tts_cmd+=( --api-key "$TTS_API_KEY" )
+    fi
+    if [[ -n "${TTS_SERVER_ARGS:-}" ]]; then
+      # shellcheck disable=SC2206
+      extra=( $TTS_SERVER_ARGS )
+      tts_cmd+=( "${extra[@]}" )
+    fi
+    nohup "${tts_cmd[@]}" > "$LOG_FILE" 2>&1 &
+  fi
+
+  if [[ "$MODEL_TYPE" == "llm" || "$MODEL_TYPE" == "embedding" ]]; then
     nohup /usr/local/bin/llama-server \
       --model "$MODEL" \
       "${MM_FLAGS[@]}" \
@@ -320,17 +335,6 @@ start_model() {
       "${MODE_FLAGS[@]}" \
       "${EXTRA_ARGS[@]}" \
       > "$LOG_FILE" 2>&1 &
-  elif [[ "$MODEL_TYPE" == "tts" ]]; then
-    tts_cmd=( "$TTS_PYTHON_BIN" -m "$TTS_SERVER_MODULE" --host "$HOST" --port "$PORT" )
-    if [[ -n "${TTS_API_KEY:-}" ]]; then
-      tts_cmd+=( --api-key "$TTS_API_KEY" )
-    fi
-    if [[ -n "${TTS_SERVER_ARGS:-}" ]]; then
-      # shellcheck disable=SC2206
-      extra=( $TTS_SERVER_ARGS )
-      tts_cmd+=( "${extra[@]}" )
-    fi
-    nohup "${tts_cmd[@]}" > "$LOG_FILE" 2>&1 &
   fi
 
   pid="$!"
@@ -342,10 +346,121 @@ stop_model() {
   stop_by_name "$pid_name"
 }
 
+server_base_url() {
+  printf 'http://%s:%s\n' "$HOST" "$PORT"
+}
+
+REPORTED_MODEL_IDS=""
+REPORTED_PRIMARY_MODEL=""
+
+extract_model_ids() {
+  local body="$1"
+  if command -v jq >/dev/null 2>&1; then
+    printf '%s' "$body" | jq -r '.data[]?.id' 2>/dev/null | paste -sd',' - || true
+  else
+    printf '%s' "$body" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p' | paste -sd',' - || true
+  fi
+}
+
+extract_primary_model_id() {
+  local body="$1"
+  if command -v jq >/dev/null 2>&1; then
+    printf '%s' "$body" | jq -r '.data[0]?.id // empty' 2>/dev/null || true
+  else
+    printf '%s' "$body" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p' | head -n 1 || true
+  fi
+}
+
+verify_model() {
+  local base body ids
+  base="$(server_base_url)"
+  echo "verify: profile=$MODEL_PROFILE type=$MODEL_TYPE endpoint=$base"
+  if ! status_model >/dev/null 2>&1; then
+    echo "verify: process not running" >&2
+    return 1
+  fi
+  body="$(curl -fsS --max-time 20 "$base/v1/models" 2>/dev/null || true)"
+  if [[ -z "$body" ]]; then
+    echo "verify: failed to query $base/v1/models" >&2
+    return 1
+  fi
+  ids="$(extract_model_ids "$body")"
+  REPORTED_MODEL_IDS="$ids"
+  REPORTED_PRIMARY_MODEL="$(extract_primary_model_id "$body")"
+  if [[ -n "$ids" ]]; then
+    echo "verify: reported_models=$ids"
+  else
+    echo "verify: reported_models=<unparsed>"
+  fi
+  if [[ -n "$REPORTED_PRIMARY_MODEL" ]]; then
+    echo "verify: primary_model=$REPORTED_PRIMARY_MODEL"
+  fi
+  return 0
+}
+
+test_model() {
+  local base payload out tmp_wav bytes request_model
+  base="$(server_base_url)"
+  verify_model
+  request_model="${REPORTED_PRIMARY_MODEL:-$MODEL}"
+  case "$MODEL_TYPE" in
+    llm)
+      payload="$(cat <<JSON
+{"model":"$request_model","messages":[{"role":"user","content":"Reply with exactly: ALIVE"}],"max_tokens":16,"temperature":0}
+JSON
+)"
+      out="$(curl -fsS --max-time 60 "$base/v1/chat/completions" -H 'Content-Type: application/json' -d "$payload")" || {
+        echo "test: llm request failed" >&2
+        return 1
+      }
+      if command -v jq >/dev/null 2>&1; then
+        printf '%s\n' "$out" | jq -r '"test: llm_model=" + ("'"$request_model"'") + " llm_reply=" + (.choices[0].message.content // "<empty>")' 2>/dev/null || true
+      else
+        echo "test: llm request completed (model=$request_model)"
+      fi
+      ;;
+    embedding)
+      payload="$(cat <<JSON
+{"model":"$request_model","input":"embedding heartbeat test"}
+JSON
+)"
+      out="$(curl -fsS --max-time 60 "$base/v1/embeddings" -H 'Content-Type: application/json' -d "$payload")" || {
+        echo "test: embedding request failed" >&2
+        return 1
+      }
+      if command -v jq >/dev/null 2>&1; then
+        printf '%s\n' "$out" | jq -r '"test: embedding_model=" + ("'"$request_model"'") + " embedding_vector_length=" + ((.data[0].embedding | length | tostring) // "0")' 2>/dev/null || true
+      else
+        echo "test: embedding request completed (model=$request_model)"
+      fi
+      ;;
+    tts)
+      tmp_wav="$(mktemp /tmp/qwen3tts-test-XXXXXX.wav)"
+      payload="$(cat <<JSON
+{"model":"$request_model","input":"Hey, I am alive.","response_format":"wav"}
+JSON
+)"
+      curl -fsS --max-time 90 "$base/v1/audio/speech" -H 'Content-Type: application/json' -d "$payload" --output "$tmp_wav" || {
+        rm -f "$tmp_wav"
+        echo "test: tts request failed" >&2
+        return 1
+      }
+      bytes="$(wc -c < "$tmp_wav" | tr -d '[:space:]')"
+      echo "test: tts_model=$request_model tts_wav_path=$tmp_wav bytes=$bytes"
+      if [[ "${bytes:-0}" -lt 128 ]]; then
+        echo "test: tts output too small" >&2
+        return 1
+      fi
+      ;;
+  esac
+}
+
 case "$action" in
   start) start_model ;;
   stop) stop_model ;;
   restart) stop_model || true; start_model ;;
   status) status_model ;;
   settings) print_model_settings ;;
+  verify) verify_model ;;
+  test) test_model ;;
 esac

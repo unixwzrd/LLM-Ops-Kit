@@ -1,7 +1,7 @@
 # Script Guides
 
 **Created**: 2026-02-26
-**Updated**: 2026-03-01
+**Updated**: 2026-03-03
 
 Mini-manpages for key operator commands.
 
@@ -14,3 +14,5 @@ Mini-manpages for key operator commands.
 - [`openclaw-stack.md`](./openclaw-stack.md)
 - [`sync-ops-scripts.md`](./sync-ops-scripts.md)
 - [`setup-ssh-deploy-key.md`](./setup-ssh-deploy-key.md)
+- [`install-runtime.md`](./install-runtime.md)
+- [`uninstall-runtime.md`](./uninstall-runtime.md)
