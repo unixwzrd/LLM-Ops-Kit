@@ -1,7 +1,7 @@
 # Deployment + Sync Runbook
 
 **Created**: 2026-02-24
-**Updated**: 2026-02-28
+**Updated**: 2026-03-03
 
 - [Deployment + Sync Runbook](#deployment--sync-runbook)
   - [Purpose](#purpose)
@@ -86,6 +86,7 @@ All commands are extensionless and action-driven.
 ```bash
 ~/bin/gateway [start|stop|restart|status]
 ~/bin/proxy [start|stop|restart|status]
+~/bin/tts-bridge [start|stop|restart|status]
 ~/bin/Qwen3 [start|stop|restart|status]
 ~/bin/Qwen3.5 [start|stop|restart|status]
 ~/bin/BGEen [start|stop|restart|status]

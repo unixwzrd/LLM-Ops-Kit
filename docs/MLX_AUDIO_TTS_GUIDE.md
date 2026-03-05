@@ -1,7 +1,7 @@
 # MLX Audio TTS Guide
 
 **Created**: 2026-03-02  
-**Updated**: 2026-03-02
+**Updated**: 2026-03-03
 
 - [MLX Audio TTS Guide](#mlx-audio-tts-guide)
   - [Purpose](#purpose)
@@ -9,8 +9,10 @@
   - [Model Recommendation](#model-recommendation)
   - [Start the TTS Server](#start-the-tts-server)
   - [API Smoke Test](#api-smoke-test)
+  - [Bridge for OpenClaw TTS](#bridge-for-openclaw-tts)
   - [Voice Clone Workflow](#voice-clone-workflow)
   - [Best Practices for Clone Samples](#best-practices-for-clone-samples)
+  - [Known Packaging Gotchas](#known-packaging-gotchas)
   - [Troubleshooting](#troubleshooting)
 
 ## Purpose
@@ -53,7 +55,12 @@ Why:
 Defaults:
 
 - Listen host: `127.0.0.1`
-- Listen port: `18081`
+- Listen port: `11439`
+
+Port note:
+
+- `11439` is just the default example.
+- Any free/open port is valid, as long as the same port is used consistently in your model startup and bridge settings.
 
 Override via environment (optional):
 
@@ -65,7 +72,7 @@ Override via environment (optional):
 ## API Smoke Test
 
 ```bash
-curl -sS http://127.0.0.1:18081/v1/audio/speech \
+curl -sS http://127.0.0.1:11439/v1/audio/speech \
   -H 'Content-Type: application/json' \
   -d '{
     "model": "'"$HOME/LLM_Repository/TTS/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit"'",
@@ -73,6 +80,45 @@ curl -sS http://127.0.0.1:18081/v1/audio/speech \
     "response_format": "wav"
   }' \
   --output /tmp/tts-smoke.wav
+```
+
+## Bridge for OpenClaw TTS
+
+Use `tts-bridge` so OpenClaw can keep using OpenAI-style TTS requests while your local bridge injects MLX-specific fields (`model`, `voice`, `ref_audio`, `ref_text`).
+
+Operationally, this behaves like `proxy`: start/stop/restart/status via a wrapper script with PID and log tracking.
+
+```bash
+~/bin/tts-bridge start
+~/bin/tts-bridge status
+```
+
+Then route OpenClaw TTS to the bridge:
+
+```bash
+export OPENAI_TTS_BASE_URL=http://127.0.0.1:11440/v1
+```
+
+Bridge port note:
+
+- `11440` is also just a default example for the bridge.
+- You can use any free/open port for the bridge; just update `messages.tts.openai.baseUrl` to match.
+
+And set provider in `~/.openclaw/openclaw.json`:
+
+```json
+{
+  "messages": {
+    "tts": {
+      "provider": "openai",
+      "openai": {
+        "baseUrl": "http://127.0.0.1:11440/v1",
+        "model": "${HOME}/LLM_Repository/TTS/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit",
+        "voice": "serena"
+      }
+    }
+  }
+}
 ```
 
 ## Voice Clone Workflow
@@ -92,7 +138,7 @@ OUT="/tmp/mia-clone.wav"
 
 REF_TEXT="$(cat "$TEXT")"
 
-curl -sS http://127.0.0.1:18081/v1/audio/speech \
+curl -sS http://127.0.0.1:11439/v1/audio/speech \
   -H 'Content-Type: application/json' \
   -d "$(jq -n \
     --arg model "$MODEL" \
@@ -111,6 +157,25 @@ curl -sS http://127.0.0.1:18081/v1/audio/speech \
 - Ensure transcript text exactly matches sample speech.
 - Avoid heavy post-processing that changes voice identity.
 
+## Known Packaging Gotchas
+
+`mlx-audio` currently may install without all runtime server dependencies in some environments.
+
+Observed missing packages during real startup testing:
+
+- `uvicorn`
+- `webrtcvad`
+- `fastapi`
+- `python-multipart`
+
+Recommended bootstrap after `pip install mlx-audio`:
+
+```bash
+python -m pip install -U uvicorn webrtcvad fastapi python-multipart
+```
+
+If you maintain a local fork/clone of `mlx-audio`, update its `pyproject.toml` so these dependencies are part of the base install set for server mode.
+
 ## Troubleshooting
 
 If `/v1/audio/speech` returns 500:
@@ -125,7 +190,7 @@ If server is not reachable:
 
 ```bash
 ~/bin/Qwen3TTS status
-lsof -nP -iTCP:18081 -sTCP:LISTEN
+lsof -nP -iTCP:11439 -sTCP:LISTEN
 ```
 
 Back to script-level command docs:

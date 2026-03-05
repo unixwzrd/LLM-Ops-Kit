@@ -13,10 +13,9 @@ HOST="${HOST:-127.0.0.1}"
 PORT="${PORT:-18081}"
 
 # TTS server runtime
-TTS_PYTHON_BIN="${TTS_PYTHON_BIN:-python3}"
+TTS_PYTHON_BIN="${TTS_PYTHON_BIN:-python}"
 TTS_SERVER_MODULE="${TTS_SERVER_MODULE:-mlx_audio.server}"
 TTS_API_KEY="${TTS_API_KEY:-}"
 
 # Optional passthrough arg string for server invocation (advanced use)
 TTS_SERVER_ARGS="${TTS_SERVER_ARGS:-}"
-

@@ -1,5 +1,7 @@
 {%- set image_count = namespace(value=0) %}
 {%- set video_count = namespace(value=0) %}
+{%- set TOOL_CONTENT_MAX = 12000 %}
+{%- set TOOL_HISTORY_LIMIT = 1 %}
 
 {%- macro render_content(content, do_vision_count, is_system_content=false) %}
     {%- if content is string %}
@@ -83,6 +85,17 @@
     {{- raise_exception('No user query found in messages.') }}
 {%- endif %}
 
+{%- set ns_tools = namespace(total=0) %}
+{%- for mm in messages %}
+    {%- if mm.role == "tool" %}
+        {%- set _tool_text = render_content(mm.content, false)|trim %}
+        {%- if not ('[[audio_as_voice]]' in _tool_text or 'MEDIA:/tmp/openclaw/tts-' in _tool_text) %}
+            {%- set ns_tools.total = ns_tools.total + 1 %}
+        {%- endif %}
+    {%- endif %}
+{%- endfor %}
+{%- set ns_seen_tools = namespace(count=0) %}
+
 {%- for message in messages %}
     {%- set content = render_content(message.content, true)|trim %}
     {%- if message.role == "system" or message.role == "developer" %}
@@ -134,16 +147,24 @@
         {%- endif %}
         {{- '<|im_end|>\n' }}
     {%- elif message.role == "tool" %}
-        {%- if loop.previtem and loop.previtem.role != "tool" %}
-            {{- '<|im_start|>user' }}
-        {%- endif %}
-        {{- '\n<tool_response>\n' }}
-        {{- content }}
-        {{- '\n</tool_response>' }}
-        {%- if not loop.last and loop.nextitem.role != "tool" %}
-            {{- '<|im_end|>\n' }}
-        {%- elif loop.last %}
-            {{- '<|im_end|>\n' }}
+        {%- if not ('[[audio_as_voice]]' in content or 'MEDIA:/tmp/openclaw/tts-' in content) %}
+            {%- set ns_seen_tools.count = ns_seen_tools.count + 1 %}
+            {%- if ns_seen_tools.count > (ns_tools.total - TOOL_HISTORY_LIMIT) %}
+                {%- if loop.previtem and loop.previtem.role != "tool" %}
+                    {{- '<|im_start|>user' }}
+                {%- endif %}
+                {{- '\n<tool_response>\n' }}
+                {{- content[:TOOL_CONTENT_MAX] }}
+                {%- if content|length > TOOL_CONTENT_MAX %}
+                    {{- '\n[tool content truncated for context safety]' }}
+                {%- endif %}
+                {{- '\n</tool_response>' }}
+                {%- if not loop.last and loop.nextitem.role != "tool" %}
+                    {{- '<|im_end|>\n' }}
+                {%- elif loop.last %}
+                    {{- '<|im_end|>\n' }}
+                {%- endif %}
+            {%- endif %}
         {%- endif %}
     {%- else %}
         {{- raise_exception('Unexpected message role.') }}

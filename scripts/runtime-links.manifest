@@ -3,6 +3,7 @@
 
 BGEen|scripts/BGEen
 gateway|scripts/gateway
+install-runtime|scripts/install-runtime.sh
 modelctl|scripts/modelctl
 openai-proxy-tap|bin/openai-proxy-tap
 openclaw-report|scripts/openclaw-report.sh
@@ -12,4 +13,6 @@ Qwen3.5|scripts/Qwen3.5
 Qwen3|scripts/Qwen3
 Qwen3TTS|scripts/Qwen3TTS
 sync-ops-scripts|scripts/sync-ops-scripts.sh
+tts-bridge|scripts/tts-bridge
 tts|scripts/tts
+uninstall-runtime|scripts/uninstall-runtime.sh

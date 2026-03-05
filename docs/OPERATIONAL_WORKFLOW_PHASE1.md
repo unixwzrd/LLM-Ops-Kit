@@ -46,8 +46,8 @@ Primary operator commands (from `~/bin`):
 - Start proxy only: `~/bin/proxy start`
 - Stop model directly: `~/bin/Qwen3 stop` / `~/bin/Qwen3.5 stop` / `~/bin/BGEen stop`
 - Stack status: `~/bin/openclaw-stack status`
-- Deploy symlinks: `~/bin/deploy-runtime-links.sh`
-- Verify links: `~/bin/verify-runtime-links.sh`
+- Deploy symlinks: `/usr/local/bin/bash ~/projects/OpenClaw-Ops-Toolkit/scripts/deploy-runtime-links.sh`
+- Verify links: `/usr/local/bin/bash ~/projects/OpenClaw-Ops-Toolkit/scripts/verify-runtime-links.sh`
 - Runtime report: `~/bin/openclaw-report`
 - Sync repo to remote host: `~/bin/sync-ops-scripts`
 

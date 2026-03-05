@@ -23,7 +23,7 @@ Examples:
 Qwen3-TTS smoke test:
 
 ```bash
-curl -sS http://127.0.0.1:18081/v1/audio/speech \
+curl -sS http://127.0.0.1:11439/v1/audio/speech \
   -H 'Content-Type: application/json' \
   -d '{
     "model": "'"$HOME/LLM_Repository/TTS/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit"'",
@@ -36,7 +36,7 @@ curl -sS http://127.0.0.1:18081/v1/audio/speech \
 Optional env overrides:
 
 - `OPENCLAW_TTS_HOST` (default `127.0.0.1`)
-- `OPENCLAW_TTS_PORT` (default `18081`)
+- `OPENCLAW_TTS_PORT` (default `11439`)
 - `OPENCLAW_TTS_PYTHON` (default `python3`)
 - `OPENCLAW_TTS_MODULE` (default `mlx_audio.server`)
 

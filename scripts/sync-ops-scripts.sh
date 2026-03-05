@@ -178,11 +178,20 @@ CONTROL_SOCKET="${TMPDIR:-/tmp}/openclaw-sync-${USER_NAME}@${HOST}"
 SSH_BASE_ARGS=( -i "$KEY_PATH" -o ControlMaster=auto -o ControlPersist=5m -o ControlPath="$CONTROL_SOCKET" )
 
 REMOTE_HOME="$(ssh "${SSH_BASE_ARGS[@]}" "$SSH_TARGET" 'printf "%s" "$HOME"')"
-if [[ "$REMOTE_DIR" == "~/"* ]]; then
+if [[ "$REMOTE_DIR" == "~" ]]; then
+  REMOTE_DIR_ABS="$REMOTE_HOME"
+elif [[ "$REMOTE_DIR" == "~/"* ]]; then
   REMOTE_DIR_ABS="${REMOTE_HOME}/${REMOTE_DIR#~/}"
-else
+elif [[ "$REMOTE_DIR" == /* ]]; then
   REMOTE_DIR_ABS="$REMOTE_DIR"
+else
+  REMOTE_DIR_ABS="${REMOTE_HOME}/${REMOTE_DIR#./}"
 fi
+
+# Defensive normalization for accidental literal-tilde segments.
+# Example bad path: /Users/name/~/projects/...
+REMOTE_DIR_ABS="${REMOTE_DIR_ABS/$REMOTE_HOME\/~\//$REMOTE_HOME/}"
+REMOTE_DIR_ABS="${REMOTE_DIR_ABS/\~\//}"
 
 log "Ensuring remote directory exists: ${REMOTE_DIR_ABS}"
 ssh "${SSH_BASE_ARGS[@]}" "$SSH_TARGET" "mkdir -p \"${REMOTE_DIR_ABS}\""

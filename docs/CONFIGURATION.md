@@ -27,7 +27,7 @@ Use it to:
 - Configure sync behavior across local and remote hosts
 - Move sensitive values to an external secrets manager instead of `.env` files
 
-If you are only trying to start services quickly, use [QUICKSTART](/QUICKSTART.md) first.
+If you are only trying to start services quickly, use [QUICKSTART](./QUICKSTART.md) first.
 
 ## When to Use This Guide
 
@@ -62,6 +62,15 @@ Scripts use this precedence:
 - `OPENCLAW_PROXY_LISTEN_HOST`: default bind host for proxy wrappers.
 - `OPENCLAW_PROXY_LISTEN_PORT`: default bind port for proxy wrappers.
 - `OPENCLAW_PROXY_TAP_BIN`: optional explicit path to `openai-proxy-tap`.
+- `OPENAI_TTS_BASE_URL`: OpenClaw OpenAI-TTS provider base URL (for example `http://127.0.0.1:11440/v1`).
+- `TTS_BRIDGE_HOST`: bind host for `tts-bridge`.
+- `TTS_BRIDGE_PORT`: bind port for `tts-bridge`.
+- `TTS_BRIDGE_UPSTREAM_BASE`: upstream MLX Audio base URL.
+- `TTS_BRIDGE_MODEL`: default model path injected by bridge.
+- `TTS_BRIDGE_VOICE`: default voice injected by bridge.
+- `TTS_BRIDGE_REF_AUDIO`: default reference audio file.
+- `TTS_BRIDGE_REF_TEXT`: default reference transcript file (or literal text if passed directly).
+- `TTS_BRIDGE_PYTHON_BIN`: python binary used by bridge launcher.
 
 ## Sync Variables
 

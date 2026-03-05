@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SOURCE="${BASH_SOURCE[0]}"
+while [[ -h "$SOURCE" ]]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+# shellcheck disable=SC1091
+. "$SCRIPT_DIR/lib/common.sh"
+
+ACTION="${1:-status}"
+shift || true
+
+LISTEN_HOST="${TTS_BRIDGE_HOST:-127.0.0.1}"
+LISTEN_PORT="${TTS_BRIDGE_PORT:-11440}"
+UPSTREAM_BASE="${TTS_BRIDGE_UPSTREAM_BASE:-http://127.0.0.1:11439/v1}"
+MODEL_PATH="${TTS_BRIDGE_MODEL:-$HOME/LLM_Repository/TTS/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit}"
+VOICE_NAME="${TTS_BRIDGE_VOICE:-serena}"
+REF_AUDIO="${TTS_BRIDGE_REF_AUDIO:-$HOME/LLM_Repository/TTS/Samples/Mia-Faith-Prof-Emotive-60s-Sample-Mastered-01.wav}"
+REF_TEXT="${TTS_BRIDGE_REF_TEXT:-$HOME/LLM_Repository/TTS/Samples/Mia-Faith-Prof-Emotive-60s-Sample-Mastered-01.txt}"
+PY_BIN="${TTS_BRIDGE_PYTHON_BIN:-python3}"
+
+pid_name="tts-bridge"
+log_file="$OPENCLAW_LOG_DIR/tts-bridge.log"
+
+usage() {
+  cat <<EOF
+Usage: tts-bridge [start|stop|restart|status] [-- <extra python args>]
+
+Env overrides:
+  TTS_BRIDGE_HOST             (default: 127.0.0.1)
+  TTS_BRIDGE_PORT             (default: 11440)
+  TTS_BRIDGE_UPSTREAM_BASE    (default: http://127.0.0.1:11439/v1)
+  TTS_BRIDGE_MODEL            (default: Qwen3-TTS local path)
+  TTS_BRIDGE_VOICE            (default: serena)
+  TTS_BRIDGE_PREFER_INCOMING_VOICE (default: 0; set 1 to honor incoming voice)
+  TTS_BRIDGE_REF_AUDIO        (default: Mia-Faith 60s wav)
+  TTS_BRIDGE_REF_TEXT         (default: matching .txt transcript)
+  TTS_BRIDGE_PYTHON_BIN       (default: python3)
+EOF
+}
+
+status_bridge() {
+  if pid="$(read_pid "$pid_name" 2>/dev/null)"; then
+    if is_pid_running "$pid"; then
+      echo "$pid_name: running pid=$pid"
+      echo "  listen=http://$LISTEN_HOST:$LISTEN_PORT"
+      echo "  upstream=$UPSTREAM_BASE"
+      echo "  model=$MODEL_PATH"
+      echo "  voice=$VOICE_NAME"
+      echo "  ref_audio=$REF_AUDIO"
+      echo "  ref_text=$REF_TEXT"
+      echo "  log=$log_file"
+      return 0
+    fi
+    echo "$pid_name: stale pid=$pid"
+    return 1
+  fi
+  echo "$pid_name: stopped"
+  return 1
+}
+
+start_bridge() {
+  ensure_runtime_dirs
+  load_shell_env
+
+  if status_bridge >/dev/null 2>&1; then
+    echo "$pid_name: already running"
+    return 0
+  fi
+
+  [[ -e "$MODEL_PATH" ]] || { echo "tts-bridge: model path not found: $MODEL_PATH" >&2; exit 1; }
+  [[ -f "$REF_AUDIO" ]] || { echo "tts-bridge: ref audio not found: $REF_AUDIO" >&2; exit 1; }
+  [[ -f "$REF_TEXT" ]] || { echo "tts-bridge: ref text not found: $REF_TEXT" >&2; exit 1; }
+
+  nohup "$PY_BIN" "$SCRIPT_DIR/openai_tts_bridge.py" \
+    --listen-host "$LISTEN_HOST" \
+    --listen-port "$LISTEN_PORT" \
+    --upstream-base "$UPSTREAM_BASE" \
+    --model "$MODEL_PATH" \
+    --voice "$VOICE_NAME" \
+    --ref-audio "$REF_AUDIO" \
+    --ref-text "$REF_TEXT" \
+    "$@" \
+    > "$log_file" 2>&1 &
+
+  write_pid "$pid_name" "$!"
+  echo "Started $pid_name pid=$! log=$log_file"
+}
+
+case "$ACTION" in
+  start) start_bridge "$@" ;;
+  stop) stop_by_name "$pid_name" ;;
+  restart) stop_by_name "$pid_name" || true; start_bridge "$@" ;;
+  status) status_bridge ;;
+  -h|--help|help) usage ;;
+  *)
+    echo "Invalid action: $ACTION" >&2
+    usage >&2
+    exit 2
+    ;;
+esac

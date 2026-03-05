@@ -1,7 +1,7 @@
 # OpenClaw-Ops-Toolkit
 
 **Created**: 2026-02-20
-**Updated**: 2026-03-02
+**Updated**: 2026-03-03
 
 
 Operational toolkit for running, deploying, and maintaining a local OpenClaw stack across hosts.
@@ -126,6 +126,7 @@ Full setup + troubleshooting guide:
 ~/bin/gateway [start|stop|restart|status]
 ~/bin/proxy [start|stop|restart|status]
 ~/bin/tts [start|stop|restart|status]
+~/bin/tts-bridge [start|stop|restart|status]
 ~/bin/Qwen3TTS [start|stop|restart|status|settings|verify|test]
 ~/bin/Qwen3 [start|stop|restart|status|settings|verify|test]
 ~/bin/Qwen3.5 [start|stop|restart|status|settings|verify|test]
@@ -134,7 +135,7 @@ Full setup + troubleshooting guide:
 ~/bin/modelctl status
 ~/bin/modelctl <ModelProfile> [start|stop|restart|status|settings|verify|test]
 ~/bin/install-runtime [--source <repo-path>] [--prefix <install-base>] [--bin-dir <bin-dir>] [--no-links]
-~/bin/uninstall-runtime [--prefix <install-base>] [--bin-dir <bin-dir>] [--keep-files]
+~/bin/uninstall-runtime [--prefix <install-base>] [--bin-dir <bin-dir>] [--state-file <path>] [--keep-files]
 ~/bin/openclaw-stack [start|stop|restart|status] [all|gateway|llm|embedding|tts|proxy|models]
 ~/bin/openclaw-report
 ```
@@ -193,7 +194,7 @@ A future optional path is to add `pyproject.toml` and package wrappers for insta
 - [TROUBLESHOOTING](docs/TROUBLESHOOTING.md) — symptom-driven fixes
 - [ARCHITECTURE](docs/ARCHITECTURE.md) — component and runtime flow overview
 - [GLOSSARY](docs/GLOSSARY.md) — core terms used across docs
-- [SAFE_PUBLISH_CHECKLIST](docs/internal/SAFE_PUBLISH_CHECKLIST.md) — public pre-publish safety checks
+- [SAFE_PUBLISH_CHECKLIST](docs/SAFE_PUBLISH_CHECKLIST.md) — public pre-publish safety checks
 - [Scripts README](docs/scripts/README.md) — per-command script guides
 - [MLX_AUDIO_TTS_GUIDE](docs/MLX_AUDIO_TTS_GUIDE.md) — end-to-end MLX Audio setup and voice-clone workflow
 

@@ -79,8 +79,8 @@ Runtime link manifest is generated from launcher symlinks:
 ## 5) Deploy and verify links
 
 ```bash
-~/bin/deploy-runtime-links.sh
-~/bin/verify-runtime-links.sh
+/usr/local/bin/bash ~/projects/OpenClaw-Ops-Toolkit/scripts/deploy-runtime-links.sh
+/usr/local/bin/bash ~/projects/OpenClaw-Ops-Toolkit/scripts/verify-runtime-links.sh
 ```
 
 Remote:

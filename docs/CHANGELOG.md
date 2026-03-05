@@ -1,12 +1,36 @@
 # Agent Ops Changelog
 
 **Created**: 2026-02-20
-**Updated**: 2026-03-01
+**Updated**: 2026-03-03
 
 All notable changes to OpenClaw-Ops-Toolkit will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+### 2026-03-03 — TTS bridge wiring + sync path normalization + prompt replay pruning
+
+- **Scope:** `OpenClaw-Ops-Toolkit/scripts`, `OpenClaw-Ops-Toolkit/docs`
+- **Category:** `runtime`, `tts`, `deployment`, `prompting`, `documentation`
+- **What changed:**
+  - Added OpenAI-compatible local TTS bridge:
+    - `scripts/openai_tts_bridge.py`
+    - `scripts/tts-bridge`
+  - Added managed runtime command entry for `tts-bridge` in `scripts/runtime-links.manifest`.
+  - Added script guide for bridge operations:
+    - `docs/scripts/tts-bridge.md`
+    - linked from `docs/scripts/README.md`
+  - Extended MLX TTS runbook with OpenClaw bridge wiring:
+    - `OPENAI_TTS_BASE_URL=http://127.0.0.1:11440/v1`
+    - Added known `mlx-audio` packaging gaps and required extra installs (`uvicorn`, `webrtcvad`, `fastapi`, `python-multipart`).
+  - Hardened `sync-ops-scripts.sh` remote path normalization to handle literal `~` path artifacts.
+  - Reduced template replay pressure for tool messages in Qwen3.5 templates to avoid context bloat:
+    - stricter tool history limit
+    - shorter tool payload truncation ceiling
+- **Why:**
+  - Keep OpenClaw TTS provider surface stable while supporting MLX CustomVoice payload requirements.
+  - Prevent sync path drift on mixed local/remote tilde usage.
+  - Improve long-session stability under heavy tool-use history.
 
 ### 2026-03-01 — modelctl verify/test + resilient runtime link flow
 

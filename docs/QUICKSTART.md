@@ -1,7 +1,7 @@
 # Quickstart (10 Minutes)
 
 **Created**: 2026-02-26
-**Updated**: 2026-02-28
+**Updated**: 2026-03-03
 
 - [Quickstart (10 Minutes)](#quickstart-10-minutes)
   - [Requirements](#requirements)
@@ -21,12 +21,15 @@ See `docs/CONFIGURATION.md` for environment overrides before first run.
 ## Local bring-up
 
 ```bash
-~/bin/deploy-runtime-links.sh
-~/bin/verify-runtime-links.sh
+/usr/local/bin/bash ~/projects/OpenClaw-Ops-Toolkit/scripts/deploy-runtime-links.sh
+/usr/local/bin/bash ~/projects/OpenClaw-Ops-Toolkit/scripts/verify-runtime-links.sh
 ~/bin/gateway start
 ~/bin/Qwen3 start
 ~/bin/BGEen start
 ~/bin/proxy start
+# Optional for local OpenAI-style TTS via MLX bridge:
+# ~/bin/Qwen3TTS start
+# ~/bin/tts-bridge start
 ```
 
 ## Remote sync + deploy
