@@ -1,7 +1,7 @@
 # Configuration Guide
 
 **Created**: 2026-02-28  
-**Updated**: 2026-03-02
+**Updated**: 2026-03-06
 
 - [Configuration Guide](#configuration-guide)
   - [What This Doc Is For](#what-this-doc-is-for)
@@ -52,10 +52,20 @@ Scripts use this precedence:
 
 1. CLI flags (when supported)
 2. Exported environment variables
-3. Script defaults (kept backward-compatible for current local setup)
+3. `~/.llmops/config.env` user config
+4. Repo defaults (`scripts/config/hosts.env`)
+5. Script defaults
+
+Note:
+- Toolkit scripts do not rely on `~/.openclaw/.env` by default.
+- Keep toolkit configuration in `~/.llmops/config.env`.
 
 ## Core Environment Variables
 
+- `~/.llmops/config.env`: user-owned toolkit config file for host/IP/path overrides.
+- `LLMOPS_HOME`: toolkit state root (default `~/.llmops`).
+- `OPENCLAW_RUN_DIR`: runtime pid/state dir (default `$LLMOPS_HOME/run`).
+- `OPENCLAW_LOG_DIR`: toolkit log dir (default `$LLMOPS_HOME/logs`).
 - `scripts/config/hosts.env`: centralized default host/IP file for wrappers (sync/proxy) in this repo.
 - `OPENCLAW_AGENT_WORK_ROOT`: canonical repo root used for template/tool paths.
 - `OPENCLAW_UPSTREAM_HOST`: default upstream model host for wrappers.
@@ -92,6 +102,9 @@ OPENCLAW_UPSTREAM_HOST=<upstream-host>
 OPENCLAW_UPSTREAM_PORT=<upstream-port>
 OPENCLAW_PROXY_LISTEN_HOST=127.0.0.1
 OPENCLAW_PROXY_LISTEN_PORT=<listen-port>
+LLMOPS_HOME=~/.llmops
+OPENCLAW_RUN_DIR=~/.llmops/run
+OPENCLAW_LOG_DIR=~/.llmops/logs
 
 SYNC_HOST=<sync-host>
 SYNC_USER=<your-user>
@@ -155,3 +168,19 @@ Notes:
 ## Bootstrapping
 
 Use [`.env.example`](../.env.example) as a starting template for your local environment values.
+
+Recommended user-owned config path:
+
+```bash
+mkdir -p ~/.llmops
+cat > ~/.llmops/config.env <<'EOF'
+OPENCLAW_UPSTREAM_HOST=10.0.0.67
+OPENCLAW_SYNC_HOST=10.0.0.67
+OPENCLAW_UPSTREAM_PORT=11434
+OPENCLAW_PROXY_LISTEN_HOST=127.0.0.1
+OPENCLAW_PROXY_LISTEN_PORT=11434
+LLMOPS_HOME=$HOME/.llmops
+OPENCLAW_RUN_DIR=$HOME/.llmops/run
+OPENCLAW_LOG_DIR=$HOME/.llmops/logs
+EOF
+```

@@ -194,7 +194,7 @@ A future optional path is to add `pyproject.toml` and package wrappers for insta
 - [TROUBLESHOOTING](docs/TROUBLESHOOTING.md) — symptom-driven fixes
 - [ARCHITECTURE](docs/ARCHITECTURE.md) — component and runtime flow overview
 - [GLOSSARY](docs/GLOSSARY.md) — core terms used across docs
-- [SAFE_PUBLISH_CHECKLIST](docs/SAFE_PUBLISH_CHECKLIST.md) — public pre-publish safety checks
+- [SAFE_PUBLISH_CHECKLIST](docs/internal/SAFE_PUBLISH_CHECKLIST.md) — canonical pre-publish safety checks (internal)
 - [Scripts README](docs/scripts/README.md) — per-command script guides
 - [MLX_AUDIO_TTS_GUIDE](docs/MLX_AUDIO_TTS_GUIDE.md) — end-to-end MLX Audio setup and voice-clone workflow
 

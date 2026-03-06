@@ -13,7 +13,7 @@ SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
 
 is_action() {
   case "$1" in
-    start|stop|restart|status|settings|verify|test) return 0 ;;
+    start|stop|restart|status|status-all|settings|verify|test|list) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -41,8 +41,10 @@ resolve_model_from_invocation() {
 resolve_args() {
   local arg1
   local arg2
+  local invoked_as
   arg1="$(normalize_action "${1:-}")"
   arg2="$(normalize_action "${2:-}")"
+  invoked_as="$(basename "$0")"
 
   if [[ -z "$arg1" ]]; then
     model_name="$(resolve_model_from_invocation)"
@@ -51,6 +53,11 @@ resolve_args() {
   fi
 
   if is_action "$arg1"; then
+    if [[ "$invoked_as" == "modelctl" && ( "$arg1" == "status" || "$arg1" == "status-all" || "$arg1" == "list" ) ]]; then
+      model_name="__all__"
+      action="$arg1"
+      return
+    fi
     model_name="$(resolve_model_from_invocation)"
     action="$arg1"
     return
@@ -193,15 +200,51 @@ resolve_args "${1:-}" "${2:-}"
 
 if ! is_action "$action"; then
   echo "Invalid action: $action" >&2
-  echo "Usage: $(basename "$0") [start|stop|restart|status|settings|verify|test]" >&2
+  echo "Usage: $(basename "$0") [start|stop|restart|status|status-all|settings|verify|test|list]" >&2
   echo "   or: modelctl <model-profile> [start|stop|restart|status|settings|verify|test]" >&2
   exit 2
 fi
 
-if [[ "$action" == "start" || "$action" == "restart" || "$action" == "settings" || "$action" == "verify" || "$action" == "test" ]]; then
+if [[ "$action" == "start" || "$action" == "restart" || "$action" == "status" || "$action" == "settings" || "$action" == "verify" || "$action" == "test" ]]; then
   load_shell_env
 fi
 ensure_runtime_dirs
+
+list_profiles() {
+  find "$SCRIPT_DIR/models" -maxdepth 1 -type f -name '*.sh' -print \
+    | sed -e 's#^.*/##' -e 's#\.sh$##' \
+    | sort
+}
+
+if [[ "$model_name" == "__all__" ]]; then
+  case "$action" in
+    list)
+      while IFS= read -r profile; do
+        [[ -n "$profile" ]] || continue
+        model_file="$SCRIPT_DIR/models/$profile.sh"
+        MODEL_TYPE=""
+        # shellcheck disable=SC1090
+        . "$model_file"
+        echo "$profile|${MODEL_TYPE:-unknown}"
+      done < <(list_profiles)
+      exit 0
+      ;;
+    status|status-all)
+      rc=0
+      first=1
+      while IFS= read -r profile; do
+        [[ -n "$profile" ]] || continue
+        if [[ "$first" -eq 0 ]]; then
+          echo
+        fi
+        first=0
+        "$SCRIPT_DIR/modelctl" "$profile" status || rc=1
+      done < <(list_profiles)
+      exit "$rc"
+      ;;
+  esac
+fi
+
 load_model_defaults "$model_name"
 
 if [[ "$MODEL_TYPE" == "llm" || "$MODEL_TYPE" == "embedding" ]]; then
@@ -215,19 +258,85 @@ else
   pid_name="llama-$MODEL_PROFILE"
   model_log_file="$OPENCLAW_LOG_DIR/llama-server-$MODEL_PROFILE.log"
 fi
+state_file="$OPENCLAW_RUN_DIR/$pid_name.state"
+
+write_model_state() {
+  local pid="$1"
+  cat > "$state_file" <<EOF
+MODEL_PROFILE=$MODEL_PROFILE
+MODEL_TYPE=$MODEL_TYPE
+PID=$pid
+HOST=$HOST
+PORT=$PORT
+LOG_FILE=$model_log_file
+STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+EOF
+}
+
+read_model_state() {
+  [[ -f "$state_file" ]] || return 1
+  # shellcheck disable=SC1090
+  . "$state_file"
+}
+
+clear_model_state() {
+  rm -f "$state_file"
+}
+
+pid_matches_expected_process() {
+  local pid="$1"
+  local cmd=""
+  cmd="$(ps -o command= -p "$pid" 2>/dev/null || true)"
+  [[ -n "$cmd" ]] || return 1
+
+  case "$MODEL_TYPE" in
+    llm|embedding)
+      [[ "$cmd" == *"llama-server"* ]] || return 1
+      [[ "$cmd" == *"--port $PORT"* ]] || return 1
+      ;;
+    tts)
+      [[ "$cmd" == *"$TTS_SERVER_MODULE"* ]] || return 1
+      [[ "$cmd" == *"--port $PORT"* ]] || return 1
+      ;;
+  esac
+  return 0
+}
+
+status_probe() {
+  local base
+  base="$(server_base_url)"
+  if curl -fsS --max-time 2 "$base/v1/models" >/dev/null 2>&1; then
+    echo "  api_probe=ok endpoint=$base/v1/models"
+  else
+    echo "  api_probe=failed endpoint=$base/v1/models"
+  fi
+}
 
 status_model() {
   if pid="$(read_pid "$pid_name" 2>/dev/null)"; then
     if is_pid_running "$pid"; then
+      if ! pid_matches_expected_process "$pid"; then
+        echo "$pid_name: pid mismatch pid=$pid log=$model_log_file"
+        [[ -f "$state_file" ]] && echo "  state_file=$state_file"
+        print_model_settings
+        return 1
+      fi
       echo "$pid_name: running pid=$pid log=$model_log_file"
+      if read_model_state 2>/dev/null; then
+        echo "  started_at=${STARTED_AT:-unknown}"
+        echo "  state_file=$state_file"
+      fi
+      status_probe
       print_model_settings
       return 0
     fi
     echo "$pid_name: stale pid=$pid log=$model_log_file"
+    [[ -f "$state_file" ]] && echo "  state_file=$state_file"
     print_model_settings
     return 1
   fi
   echo "$pid_name: stopped log=$model_log_file"
+  [[ -f "$state_file" ]] && echo "  state_file=$state_file"
   print_model_settings
   return 1
 }
@@ -339,15 +448,29 @@ start_model() {
 
   pid="$!"
   write_pid "$pid_name" "$pid"
+  write_model_state "$pid"
   echo "Started $pid_name pid=$pid log=$LOG_FILE"
 }
 
 stop_model() {
+  if pid="$(read_pid "$pid_name" 2>/dev/null)"; then
+    if is_pid_running "$pid" && ! pid_matches_expected_process "$pid"; then
+      echo "$pid_name: pid mismatch pid=$pid, refusing to kill unexpected process" >&2
+      rm -f "$(pid_file_for "$pid_name")"
+      clear_model_state
+      return 1
+    fi
+  fi
   stop_by_name "$pid_name"
+  clear_model_state
 }
 
 server_base_url() {
-  printf 'http://%s:%s\n' "$HOST" "$PORT"
+  local h="$HOST"
+  if [[ "$h" == "0.0.0.0" || "$h" == "::" ]]; then
+    h="127.0.0.1"
+  fi
+  printf 'http://%s:%s\n' "$h" "$PORT"
 }
 
 REPORTED_MODEL_IDS=""

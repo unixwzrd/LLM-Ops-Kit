@@ -1,12 +1,41 @@
 # Agent Ops Changelog
 
 **Created**: 2026-02-20
-**Updated**: 2026-03-03
+**Updated**: 2026-03-06
 
 All notable changes to LLM-Ops-Kit will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+### 2026-03-06 — Runtime ownership boundary + rename finalization + status hardening
+
+- **Scope:** `LLM-Ops-Kit/scripts`, `LLM-Ops-Kit/docs`, `LLM-Ops-Kit/.env.example`, `LLM-Ops-Kit/CHANGELOG.md`
+- **Category:** `runtime`, `deployment`, `configuration`, `documentation`
+- **What changed:**
+  - Finalized project naming/path defaults to `LLM-Ops-Kit` in scripts and docs.
+  - Moved changelog to project root (`CHANGELOG.md`) and updated references.
+  - Fixed `sync-ops-scripts` host loading so shared env defaults apply before host assignment.
+  - Added repo-local/default host source support and documented host precedence.
+  - Added deploy-time symlink auto-heal for rename migration:
+    - heals managed links from `~/projects/OpenClaw-Ops-Toolkit/...` to `~/projects/LLM-Ops-Kit/...`
+    - preserves conflict behavior for non-symlink collisions.
+  - Hardened `modelctl status`:
+    - persistent state file per model process (`$OPENCLAW_RUN_DIR/<pid_name>.state`)
+    - PID command validation via `ps`
+    - fast API responsiveness probe to `/v1/models`
+    - state cleanup on stop.
+  - Moved toolkit-owned runtime defaults from `.openclaw` to `.llmops`:
+    - `OPENCLAW_RUN_DIR` default -> `~/.llmops/run`
+    - `OPENCLAW_LOG_DIR` default -> `~/.llmops/logs`
+    - config loading now prefers `~/.llmops/config.env`
+    - removed implicit dependence on `~/.openclaw/.env` for toolkit scripts.
+  - Updated proxy and runbook defaults to `.llmops` paths.
+  - Updated `.env.example` to include `LLMOPS_HOME`, `OPENCLAW_RUN_DIR`, and `OPENCLAW_LOG_DIR`.
+- **Why:**
+  - Keep ownership boundaries clear: OpenClaw controls `.openclaw`, toolkit controls `.llmops`.
+  - Improve operator reliability during host/network changes and repo-path migration.
+  - Make status output more trustworthy than pidfile-only checks.
 
 ### 2026-03-03 — TTS bridge wiring + sync path normalization + prompt replay pruning
 

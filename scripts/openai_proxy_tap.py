@@ -5,7 +5,7 @@ Logs request/response metadata and JSON bodies to NDJSON while proxying traffic.
 
 Typical use:
   openai-proxy-tap --upstream http://<upstream-host>:<upstream-port> --listen-port 18080 \
-    --log ~/.openclaw/logs/openai-proxy.ndjson
+    --log ~/.llmops/logs/openai-proxy.ndjson
 
 Then point OpenClaw llamacpp baseUrl to:
   http://127.0.0.1:18080/v1
@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin, urlparse
-from urllib.request import Request, urlopen
+from urllib.request import ProxyHandler, Request, build_opener
 
 try:
     import jinja2
@@ -208,6 +208,7 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
     raw_request_log_path: Path | None = None
     rendered_prompt_log_path: Path | None = None
     raw_response_log_path: Path | None = None
+    upstream_opener = build_opener(ProxyHandler({}))
 
     protocol_version = "HTTP/1.1"
 
@@ -390,7 +391,7 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
             resp_truncated = True
 
         try:
-            with urlopen(req, timeout=self.timeout_sec) as resp:
+            with self.upstream_opener.open(req, timeout=self.timeout_sec) as resp:
                 status = int(resp.status)
                 resp_headers = dict(resp.headers.items())
 
@@ -530,7 +531,7 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
         self._proxy()
 
 
-class ForkingHTTPServer(socketserver.ForkingMixIn, HTTPServer):
+class ThreadingHTTPServer(socketserver.ThreadingMixIn, HTTPServer):
     daemon_threads = True
     allow_reuse_address = True
 
@@ -557,11 +558,12 @@ def normalize_upstream(raw: str) -> tuple[str, int]:
 
 
 def parse_args() -> argparse.Namespace:
+    default_log_dir = os.path.expanduser("~/.llmops/logs")
     p = argparse.ArgumentParser(description="OpenAI-compatible reverse proxy tap")
     p.add_argument("--listen-host", default="127.0.0.1")
     p.add_argument("--listen-port", "--port", dest="listen_port", type=int, help="Listen port (default: upstream port)")
     p.add_argument("--upstream", required=True, help="Upstream host:port or URL, e.g. <upstream-host>:<upstream-port>")
-    p.add_argument("--log", default="~/.openclaw/logs/openai-proxy.ndjson", help="NDJSON log file path")
+    p.add_argument("--log", default=f"{default_log_dir}/openai-proxy.ndjson", help="NDJSON log file path")
     p.add_argument("--timeout", type=float, default=900.0)
     p.add_argument("--max-log-bytes", type=int, default=0, help="Per-request capture cap in bytes; 0 means unlimited")
     p.add_argument("--stream-chunk-size", type=int, default=65536)
@@ -569,7 +571,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--chat-template-max-chars", type=int, default=200000)
     p.add_argument("--raw-log", help="Optional combined plain-text framed log path (request + response in sequence).")
     p.add_argument("--raw-request-log", help="Optional plain-text framed log path for raw request_text per request_start")
-    p.add_argument("--rendered-prompt-log", default="~/.openclaw/logs/openai-proxy.rendered.log", help="Optional plain-text framed log path for rendered_prompt per request_start")
+    p.add_argument("--rendered-prompt-log", default=f"{default_log_dir}/openai-proxy.rendered.log", help="Optional plain-text framed log path for rendered_prompt per request_start")
     p.add_argument("--raw-response-log", help="Optional plain-text framed log path for response body per request_end")
     p.set_defaults(log_fsync=True)
     p.add_argument("--log-fsync", dest="log_fsync", action="store_true", help="Force fsync after each log line write (default: on)")
@@ -590,6 +592,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    default_log_dir = os.path.expanduser("~/.llmops/logs")
     args = parse_args()
     try:
         upstream_base, upstream_port = normalize_upstream(args.upstream)
@@ -614,7 +617,7 @@ def main() -> int:
 
     # Default behavior: keep request/response framed logs together in one sequential file.
     if raw_request_log_path is None and raw_response_log_path is None and raw_log_path is None:
-        raw_request_log_path = Path(os.path.expanduser("~/.openclaw/logs/openai-proxy.raw.log"))
+        raw_request_log_path = Path(f"{default_log_dir}/openai-proxy.raw.log")
         raw_response_log_path = raw_request_log_path
     else:
         if raw_log_path is not None:
@@ -646,10 +649,10 @@ def main() -> int:
             except Exception as e:
                 ProxyTapHandler.chat_template_error = f"TemplateLoadError: {e}"
 
-    server = ForkingHTTPServer((args.listen_host, listen_port), ProxyTapHandler)
+    server = ThreadingHTTPServer((args.listen_host, listen_port), ProxyTapHandler)
     print(
         f"openai-proxy-tap listening on http://{args.listen_host}:{listen_port} "
-        f"-> {upstream_base} (forking, log: {ProxyTapHandler.log_path}, raw_log={ProxyTapHandler.raw_request_log_path}, rendered_log={ProxyTapHandler.rendered_prompt_log_path}, raw_response_log={ProxyTapHandler.raw_response_log_path}, latest_image_only={ProxyTapHandler.latest_image_only}, log_fsync={ProxyTapHandler.log_fsync}, stream_chunk_size={ProxyTapHandler.stream_chunk_size}, max_log_bytes={ProxyTapHandler.max_log_bytes}, chat_template={ProxyTapHandler.chat_template_path})",
+        f"-> {upstream_base} (threading, log: {ProxyTapHandler.log_path}, raw_log={ProxyTapHandler.raw_request_log_path}, rendered_log={ProxyTapHandler.rendered_prompt_log_path}, raw_response_log={ProxyTapHandler.raw_response_log_path}, latest_image_only={ProxyTapHandler.latest_image_only}, log_fsync={ProxyTapHandler.log_fsync}, stream_chunk_size={ProxyTapHandler.stream_chunk_size}, max_log_bytes={ProxyTapHandler.max_log_bytes}, chat_template={ProxyTapHandler.chat_template_path})",
         flush=True,
     )
 

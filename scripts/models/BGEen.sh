@@ -17,7 +17,7 @@ THREADS_BATCH="${THREADS_BATCH:-$THREADS}"
 
 # llama.cpp sizing (BGE-tuned)
 # bge-small-en-v1.5 is effectively 512-token context.
-CTX_SIZE="${CTX_SIZE:-1024}"
+CTX_SIZE="${CTX_SIZE:-512}"
 GPU_LAYERS="${GPU_LAYERS:-99}"
 BATCH_SIZE="${BATCH_SIZE:-1024}"
 UBATCH_SIZE="${UBATCH_SIZE:-1024}"

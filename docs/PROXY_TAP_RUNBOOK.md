@@ -38,9 +38,9 @@ Default wrapper values (`~/bin/openai-proxy-tap`):
 - `UPSTREAM=http://<upstream-host>:<upstream-port>`
 - `LISTEN_HOST=127.0.0.1`
 - `LISTEN_PORT=18080`
-- `LOG_PATH=~/.openclaw/logs/openai-proxy.ndjson`
-- `RAW_LOG=~/.openclaw/logs/openai-proxy.raw.log` (combined request + response)
-- `RENDERED_PROMPT_LOG=~/.openclaw/logs/openai-proxy.rendered.log`
+- `LOG_PATH=~/.llmops/logs/openai-proxy.ndjson`
+- `RAW_LOG=~/.llmops/logs/openai-proxy.raw.log` (combined request + response)
+- `RENDERED_PROMPT_LOG=~/.llmops/logs/openai-proxy.rendered.log`
 - `LATEST_IMAGE_ONLY=1`
 - `LOG_FSYNC=0`
 
@@ -77,7 +77,7 @@ LISTEN_PORT=18080
 ## Direct Logs (No jq)
 
 ```bash
-tail -F ~/.openclaw/logs/openai-proxy.raw.log
+tail -F ~/.llmops/logs/openai-proxy.raw.log
 ```
 
 Sample output:
@@ -89,7 +89,7 @@ Sample output:
 ```
 
 ```bash
-tail -F ~/.openclaw/logs/openai-proxy.rendered.log
+tail -F ~/.llmops/logs/openai-proxy.rendered.log
 ```
 
 Sample output:
@@ -113,7 +113,7 @@ Use this pattern so commands work whether lines are plain JSON objects or JSON s
 ## Live Traffic View
 
 ```bash
-tail -F ~/.openclaw/logs/openai-proxy.ndjson | jq --unbuffered -r '
+tail -F ~/.llmops/logs/openai-proxy.ndjson | jq --unbuffered -r '
   (fromjson? // .)
   | select(.path=="/v1/chat/completions")
   | [.ts, .event, (.response_status // "-"), (.duration_ms // "-")]
@@ -130,7 +130,7 @@ Sample output:
 ## Role / Tool Summary View
 
 ```bash
-tail -F ~/.openclaw/logs/openai-proxy.ndjson | jq --unbuffered -r '
+tail -F ~/.llmops/logs/openai-proxy.ndjson | jq --unbuffered -r '
   (fromjson? // .)
   | select(.event=="request_start" and .path=="/v1/chat/completions")
   | .request_summary as $s
@@ -152,7 +152,7 @@ Sample output:
 ## Rendered Prompt (Human Readable)
 
 ```bash
-tail -F ~/.openclaw/logs/openai-proxy.ndjson | jq --unbuffered -r '
+tail -F ~/.llmops/logs/openai-proxy.ndjson | jq --unbuffered -r '
   (fromjson? // .)
   | select(.event=="request_start" and .path=="/v1/chat/completions")
   | .ts as $ts
@@ -180,7 +180,7 @@ Sample output:
 ## Rendered Prompt (Only Body)
 
 ```bash
-tail -F ~/.openclaw/logs/openai-proxy.ndjson | jq --unbuffered -r '
+tail -F ~/.llmops/logs/openai-proxy.ndjson | jq --unbuffered -r '
   (fromjson? // .)
   | select(.event=="request_start" and .path=="/v1/chat/completions")
   | .rendered_prompt'
@@ -203,7 +203,7 @@ jq -s -r '
   | map(select(.event=="request_start" and .path=="/v1/chat/completions"))
   | last
   | .rendered_prompt // ""
-' ~/.openclaw/logs/openai-proxy.ndjson > /tmp/last-rendered-prompt.txt
+' ~/.llmops/logs/openai-proxy.ndjson > /tmp/last-rendered-prompt.txt
 ```
 
 Sample output:
@@ -218,7 +218,7 @@ wc -l /tmp/last-rendered-prompt.txt
 ## Framed Raw Request Stream
 
 ```bash
-tail -F ~/.openclaw/logs/openai-proxy.ndjson | jq --unbuffered -r '
+tail -F ~/.llmops/logs/openai-proxy.ndjson | jq --unbuffered -r '
   (fromjson? // .)
   | select(.event=="request_start" and .path=="/v1/chat/completions")
   | [
@@ -234,7 +234,7 @@ tail -F ~/.openclaw/logs/openai-proxy.ndjson | jq --unbuffered -r '
 ## Combined Raw File (Recommended)
 
 ```bash
-tail -F ~/.openclaw/logs/openai-proxy.raw.log
+tail -F ~/.llmops/logs/openai-proxy.raw.log
 ```
 
 Sample output:
@@ -261,7 +261,7 @@ Sample output:
 ## Full Pretty Request/Response Blocks
 
 ```bash
-tail -F ~/.openclaw/logs/openai-proxy.ndjson | jq --unbuffered -r '
+tail -F ~/.llmops/logs/openai-proxy.ndjson | jq --unbuffered -r '
   (fromjson? // .)
   | [.ts, (.event // ""), .path, "=== REQUEST ===", (.request_text // ""), "=== RESPONSE ===", (.response_text // ""), ""]
   | join("\n")'

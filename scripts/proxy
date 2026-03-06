@@ -241,12 +241,12 @@ start_proxy() {
   fi
 
   log="$(arg_value --log 2>/dev/null || true)"
-  log="${log:-~/.openclaw/logs/openai-proxy.ndjson}"
+  log="${log:-$OPENCLAW_LOG_DIR/openai-proxy.ndjson}"
   tmpl="$(arg_value --chat-template 2>/dev/null || true)"
   raw_req="$(arg_value --raw-request-log 2>/dev/null || true)"
-  raw_req="${raw_req:-~/.openclaw/logs/openai-proxy.raw.log}"
+  raw_req="${raw_req:-$OPENCLAW_LOG_DIR/openai-proxy.raw.log}"
   rendered="$(arg_value --rendered-prompt-log 2>/dev/null || true)"
-  rendered="${rendered:-~/.openclaw/logs/openai-proxy.rendered.log}"
+  rendered="${rendered:-$OPENCLAW_LOG_DIR/openai-proxy.rendered.log}"
   raw_resp="$(arg_value --raw-response-log 2>/dev/null || true)"
   raw_resp="${raw_resp:-$raw_req}"
 
@@ -301,9 +301,9 @@ status_proxy() {
       raw_resp="$(read_runtime proxy-live-raw-response-log 2>/dev/null || true)"
 
       listen_host="${listen_host:-127.0.0.1}"
-      log="${log:-~/.openclaw/logs/openai-proxy.ndjson}"
-      raw_req="${raw_req:-~/.openclaw/logs/openai-proxy.raw.log}"
-      rendered="${rendered:-~/.openclaw/logs/openai-proxy.rendered.log}"
+      log="${log:-$OPENCLAW_LOG_DIR/openai-proxy.ndjson}"
+      raw_req="${raw_req:-$OPENCLAW_LOG_DIR/openai-proxy.raw.log}"
+      rendered="${rendered:-$OPENCLAW_LOG_DIR/openai-proxy.rendered.log}"
       raw_resp="${raw_resp:-$raw_req}"
 
       local health="unknown" health_detail=""

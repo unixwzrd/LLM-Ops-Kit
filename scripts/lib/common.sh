@@ -1,8 +1,9 @@
 #! /usr/bin/env bash
 set -euo pipefail
 
-OPENCLAW_RUN_DIR="${OPENCLAW_RUN_DIR:-$HOME/.openclaw/run}"
-OPENCLAW_LOG_DIR="${OPENCLAW_LOG_DIR:-$HOME/.openclaw/logs}"
+LLMOPS_HOME="${LLMOPS_HOME:-$HOME/.llmops}"
+OPENCLAW_RUN_DIR="${OPENCLAW_RUN_DIR:-$LLMOPS_HOME/run}"
+OPENCLAW_LOG_DIR="${OPENCLAW_LOG_DIR:-$LLMOPS_HOME/logs}"
 OPENCLAW_OPS_ROOT="${OPENCLAW_OPS_ROOT:-$(cd -P "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)}"
 
 ensure_runtime_dirs() {
@@ -18,8 +19,9 @@ load_shell_env() {
     files+=("$OPENCLAW_ENV_FILE")
   fi
   # Repo-local host/runtime overrides (optional, checked in by default).
+  files+=("$LLMOPS_HOME/config.env" "$LLMOPS_HOME/hosts.env")
   files+=("$OPENCLAW_OPS_ROOT/config/hosts.env" "$OPENCLAW_OPS_ROOT/config/hosts.local.env")
-  files+=("$HOME/.openclaw/.env" "$HOME/.env")
+  files+=("$HOME/.env")
   local f
   for f in "${files[@]}"; do
     if [[ -f "$f" ]]; then

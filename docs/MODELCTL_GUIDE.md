@@ -1,7 +1,7 @@
 # modelctl Guide
 
 **Created**: 2026-02-26
-**Updated**: 2026-03-03
+**Updated**: 2026-03-06
 
 - [modelctl Guide](#modelctl-guide)
   - [Purpose](#purpose)
@@ -11,6 +11,7 @@
   - [Template behavior](#template-behavior)
   - [Sampling behavior](#sampling-behavior)
   - [Validation rules](#validation-rules)
+  - [Status behavior](#status-behavior)
   - [Where logs/pids live](#where-logspids-live)
 
 ## Purpose
@@ -22,15 +23,10 @@ Any launcher name is supported as long as `scripts/models/<Launcher>.sh` exists.
 
 ```bash
 ~/bin/<ModelProfile> [start|stop|restart|status|settings|verify|test]
-~/bin/modelctl list
-~/bin/modelctl status
-~/bin/modelctl status-all
 ~/bin/modelctl <ModelProfile> [start|stop|restart|status|settings|verify|test]
 ```
 
-- `list`: show discovered model profiles and their `MODEL_TYPE`.
-- `status`: status across all discovered model profiles.
-- `status-all`: same as `status`, explicit form.
+- `status`: checks pidfile, validates pid is still running, validates process command shape via `ps`, and does a fast API probe.
 - `verify`: checks process status and queries `/v1/models` to print reported model IDs.
 - `test`: runs a minimal live request for the model type:
   - `llm`: `/v1/chat/completions`
@@ -87,11 +83,21 @@ Model profiles can implement preset selectors (for example `QWEN35_PRESET`) that
 - Embedding: `POOLING`
 - TTS: `TTS_PYTHON_BIN`, `TTS_SERVER_MODULE`
 
+## Status behavior
+
+`status` now reports:
+
+- Runtime line (`running`, `stale`, `stopped`, or `pid mismatch`)
+- PID and log file path
+- `started_at` from model state file when available
+- API probe result (`ok`/`failed`) against `http://<HOST>:<PORT>/v1/models`
+
 ## Where logs/pids live
 
 - LLM/embedding PID name: `llama-$MODEL_PROFILE`
 - LLM/embedding log file: `$OPENCLAW_LOG_DIR/llama-server-$MODEL_PROFILE.log`
 - TTS PID name: `tts-$MODEL_PROFILE`
 - TTS log file: `$OPENCLAW_LOG_DIR/tts-server-$MODEL_PROFILE.log`
+- State file: `$OPENCLAW_RUN_DIR/<pid_name>.state`
 
 Use `status` to see active pid and log path.
