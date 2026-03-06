@@ -1,4 +1,4 @@
-# AGENTS.md - OpenClaw-Ops-Toolkit
+# AGENTS.md - LLM-Ops-Kit
 
 ## Scope and Boundaries
 

@@ -10,17 +10,17 @@ Create/load a deploy SSH key with TTL and optionally install the public key on a
 ## Syntax
 
 ```bash
-~/projects/OpenClaw-Ops-Toolkit/scripts/setup-ssh-deploy-key.sh [options]
+~/projects/LLM-Ops-Kit/scripts/setup-ssh-deploy-key.sh [options]
 ```
 
 ## Examples
 
 ```bash
 # Create/load key only
-~/projects/OpenClaw-Ops-Toolkit/scripts/setup-ssh-deploy-key.sh
+~/projects/LLM-Ops-Kit/scripts/setup-ssh-deploy-key.sh
 
 # Create/load key and install to remote
-~/projects/OpenClaw-Ops-Toolkit/scripts/setup-ssh-deploy-key.sh \
+~/projects/LLM-Ops-Kit/scripts/setup-ssh-deploy-key.sh \
   --host <host> --user <user> --install-remote
 ```
 

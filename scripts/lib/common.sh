@@ -3,6 +3,7 @@ set -euo pipefail
 
 OPENCLAW_RUN_DIR="${OPENCLAW_RUN_DIR:-$HOME/.openclaw/run}"
 OPENCLAW_LOG_DIR="${OPENCLAW_LOG_DIR:-$HOME/.openclaw/logs}"
+OPENCLAW_OPS_ROOT="${OPENCLAW_OPS_ROOT:-$(cd -P "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)}"
 
 ensure_runtime_dirs() {
   mkdir -p "$OPENCLAW_RUN_DIR" "$OPENCLAW_LOG_DIR"
@@ -16,6 +17,8 @@ load_shell_env() {
   if [[ -n "${OPENCLAW_ENV_FILE:-}" ]]; then
     files+=("$OPENCLAW_ENV_FILE")
   fi
+  # Repo-local host/runtime overrides (optional, checked in by default).
+  files+=("$OPENCLAW_OPS_ROOT/config/hosts.env" "$OPENCLAW_OPS_ROOT/config/hosts.local.env")
   files+=("$HOME/.openclaw/.env" "$HOME/.env")
   local f
   for f in "${files[@]}"; do

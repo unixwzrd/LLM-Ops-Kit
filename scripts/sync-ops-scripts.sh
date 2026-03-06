@@ -1,15 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Sync local OpenClaw-Ops-Toolkit repo to a remote host with short-lived key loading.
+SOURCE="${BASH_SOURCE[0]}"
+while [[ -h "$SOURCE" ]]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+# shellcheck disable=SC1091
+. "$SCRIPT_DIR/lib/common.sh"
+load_shell_env
+
+# Sync local LLM-Ops-Kit repo to a remote host with short-lived key loading.
 # Default: interactive + safe (no --delete unless requested).
 
-HOST="${SYNC_HOST:-${OPENCLAW_UPSTREAM_HOST:-10.0.0.67}}"
+HOST="${SYNC_HOST:-${OPENCLAW_SYNC_HOST:-${OPENCLAW_UPSTREAM_HOST:-172.20.10.2}}}"
 USER_NAME="${SYNC_USER:-${OPENCLAW_SYNC_USER:-$USER}}"
-REMOTE_DIR="${SYNC_REMOTE_DIR:-${OPENCLAW_SYNC_REMOTE_DIR:-~/projects/OpenClaw-Ops-Toolkit}}"
+REMOTE_DIR="${SYNC_REMOTE_DIR:-${OPENCLAW_SYNC_REMOTE_DIR:-~/projects/LLM-Ops-Kit}}"
 KEY_PATH="${SYNC_KEY_PATH:-$HOME/.ssh/id_ed25519_misfour_deploy}"
 TTL="${SYNC_KEY_TTL:-20m}"
-LOCAL_DIR="${SYNC_LOCAL_DIR:-$HOME/projects/OpenClaw-Ops-Toolkit/}"
+LOCAL_DIR="${SYNC_LOCAL_DIR:-$HOME/projects/LLM-Ops-Kit/}"
 DELETE_MODE=0
 DRY_RUN=0
 NO_AGENT=0

@@ -38,7 +38,7 @@ Then edit only model-specific values.
 
 Set at minimum:
 
-- `MODEL_TYPE` (`llm`, `embedding`, or `tts`)
+- `MODEL_TYPE` (`llm`, `embedding`, stt, or `tts`)
 - `MODEL_PROFILE`
 - `MODEL`
 - `PORT`
@@ -71,7 +71,7 @@ You do not need to hardcode model names in `modelctl`.
 Runtime link manifest is generated from launcher symlinks:
 
 ```bash
-~/projects/OpenClaw-Ops-Toolkit/scripts/generate-manifest
+~/projects/LLM-Ops-Kit/scripts/generate-manifest
 ```
 
 `sync-ops-scripts` also runs this automatically before rsync (unless `--no-manifest` is used).
@@ -79,15 +79,15 @@ Runtime link manifest is generated from launcher symlinks:
 ## 5) Deploy and verify links
 
 ```bash
-/usr/local/bin/bash ~/projects/OpenClaw-Ops-Toolkit/scripts/deploy-runtime-links.sh
-/usr/local/bin/bash ~/projects/OpenClaw-Ops-Toolkit/scripts/verify-runtime-links.sh
+/usr/local/bin/bash ~/projects/LLM-Ops-Kit/scripts/deploy-runtime-links.sh
+/usr/local/bin/bash ~/projects/LLM-Ops-Kit/scripts/verify-runtime-links.sh
 ```
 
 Remote:
 
 ```bash
-ssh <host> '/usr/local/bin/bash ~/projects/OpenClaw-Ops-Toolkit/scripts/deploy-runtime-links.sh'
-ssh <host> '/usr/local/bin/bash ~/projects/OpenClaw-Ops-Toolkit/scripts/verify-runtime-links.sh'
+ssh <host> '/usr/local/bin/bash ~/projects/LLM-Ops-Kit/scripts/deploy-runtime-links.sh'
+ssh <host> '/usr/local/bin/bash ~/projects/LLM-Ops-Kit/scripts/verify-runtime-links.sh'
 ```
 
 ## 6) Template workflow

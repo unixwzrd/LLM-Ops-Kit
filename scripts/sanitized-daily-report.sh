@@ -5,7 +5,7 @@ set -euo pipefail
 # No raw message bodies, credentials, or tokens are included.
 
 DATE_ARG="${1:-$(date +%F)}"
-REPORT_ROOT="${2:-$HOME/projects/OpenClaw-Ops-Toolkit/docs/reports}"
+REPORT_ROOT="${2:-$HOME/projects/LLM-Ops-Kit/docs/reports}"
 REPORT_FILE="${REPORT_ROOT}/${DATE_ARG}.md"
 LOG_FILE="$(ls -1t /tmp/openclaw/openclaw-*.log 2>/dev/null | head -n1 || true)"
 

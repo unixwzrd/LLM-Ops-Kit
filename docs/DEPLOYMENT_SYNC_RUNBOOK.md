@@ -21,12 +21,12 @@
 
 ## Purpose
 
-Deploy `OpenClaw-Ops-Toolkit` changes safely to another host and keep runtime commands consistent using user-local links (`$HOME/bin`) only.
+Deploy `LLM-Ops-Kit` changes safely to another host and keep runtime commands consistent using user-local links (`$HOME/bin`) only.
 
 ## Preconditions
 
-- Source repo: `~/projects/OpenClaw-Ops-Toolkit`
-- Remote repo path target: `~/projects/OpenClaw-Ops-Toolkit`
+- Source repo: `~/projects/LLM-Ops-Kit`
+- Remote repo path target: `~/projects/LLM-Ops-Kit`
 - Remote host reachable via SSH
 - Remote has `/usr/local/bin/bash` (for scripts using bash features beyond macOS default bash 3)
 
@@ -48,7 +48,7 @@ This now performs:
 Equivalent explicit form:
 
 ```bash
-rsync -avz --delete ~/projects/OpenClaw-Ops-Toolkit/ <host>:~/projects/OpenClaw-Ops-Toolkit/
+rsync -avz --delete ~/projects/LLM-Ops-Kit/ <host>:~/projects/LLM-Ops-Kit/
 ```
 
 If you only want transfer (skip deploy+verify):
@@ -61,7 +61,7 @@ If you only want transfer (skip deploy+verify):
 
 Link definitions are now centralized in:
 
-`~/projects/OpenClaw-Ops-Toolkit/scripts/runtime-links.manifest`
+`~/projects/LLM-Ops-Kit/scripts/runtime-links.manifest`
 
 The manifest is auto-generated from launcher symlinks via `scripts/generate-manifest` (also run by `sync-ops-scripts`). Deploy and verify consume this file.
 
@@ -70,13 +70,13 @@ The manifest is auto-generated from launcher symlinks via `scripts/generate-mani
 Use explicit remote bash path:
 
 ```bash
-ssh <host> '/usr/local/bin/bash ~/projects/OpenClaw-Ops-Toolkit/scripts/deploy-runtime-links.sh'
+ssh <host> '/usr/local/bin/bash ~/projects/LLM-Ops-Kit/scripts/deploy-runtime-links.sh'
 ```
 
 ## 4) Verify Runtime Links on Remote
 
 ```bash
-ssh <host> '/usr/local/bin/bash ~/projects/OpenClaw-Ops-Toolkit/scripts/verify-runtime-links.sh'
+ssh <host> '/usr/local/bin/bash ~/projects/LLM-Ops-Kit/scripts/verify-runtime-links.sh'
 ```
 
 ## 5) Runtime Commands (Action-Based)
@@ -134,7 +134,7 @@ ssh-add -D
 Run scripts with remote bash 5:
 
 ```bash
-ssh <host> '/usr/local/bin/bash ~/projects/OpenClaw-Ops-Toolkit/scripts/verify-runtime-links.sh'
+ssh <host> '/usr/local/bin/bash ~/projects/LLM-Ops-Kit/scripts/verify-runtime-links.sh'
 ```
 
 ### B) `mkpath: Operation not supported`
@@ -142,7 +142,7 @@ ssh <host> '/usr/local/bin/bash ~/projects/OpenClaw-Ops-Toolkit/scripts/verify-r
 Destination path is invalid for that host. Use home-relative target:
 
 ```bash
-<host>:~/projects/OpenClaw-Ops-Toolkit/
+<host>:~/projects/LLM-Ops-Kit/
 ```
 
 ### C) Password prompts unexpectedly

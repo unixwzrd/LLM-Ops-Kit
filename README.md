@@ -1,4 +1,4 @@
-# OpenClaw-Ops-Toolkit
+# LLM-Ops-Kit
 
 **Created**: 2026-02-20
 **Updated**: 2026-03-03
@@ -10,7 +10,7 @@ Operational toolkit for running, deploying, and maintaining a local OpenClaw sta
 
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-informational)](#) [![Shell](https://img.shields.io/badge/Shell-bash-blue)](#) [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-- [OpenClaw-Ops-Toolkit](#openclaw-ops-toolkit)
+- [LLM-Ops-Kit](#openclaw-ops-toolkit)
   - [Why This Repo Exists](#why-this-repo-exists)
   - [Requirements](#requirements)
   - [Recommended Models](#recommended-models)
@@ -31,7 +31,7 @@ Operational toolkit for running, deploying, and maintaining a local OpenClaw sta
 
 ## Why This Repo Exists
 
-`OpenClaw-Ops-Toolkit` is the operator layer around a local OpenClaw install:
+`LLM-Ops-Kit` is the operator layer around a local OpenClaw install:
 
 - Unified startup/shutdown/status scripts for gateway, proxy, TTS, LLM, and embeddings
 - Model profile management (`Qwen3`, `Qwen3.5`, `BGEen`) via one launcher architecture
@@ -46,7 +46,7 @@ This repo is intentionally focused on **operations and reproducibility**, not ra
 - OpenClaw installed and configured on the host
 - `llama.cpp` server binary available at `/usr/local/bin/llama-server` (project: <https://github.com/ggml-org/llama.cpp>)
 - `mlx-audio` installed for local TTS server (`python -m mlx_audio.server`) (project: <https://github.com/Blaizzy/mlx-audio>)
-- Optional but recommended for secret handling: `secrets-kit` (example repo: <https://github.com/unixwzrd/secrets-kit>)
+- Optional but recommended for secret handling: `seckit` (example repo: <https://github.com/unixwzrd/seckit>)
 - Bash scripts use `#!/usr/bin/env bash`
 - Compatibility target: Bash 3.2+ (macOS system bash), Bash 5+ recommended
 - Standard CLI tools: `ssh`, `rsync`, `jq`, `sed`, `awk`, `perl`
@@ -108,10 +108,10 @@ Full setup + troubleshooting guide:
 ~/bin/sync-ops-scripts --delete
 
 # 2) Deploy runtime commands into ~/bin
-/usr/local/bin/bash ~/projects/OpenClaw-Ops-Toolkit/scripts/deploy-runtime-links.sh
+/usr/local/bin/bash ~/projects/LLM-Ops-Kit/scripts/deploy-runtime-links.sh
 
 # 3) Verify links
-/usr/local/bin/bash ~/projects/OpenClaw-Ops-Toolkit/scripts/verify-runtime-links.sh
+/usr/local/bin/bash ~/projects/LLM-Ops-Kit/scripts/verify-runtime-links.sh
 
 # 4) Start services
 ~/bin/gateway start
@@ -187,9 +187,9 @@ A future optional path is to add `pyproject.toml` and package wrappers for insta
 - [OPERATIONAL_WORKFLOW_PHASE1](docs/OPERATIONAL_WORKFLOW_PHASE1.md) — day-to-day operating workflow
 - [PROXY_TAP_RUNBOOK](docs/PROXY_TAP_RUNBOOK.md) — proxy request/response visibility + jq recipes
 - [CONTEXT_ARCHITECTURE_PLAN](docs/CONTEXT_ARCHITECTURE_PLAN.md) — context routing/system design
-- [CHANGELOG](docs/CHANGELOG.md) — chronological operational changes
+- [CHANGELOG](CHANGELOG.md) — chronological operational changes
 - [QUICKSTART](docs/QUICKSTART.md) — fast path setup and startup
-- [CONFIGURATION](docs/CONFIGURATION.md) — environment overrides, host/path defaults, and optional `secrets-kit` runtime export workflow
+- [CONFIGURATION](docs/CONFIGURATION.md) — environment overrides, host/path defaults, and optional `seckit` runtime export workflow
 - [SSH_SETUP_RUNBOOK](docs/SSH_SETUP_RUNBOOK.md) — SSH key setup and deployment auth flow
 - [TROUBLESHOOTING](docs/TROUBLESHOOTING.md) — symptom-driven fixes
 - [ARCHITECTURE](docs/ARCHITECTURE.md) — component and runtime flow overview

@@ -27,7 +27,7 @@ Manage proxy tap lifecycle for request/response visibility.
 ```bash
 ~/bin/proxy restart --upstream <upstream-host>:<upstream-port>
 ~/bin/proxy restart --port <listen-port> --upstream <upstream-host>:<upstream-port>
-~/bin/proxy restart --upstream <upstream-host>:<upstream-port> --chat-template ~/projects/OpenClaw-Ops-Toolkit/scripts/templates/Qwen3.5-chatml-tools.jinja
+~/bin/proxy restart --upstream <upstream-host>:<upstream-port> --chat-template ~/projects/LLM-Ops-Kit/scripts/templates/Qwen3.5-chatml-tools.jinja
 ~/bin/proxy restart --upstream <upstream-host>:<upstream-port> --raw-log ~/.openclaw/logs/openai-proxy.raw.log
 ~/bin/proxy restart --upstream <upstream-host>:<upstream-port> --raw-request-log ~/.openclaw/logs/openai-proxy.requests.log --raw-response-log ~/.openclaw/logs/openai-proxy.responses.log
 ```

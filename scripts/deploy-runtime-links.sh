@@ -10,7 +10,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MANIFEST_FILE="${MANIFEST_FILE:-$SCRIPT_DIR/runtime-links.manifest}"
 
 BIN_DIR="${BIN_DIR:-$HOME/bin}"
-REPO_DIR="${REPO_DIR:-$HOME/projects/OpenClaw-Ops-Toolkit}"
+REPO_DIR="${REPO_DIR:-$HOME/projects/LLM-Ops-Kit}"
 mkdir -p "$BIN_DIR"
 
 if [[ ! -f "$MANIFEST_FILE" ]]; then
@@ -24,12 +24,21 @@ link_one() {
   local target="$1"
   local src="$2"
   local actual=""
+  local healed=""
   if [[ "$MODE" == "symlink" ]]; then
     if [[ -e "$target" || -L "$target" ]]; then
       if [[ -L "$target" ]]; then
         actual="$(readlink "$target" 2>/dev/null || true)"
         if [[ "$actual" == "$src" ]]; then
           echo "OK_ALREADY: $target -> $src"
+          return 0
+        fi
+        # Auto-heal symlinks left behind by repo rename:
+        # ~/projects/OpenClaw-Ops-Toolkit -> ~/projects/LLM-Ops-Kit
+        healed="${actual/\/projects\/OpenClaw-Ops-Toolkit\//\/projects\/LLM-Ops-Kit\/}"
+        if [[ "$healed" == "$src" ]]; then
+          ln -sfn "$src" "$target"
+          echo "HEALED_RENAME_LINK: $target -> $src"
           return 0
         fi
         echo "CONFLICT: $target -> $actual (expected $src); skipped." >&2
@@ -64,7 +73,7 @@ done < "$MANIFEST_FILE"
 
 # Remove deprecated names in BIN_DIR only.
 for old in \
-  "$BIN_DIR/openclaw-start.sh" "$BIN_DIR/sync-agent-work" "$BIN_DIR/sync-agent-work.sh" "$BIN_DIR/sync-OpenClaw-Ops-Toolkit" "$BIN_DIR/sync-OpenClaw-Ops-Toolkit.sh" "$BIN_DIR/sync-ops-scripts.sh" "$BIN_DIR/node-hygiene.sh" \
+  "$BIN_DIR/openclaw-start.sh" "$BIN_DIR/sync-agent-work" "$BIN_DIR/sync-agent-work.sh" "$BIN_DIR/sync-OpenClaw-Ops-Toolkit" "$BIN_DIR/sync-OpenClaw-Ops-Toolkit.sh" "$BIN_DIR/sync-LLM-Ops-Kit" "$BIN_DIR/sync-LLM-Ops-Kit.sh" "$BIN_DIR/sync-ops-scripts.sh" "$BIN_DIR/node-hygiene.sh" \
   "$BIN_DIR/openclaw-report.sh" "$BIN_DIR/openclaw-stack.sh" \
   "$BIN_DIR/StartQwen3" "$BIN_DIR/StartBGEen" "$BIN_DIR/StopQwen3" "$BIN_DIR/StopBGEen" \
   "$BIN_DIR/run-openclaw-server.sh" "$BIN_DIR/run-openclaw-embedding.sh"; do

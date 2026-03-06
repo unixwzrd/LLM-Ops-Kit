@@ -18,7 +18,7 @@
 
 ## Goal
 
-Set up secure SSH-based deployment for `OpenClaw-Ops-Toolkit` using short-lived agent credentials.
+Set up secure SSH-based deployment for `LLM-Ops-Kit` using short-lived agent credentials.
 
 ## Related Docs
 
@@ -31,8 +31,8 @@ Set up secure SSH-based deployment for `OpenClaw-Ops-Toolkit` using short-lived 
 Use the helper script for key creation/load and optional remote key install:
 
 ```bash
-~/projects/OpenClaw-Ops-Toolkit/scripts/setup-ssh-deploy-key.sh --help
-~/projects/OpenClaw-Ops-Toolkit/scripts/setup-ssh-deploy-key.sh --host <host> --user <user> --install-remote
+~/projects/LLM-Ops-Kit/scripts/setup-ssh-deploy-key.sh --help
+~/projects/LLM-Ops-Kit/scripts/setup-ssh-deploy-key.sh --host <host> --user <user> --install-remote
 ```
 
 ## Web UI SSH Tunnel
@@ -92,8 +92,8 @@ ssh <host> 'echo SSH_OK'
 ## 5) Deploy + verify runtime links (remote bash 5)
 
 ```bash
-ssh <host> '/usr/local/bin/bash ~/projects/OpenClaw-Ops-Toolkit/scripts/deploy-runtime-links.sh'
-ssh <host> '/usr/local/bin/bash ~/projects/OpenClaw-Ops-Toolkit/scripts/verify-runtime-links.sh'
+ssh <host> '/usr/local/bin/bash ~/projects/LLM-Ops-Kit/scripts/deploy-runtime-links.sh'
+ssh <host> '/usr/local/bin/bash ~/projects/LLM-Ops-Kit/scripts/verify-runtime-links.sh'
 ```
 
 ## 6) Remove key from agent after deployment
@@ -108,4 +108,4 @@ ssh-add -D
 
 - `declare -A: invalid option`: run scripts with `/usr/local/bin/bash`.
 - Password prompts persist: verify `authorized_keys` ownership/permissions and correct remote username.
-- `mkpath: Operation not supported`: target path invalid on remote; use `~/projects/OpenClaw-Ops-Toolkit`.
+- `mkpath: Operation not supported`: target path invalid on remote; use `~/projects/LLM-Ops-Kit`.

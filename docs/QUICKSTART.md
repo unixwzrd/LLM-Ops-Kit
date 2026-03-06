@@ -21,8 +21,8 @@ See `docs/CONFIGURATION.md` for environment overrides before first run.
 ## Local bring-up
 
 ```bash
-/usr/local/bin/bash ~/projects/OpenClaw-Ops-Toolkit/scripts/deploy-runtime-links.sh
-/usr/local/bin/bash ~/projects/OpenClaw-Ops-Toolkit/scripts/verify-runtime-links.sh
+/usr/local/bin/bash ~/projects/LLM-Ops-Kit/scripts/deploy-runtime-links.sh
+/usr/local/bin/bash ~/projects/LLM-Ops-Kit/scripts/verify-runtime-links.sh
 ~/bin/gateway start
 ~/bin/Qwen3 start
 ~/bin/BGEen start
@@ -36,8 +36,8 @@ See `docs/CONFIGURATION.md` for environment overrides before first run.
 
 ```bash
 ~/bin/sync-ops-scripts --delete
-ssh <host> '/usr/local/bin/bash ~/projects/OpenClaw-Ops-Toolkit/scripts/deploy-runtime-links.sh'
-ssh <host> '/usr/local/bin/bash ~/projects/OpenClaw-Ops-Toolkit/scripts/verify-runtime-links.sh'
+ssh <host> '/usr/local/bin/bash ~/projects/LLM-Ops-Kit/scripts/deploy-runtime-links.sh'
+ssh <host> '/usr/local/bin/bash ~/projects/LLM-Ops-Kit/scripts/verify-runtime-links.sh'
 ```
 
 ## Common checks

@@ -17,4 +17,4 @@ Default runtime state file:
 
 - `~/.openclaw-ops/runtime-state.env`
 
-This is useful when you do not want runtime commands to break if `~/projects/OpenClaw-Ops-Toolkit` is moved or deleted.
+This is useful when you do not want runtime commands to break if `~/projects/LLM-Ops-Kit` is moved or deleted.

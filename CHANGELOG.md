@@ -3,14 +3,14 @@
 **Created**: 2026-02-20
 **Updated**: 2026-03-03
 
-All notable changes to OpenClaw-Ops-Toolkit will be documented in this file.
+All notable changes to LLM-Ops-Kit will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### 2026-03-03 — TTS bridge wiring + sync path normalization + prompt replay pruning
 
-- **Scope:** `OpenClaw-Ops-Toolkit/scripts`, `OpenClaw-Ops-Toolkit/docs`
+- **Scope:** `LLM-Ops-Kit/scripts`, `LLM-Ops-Kit/docs`
 - **Category:** `runtime`, `tts`, `deployment`, `prompting`, `documentation`
 - **What changed:**
   - Added OpenAI-compatible local TTS bridge:
@@ -34,7 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 2026-03-01 — modelctl verify/test + resilient runtime link flow
 
-- **Scope:** `OpenClaw-Ops-Toolkit/scripts`, `OpenClaw-Ops-Toolkit/docs`
+- **Scope:** `LLM-Ops-Kit/scripts`, `LLM-Ops-Kit/docs`
 - **Category:** `runtime`, `deployment`, `documentation`
 - **What changed:**
   - Added `verify` and `test` actions to `scripts/modelctl` for all model types:
@@ -56,7 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 2026-03-01 — Sunday release gate completion (public push prep)
 
-- **Scope:** `OpenClaw-Ops-Toolkit/docs`, `OpenClaw-Ops-Toolkit/scripts`, `OpenClaw-Ops-Toolkit/.gitignore`
+- **Scope:** `LLM-Ops-Kit/docs`, `LLM-Ops-Kit/scripts`, `LLM-Ops-Kit/.gitignore`
 - **Category:** `release`, `sanitization`, `validation`
 - **What changed:**
   - Enforced internal-doc exclusion for public pushes via `.gitignore` (`docs/internal/`).
@@ -78,7 +78,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 2026-02-28 — Naming cleanup + generic model profile loading
 
-- **Scope:** `OpenClaw-Ops-Toolkit/scripts`, `OpenClaw-Ops-Toolkit/docs`
+- **Scope:** `LLM-Ops-Kit/scripts`, `LLM-Ops-Kit/docs`
 - **Category:** `maintainability`, `runtime`, `documentation`
 - **What changed:**
   - Renamed canonical sync script to `scripts/sync-ops-scripts.sh`.
@@ -86,7 +86,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added SSH connection reuse in `sync-ops-scripts` to reduce repeated authentication prompts.
   - Removed deprecated long/duplicate script names:
     - `scripts/generate-runtime-links-manifest.sh`
-    - `scripts/sync-OpenClaw-Ops-Toolkit.sh`
+    - `scripts/sync-LLM-Ops-Kit.sh`
     - `scripts/sync-runtime-scripts.sh`
   - Updated docs/runbooks/examples to use `sync-ops-scripts`.
   - Refactored `scripts/modelctl` defaults loading:
@@ -101,7 +101,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 2026-02-28 — Publish readiness pass (aggressive sanitization, non-breaking defaults)
 
-- **Scope:** `OpenClaw-Ops-Toolkit/scripts`, `OpenClaw-Ops-Toolkit/docs`, `OpenClaw-Ops-Toolkit/.env.example`
+- **Scope:** `LLM-Ops-Kit/scripts`, `LLM-Ops-Kit/docs`, `LLM-Ops-Kit/.env.example`
 - **Category:** `release`, `documentation`, `configuration`, `hygiene`
 - **What changed:**
   - Moved internal-only docs from public root to `docs/internal/`:
@@ -133,7 +133,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 2026-02-26 — Auto-generated runtime link manifest + sync integration
 
-- **Scope:** `OpenClaw-Ops-Toolkit/scripts`, `OpenClaw-Ops-Toolkit/docs`
+- **Scope:** `LLM-Ops-Kit/scripts`, `LLM-Ops-Kit/docs`
 - **Category:** `automation`, `deployment`, `documentation`
 - **What changed:**
   - Added `scripts/generate-manifest` to auto-build `runtime-links.manifest` from launcher symlinks (`scripts/* -> modelctl`) plus static runtime commands.
@@ -146,7 +146,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 2026-02-26 — Documentation expansion for onboarding and operations
 
-- **Scope:** `OpenClaw-Ops-Toolkit/docs`
+- **Scope:** `LLM-Ops-Kit/docs`
 - **Category:** `documentation`, `operations`, `onboarding`
 - **What changed:**
   - Added quickstart, SSH setup, troubleshooting, architecture, glossary, and safe-publish docs:
@@ -163,7 +163,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 2026-02-26 — Model defaults normalization + manifest-driven runtime links
 
-- **Scope:** `OpenClaw-Ops-Toolkit`
+- **Scope:** `LLM-Ops-Kit`
 - **Category:** `runtime`, `deployment`, `maintainability`
 - **What changed:**
   - Renamed model classification variable from `MODEL_KIND` to `MODEL_TYPE` across launcher/default/model scripts for clearer terminology.
@@ -182,11 +182,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 2026-02-26 — Qwen3.5 integration + launcher symlink migration
 
-- **Scope:** `OpenClaw-Ops-Toolkit`, `.openclaw`
+- **Scope:** `LLM-Ops-Kit`, `.openclaw`
 - **Category:** `runtime`, `models`, `deployment`
 - **What changed:**
   - Added `Qwen3.5` launcher support to `modelctl` (`start|stop|restart|status|settings`) with model-profile resolution.
-  - Added `OpenClaw-Ops-Toolkit/scripts/models/Qwen3.5.sh` profile with:
+  - Added `LLM-Ops-Kit/scripts/models/Qwen3.5.sh` profile with:
     - stable/new template switching (`QWEN35_TEMPLATE_MODE`),
     - sampling presets (`QWEN35_PRESET=thinking-general|thinking-coding`),
     - env-first override semantics.
@@ -202,7 +202,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 2026-02-24 — Context system first-pass finalized (workspace-owned)
 
-- **Scope:** `OpenClaw-workspace`, `OpenClaw-Ops-Toolkit`
+- **Scope:** `OpenClaw-workspace`, `LLM-Ops-Kit`
 - **Category:** `architecture`, `documentation`, `operations`
 - **What changed:**
   - Finalized context routing around `OpenClaw-workspace/CONTEXTS.md` as the canonical router/index.
@@ -212,7 +212,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Removed `CONVERSATIONS_INDEX.md` from active context path (routing/index now handled by `CONTEXTS.md`).
   - Moved context system docs/templates under workspace ownership:
     - `OpenClaw-workspace/contexts/docs/*`
-  - Updated backend docs in `OpenClaw-Ops-Toolkit/docs` to reflect current context architecture and file layout.
+  - Updated backend docs in `LLM-Ops-Kit/docs` to reflect current context architecture and file layout.
 - **Why:**
   - Reduce prompt bloat and indirection while making routing deterministic and policy boundaries explicit.
 - **Behavior notes:**
@@ -221,7 +221,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 2026-02-24 — Documentation normalization for deployment commands
 
-- **Scope:** `OpenClaw-Ops-Toolkit`
+- **Scope:** `LLM-Ops-Kit`
 - **Category:** `documentation`, `operations`
 - **What changed:**
   - Normalized operator docs to the extensionless command surface in `~/bin` (`gateway`, `proxy`, `Qwen3`, `BGEen`, `openclaw-stack`).
@@ -233,7 +233,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 2026-02-24 — Context architecture + private scope migration + script consolidation
 
-- **Scope:** `OpenClaw-workspace`, `OpenClaw-Ops-Toolkit`
+- **Scope:** `OpenClaw-workspace`, `LLM-Ops-Kit`
 - **Category:** `architecture`, `policy`, `operations`, `runtime`
 - **What changed:**
   - Implemented channel-keyed context system with deterministic dispatch in `OpenClaw-workspace/CONTEXTS.md`.
@@ -242,7 +242,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added compatibility stubs at legacy paths to avoid read-path breakage.
   - Updated privacy scope policy to canonical private context paths.
   - Added `CONVERSATIONS_INDEX.md` pointer index for operators.
-  - Consolidated startup/utility scripts under `OpenClaw-Ops-Toolkit/scripts/`.
+  - Consolidated startup/utility scripts under `LLM-Ops-Kit/scripts/`.
   - Added profile-driven llama startup (`llm`, `embedding`) and stack lifecycle helper.
   - Added symlink-first deployment helper, drift verifier, and fallback sync mode.
   - Updated operational workflow doc and added dedicated context architecture plan doc.
@@ -257,7 +257,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 2026-02-24 — Deployment runbook + portable link strategy
 
-- **Scope:** `OpenClaw-Ops-Toolkit`
+- **Scope:** `LLM-Ops-Kit`
 - **Category:** `operations`, `deployment`, `portability`
 - **What changed:**
   - Added `docs/DEPLOYMENT_SYNC_RUNBOOK.md` with repeatable sync/deploy/verify steps.
@@ -270,7 +270,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 2026-02-23 — Jinja tool-loop stabilization + proxy observability hardening
 
-- **Scope:** `OpenClaw-Ops-Toolkit`, `.openclaw`, mounted template at `/Volumes/mps/bin/chatml-tools.jinja`
+- **Scope:** `LLM-Ops-Kit`, `.openclaw`, mounted template at `/Volumes/mps/bin/chatml-tools.jinja`
 - **Category:** `runtime`, `prompting`, `observability`, `performance`
 - **What changed:**
   - Hardened ChatML Jinja prompt shaping to reduce tool-loop and malformed tool-call failures:
@@ -304,7 +304,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 2026-02-21 — Prompt transparency + image-context hardening
 
-- **Scope:** `.openclaw`, `OpenClaw-Ops-Toolkit`
+- **Scope:** `.openclaw`, `LLM-Ops-Kit`
 - **Category:** `runtime`, `performance`, `observability`
 - **What changed:**
   - Added OpenAI proxy tap logging to inspect actual request/response payloads sent to llama.cpp.
@@ -320,11 +320,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 2026-02-20 — Privacy-first local repo strategy adopted
 
-- **Scope:** `.openclaw`, `OpenClaw-workspace`, `OpenClaw-Ops-Toolkit`
+- **Scope:** `.openclaw`, `OpenClaw-workspace`, `LLM-Ops-Kit`
 - **Category:** `policy`, `dr`, `hygiene`
 - **What changed:**
   - Adopted local-only mode for `.openclaw` and `OpenClaw-workspace`.
-  - Moved canonical hygiene/DR docs to `~/projects/OpenClaw-Ops-Toolkit/docs`.
+  - Moved canonical hygiene/DR docs to `~/projects/LLM-Ops-Kit/docs`.
   - Converted `.openclaw/docs` to pointer docs to avoid drift.
   - Reinforced ignore/untracking of runtime session/auth/device churn files.
 - **Why:**
@@ -351,16 +351,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 2026-02-20 — Canonical script/docs consolidation and repo bootstrap
 
-- **Scope:** `.openclaw`, `OpenClaw-Ops-Toolkit`
+- **Scope:** `.openclaw`, `LLM-Ops-Kit`
 - **Category:** `hygiene`, `policy`, `dr`
 - **What changed:**
-  - Confirmed canonical script location at `~/projects/OpenClaw-Ops-Toolkit/scripts/`.
-  - Consolidated script ownership to `OpenClaw-Ops-Toolkit` and prepared `.openclaw` for script-directory removal.
-  - Initialized `~/projects/OpenClaw-Ops-Toolkit` as a git repository for canonical docs/planning assets.
+  - Confirmed canonical script location at `~/projects/LLM-Ops-Kit/scripts/`.
+  - Consolidated script ownership to `LLM-Ops-Kit` and prepared `.openclaw` for script-directory removal.
+  - Initialized `~/projects/LLM-Ops-Kit` as a git repository for canonical docs/planning assets.
 - **Why:**
   - Reduce repo sprawl and keep policy/history artifacts in one stable project namespace.
 - **Risk/Privacy impact:**
   - Improves governance by centralizing non-runtime artifacts.
 - **Recovery note:**
-  - Canonical docs + scripts are now recoverable from `OpenClaw-Ops-Toolkit` local history.
+  - Canonical docs + scripts are now recoverable from `LLM-Ops-Kit` local history.
 - **Public blog candidate:** yes (sanitize machine-specific paths)

@@ -53,7 +53,7 @@ openai-proxy-tap listening on http://127.0.0.1:18080 -> http://<upstream-host>:<
 ## Start Proxy With Rendered Prompt Logging
 
 ```bash
-~/bin/openai-proxy-tap --chat-template ~/projects/OpenClaw-Ops-Toolkit/scripts/templates/chatml-tools.jinja
+~/bin/openai-proxy-tap --chat-template ~/projects/LLM-Ops-Kit/scripts/templates/chatml-tools.jinja
 ```
 
 Note: template-load status is reflected in NDJSON fields (`rendered_prompt` / `rendered_prompt_error`).

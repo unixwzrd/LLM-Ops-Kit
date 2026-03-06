@@ -3,7 +3,7 @@
 **Created**: 2026-02-28
 **Updated**: 2026-03-03
 
-Sync OpenClaw-Ops-Toolkit to a remote host over SSH, refresh runtime link manifest, then deploy and verify runtime links on the remote host in one run.
+Sync LLM-Ops-Kit to a remote host over SSH, refresh runtime link manifest, then deploy and verify runtime links on the remote host in one run.
 
 ```bash
 ~/bin/sync-ops-scripts [--delete] [--dry-run] [--no-links] [--runtime-mode <repo|installed>] [--install-prefix <path>] [--state-file <path>]
@@ -22,6 +22,7 @@ Examples:
 Notes:
 
 - Prints effective `LOCAL_DIR`, `REMOTE_DIR`, `HOST`, and `USER` at runtime.
+- Host defaults are loaded from `scripts/config/hosts.env` (and optional `scripts/config/hosts.local.env`) via shared shell env loading.
 - Runs a local manifest precheck before rsync and fails if any manifest source is missing.
 - Default behavior includes remote:
   - in `repo` mode:
@@ -34,6 +35,7 @@ Notes:
   - `~/.openclaw-ops/runtime-state.env`
 - `verify-runtime-links.sh` now checks manifest links plus any dead symlink in `~/bin`.
 - If deploy fails, verify is not run (the sync command exits on first failure).
+- During repo rename migration, deploy auto-heals managed symlinks that still target `~/projects/OpenClaw-Ops-Toolkit/...` to `~/projects/LLM-Ops-Kit/...`.
 - Use `--no-links` to sync only.
 - Uses SSH connection reuse to reduce repeated authentication prompts.
 - Use `--help` for all host/user/path/key override options.

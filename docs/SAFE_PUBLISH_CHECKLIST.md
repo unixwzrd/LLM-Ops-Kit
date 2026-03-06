@@ -13,4 +13,4 @@ Use this before pushing to a public remote.
 - [ ] Script syntax checks pass (`bash -n`).
 - [ ] Python syntax checks pass (`python3 -m py_compile`).
 - [ ] Runtime command docs match actual CLI behavior.
-- [ ] `docs/CHANGELOG.md` includes release-ready changes.
+- [ ] `CHANGELOG.md` includes release-ready changes.

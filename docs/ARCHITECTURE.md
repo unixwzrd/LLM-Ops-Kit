@@ -16,7 +16,7 @@
 - TTS service (`tts` via `mlx_audio.server`)
 - LLM service (`Qwen3` / `Qwen3.5` via `llama-server`)
 - Embedding service (`BGEen` via `llama-server --embedding`)
-- Operator scripts (`OpenClaw-Ops-Toolkit/scripts`)
+- Operator scripts (`LLM-Ops-Kit/scripts`)
 
 ## Flow
 
@@ -35,6 +35,6 @@
 
 ## Deployment model
 
-- Source of truth: `~/projects/OpenClaw-Ops-Toolkit`
+- Source of truth: `~/projects/LLM-Ops-Kit`
 - Runtime command surface: `~/bin`
 - Cross-host updates via `sync-ops-scripts` + deploy/verify link scripts.

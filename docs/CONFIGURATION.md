@@ -18,7 +18,7 @@
 
 ## What This Doc Is For
 
-This guide is the runtime configuration reference for OpenClaw-Ops-Toolkit.
+This guide is the runtime configuration reference for LLM-Ops-Kit.
 
 Use it to:
 
@@ -56,8 +56,10 @@ Scripts use this precedence:
 
 ## Core Environment Variables
 
+- `scripts/config/hosts.env`: centralized default host/IP file for wrappers (sync/proxy) in this repo.
 - `OPENCLAW_AGENT_WORK_ROOT`: canonical repo root used for template/tool paths.
 - `OPENCLAW_UPSTREAM_HOST`: default upstream model host for wrappers.
+- `OPENCLAW_SYNC_HOST`: optional dedicated sync host override (falls back to `OPENCLAW_UPSTREAM_HOST`).
 - `OPENCLAW_UPSTREAM_PORT`: default upstream model port for wrappers.
 - `OPENCLAW_PROXY_LISTEN_HOST`: default bind host for proxy wrappers.
 - `OPENCLAW_PROXY_LISTEN_PORT`: default bind port for proxy wrappers.
@@ -85,7 +87,7 @@ Scripts use this precedence:
 
 ```bash
 # Copy from .env.example and adapt values.
-OPENCLAW_AGENT_WORK_ROOT=~/projects/OpenClaw-Ops-Toolkit
+OPENCLAW_AGENT_WORK_ROOT=~/projects/LLM-Ops-Kit
 OPENCLAW_UPSTREAM_HOST=<upstream-host>
 OPENCLAW_UPSTREAM_PORT=<upstream-port>
 OPENCLAW_PROXY_LISTEN_HOST=127.0.0.1
@@ -93,15 +95,15 @@ OPENCLAW_PROXY_LISTEN_PORT=<listen-port>
 
 SYNC_HOST=<sync-host>
 SYNC_USER=<your-user>
-SYNC_REMOTE_DIR=~/projects/OpenClaw-Ops-Toolkit
-SYNC_LOCAL_DIR=~/projects/OpenClaw-Ops-Toolkit/
+SYNC_REMOTE_DIR=~/projects/LLM-Ops-Kit
+SYNC_LOCAL_DIR=~/projects/LLM-Ops-Kit/
 ```
 
 ## Local Example (Current Operator Setup)
 
 ```bash
-export OPENCLAW_AGENT_WORK_ROOT="$HOME/projects/OpenClaw-Ops-Toolkit"
-export OPENCLAW_UPSTREAM_HOST="10.0.0.67"
+export OPENCLAW_AGENT_WORK_ROOT="$HOME/projects/LLM-Ops-Kit"
+export OPENCLAW_UPSTREAM_HOST="172.20.10.2"
 export OPENCLAW_UPSTREAM_PORT="11434"
 export OPENCLAW_PROXY_LISTEN_HOST="127.0.0.1"
 export OPENCLAW_PROXY_LISTEN_PORT="11434"
@@ -110,7 +112,7 @@ export OPENCLAW_PROXY_LISTEN_PORT="11434"
 ## Remote/Portable Example
 
 ```bash
-export OPENCLAW_AGENT_WORK_ROOT="$HOME/projects/OpenClaw-Ops-Toolkit"
+export OPENCLAW_AGENT_WORK_ROOT="$HOME/projects/LLM-Ops-Kit"
 export OPENCLAW_UPSTREAM_HOST="<upstream-host>"
 export OPENCLAW_UPSTREAM_PORT="<upstream-port>"
 export OPENCLAW_PROXY_LISTEN_HOST="127.0.0.1"
@@ -119,27 +121,27 @@ export OPENCLAW_PROXY_LISTEN_PORT="<listen-port>"
 
 ## Optional: Secrets Kit Integration
 
-If you do not want sensitive values in `.env` files, use `secrets-kit` and export values into the runtime shell.
+If you do not want sensitive values in `.env` files, use `seckit` and export values into the runtime shell.
 
 Project:
 
-- `secrets-kit` (set to your canonical repo URL once published)
-- Example URL: `https://github.com/unixwzrd/secrets-kit`
+- `seckit` (set to your canonical repo URL once published)
+- Example URL: `https://github.com/unixwzrd/seckit`
 
 Example flow:
 
 ```bash
 # 1) Install (example from GitHub)
-python3 -m pip install "git+https://github.com/unixwzrd/secrets-kit.git"
+python3 -m pip install "git+https://github.com/unixwzrd/seckit.git"
 
 # 2) Store values
-secrets-kit set --name OPENCLAW_UPSTREAM_HOST --value 10.0.0.67 --service openclaw --account default
-secrets-kit set --name OPENCLAW_UPSTREAM_PORT --value 11434 --service openclaw --account default
-secrets-kit set --name OPENCLAW_PROXY_LISTEN_HOST --value 127.0.0.1 --service openclaw --account default
-secrets-kit set --name OPENCLAW_PROXY_LISTEN_PORT --value 11434 --service openclaw --account default
+seckit set --name OPENCLAW_UPSTREAM_HOST --value 172.20.10.2 --service openclaw --account default
+seckit set --name OPENCLAW_UPSTREAM_PORT --value 11434 --service openclaw --account default
+seckit set --name OPENCLAW_PROXY_LISTEN_HOST --value 127.0.0.1 --service openclaw --account default
+seckit set --name OPENCLAW_PROXY_LISTEN_PORT --value 11434 --service openclaw --account default
 
 # 3) Export at runtime
-eval "$(secrets-kit export --format shell --service openclaw --account default)"
+eval "$(seckit export --format shell --service openclaw --account default)"
 
 # 4) Start stack with exported settings
 ~/bin/openclaw-stack restart all
@@ -148,7 +150,7 @@ eval "$(secrets-kit export --format shell --service openclaw --account default)"
 Notes:
 
 - Keep `.env` for non-sensitive defaults and local convenience.
-- Keep tokens/secrets in `secrets-kit` only.
+- Keep tokens/secrets in `seckit` only.
 
 ## Bootstrapping
 

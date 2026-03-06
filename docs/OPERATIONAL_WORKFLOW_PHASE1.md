@@ -19,7 +19,7 @@
 
 - `.openclaw`: local-only, no remote push.
 - `OpenClaw-workspace`: local-only, no remote push.
-- `OpenClaw-Ops-Toolkit`: canonical docs/planning/operations repository; only potential remote candidate later.
+- `LLM-Ops-Kit`: canonical docs/planning/operations repository; only potential remote candidate later.
 
 ## Context Bootstrapping Flow
 
@@ -34,7 +34,7 @@
 
 Canonical scripts live under:
 
-- `~/projects/OpenClaw-Ops-Toolkit/scripts`
+- `~/projects/LLM-Ops-Kit/scripts`
 
 Primary operator commands (from `~/bin`):
 
@@ -46,8 +46,8 @@ Primary operator commands (from `~/bin`):
 - Start proxy only: `~/bin/proxy start`
 - Stop model directly: `~/bin/Qwen3 stop` / `~/bin/Qwen3.5 stop` / `~/bin/BGEen stop`
 - Stack status: `~/bin/openclaw-stack status`
-- Deploy symlinks: `/usr/local/bin/bash ~/projects/OpenClaw-Ops-Toolkit/scripts/deploy-runtime-links.sh`
-- Verify links: `/usr/local/bin/bash ~/projects/OpenClaw-Ops-Toolkit/scripts/verify-runtime-links.sh`
+- Deploy symlinks: `/usr/local/bin/bash ~/projects/LLM-Ops-Kit/scripts/deploy-runtime-links.sh`
+- Verify links: `/usr/local/bin/bash ~/projects/LLM-Ops-Kit/scripts/verify-runtime-links.sh`
 - Runtime report: `~/bin/openclaw-report`
 - Sync repo to remote host: `~/bin/sync-ops-scripts`
 
@@ -69,7 +69,7 @@ Primary operator commands (from `~/bin`):
 ## Reporting
 
 - Keep generating sanitized reports under:
-  - `~/projects/OpenClaw-Ops-Toolkit/docs/reports/YYYY-MM-DD.md`
+  - `~/projects/LLM-Ops-Kit/docs/reports/YYYY-MM-DD.md`
 
 ## Remote Policy
 
