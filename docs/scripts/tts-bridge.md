@@ -3,7 +3,7 @@
 **Created**: 2026-03-03
 **Updated**: 2026-03-08
 
-Run a local OpenAI-compatible TTS bridge that forwards to your MLX Audio server and injects a configured voice clone payload (`model`, `voice`, `ref_audio`, `ref_text`).
+Run a local OpenAI-compatible TTS bridge that forwards to your MLX Audio server and injects a configured voice clone payload (`model`, `ref_audio`, `ref_text`). It only injects `voice` when clone refs are not present.
 
 ```bash
 ~/bin/tts-bridge [start|stop|restart|status]
@@ -32,6 +32,7 @@ Environment overrides:
 - `TTS_BRIDGE_UPSTREAM_BASE`
 - `TTS_BRIDGE_MODEL`
 - `TTS_BRIDGE_VOICE`
+  - Leave this empty for clone-ref workflows. Use it only for named-speaker / non-clone TTS.
 - `TTS_BRIDGE_REF_AUDIO`
 - `TTS_BRIDGE_REF_TEXT`
 - `TTS_BRIDGE_PYTHON_BIN`

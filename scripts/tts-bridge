@@ -20,7 +20,7 @@ LISTEN_HOST="${TTS_BRIDGE_HOST:-127.0.0.1}"
 LISTEN_PORT="${TTS_BRIDGE_PORT:-11440}"
 UPSTREAM_BASE="${TTS_BRIDGE_UPSTREAM_BASE:-http://127.0.0.1:11439/v1}"
 MODEL_PATH="${TTS_BRIDGE_MODEL:-$HOME/LLM_Repository/TTS/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit}"
-VOICE_NAME="${TTS_BRIDGE_VOICE:-serena}"
+VOICE_NAME="${TTS_BRIDGE_VOICE:-}"
 REF_AUDIO="${TTS_BRIDGE_REF_AUDIO:-$HOME/LLM_Repository/TTS/Samples/Mia-Faith-Prof-Emotive-60s-Sample-Mastered-01.wav}"
 REF_TEXT="${TTS_BRIDGE_REF_TEXT:-$HOME/LLM_Repository/TTS/Samples/Mia-Faith-Prof-Emotive-60s-Sample-Mastered-01.txt}"
 PY_BIN="${TTS_BRIDGE_PYTHON_BIN:-python}"
@@ -37,7 +37,7 @@ Env overrides:
   TTS_BRIDGE_PORT             (default: 11440)
   TTS_BRIDGE_UPSTREAM_BASE    (default: http://127.0.0.1:11439/v1)
   TTS_BRIDGE_MODEL            (default: Qwen3-TTS local path)
-  TTS_BRIDGE_VOICE            (default: serena)
+  TTS_BRIDGE_VOICE            (default: empty; only used when not cloning)
   TTS_BRIDGE_PREFER_INCOMING_VOICE (default: 0; set 1 to honor incoming voice)
   TTS_BRIDGE_REF_AUDIO        (default: Mia-Faith 60s wav)
   TTS_BRIDGE_REF_TEXT         (default: matching .txt transcript)

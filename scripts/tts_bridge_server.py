@@ -129,13 +129,6 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if model:
             output["model"] = model
 
-        if cfg.get("prefer_incoming_voice"):
-            voice = incoming.get("voice") or cfg.get("voice")
-        else:
-            voice = cfg.get("voice") or incoming.get("voice")
-        if voice:
-            output["voice"] = voice
-
         ref_audio = incoming.get("ref_audio") or cfg.get("ref_audio")
         if ref_audio:
             output["ref_audio"] = ref_audio
@@ -145,6 +138,19 @@ class BridgeHandler(BaseHTTPRequestHandler):
             if isinstance(ref_text, str) and os.path.isfile(ref_text):
                 ref_text = _read_text_file(ref_text)
             output["ref_text"] = ref_text
+
+        # When clone refs are present, avoid forcing a named speaker. Current
+        # Qwen3-TTS routes named-speaker CustomVoice requests differently than
+        # ref-audio/ref-text cloning requests.
+        has_clone_ref = bool(ref_audio) and bool(ref_text)
+        voice = ""
+        if not has_clone_ref:
+            if cfg.get("prefer_incoming_voice"):
+                voice = incoming.get("voice") or cfg.get("voice")
+            else:
+                voice = cfg.get("voice") or incoming.get("voice")
+        if voice:
+            output["voice"] = voice
 
         for k in ("speed", "language", "verbose"):
             if k in incoming:
@@ -180,8 +186,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
             self._json(502, {"error": f"upstream_error: {exc}"})
 
     def log_message(self, fmt: str, *args: Any) -> None:
-        sys.stderr.write("%s - - [%s] %s
-" % (self.client_address[0], self.log_date_time_string(), fmt % args))
+        sys.stderr.write("%s - - [%s] %s\n" % (self.client_address[0], self.log_date_time_string(), fmt % args))
 
 
 def parse_args() -> argparse.Namespace:
@@ -190,7 +195,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--listen-port", type=int, default=int(_env("TTS_BRIDGE_PORT", "11440")))
     p.add_argument("--upstream-base", default=_env("TTS_BRIDGE_UPSTREAM_BASE", "http://127.0.0.1:11439/v1"))
     p.add_argument("--model", default=_env("TTS_BRIDGE_MODEL", ""))
-    p.add_argument("--voice", default=_env("TTS_BRIDGE_VOICE", "serena"))
+    p.add_argument("--voice", default=_env("TTS_BRIDGE_VOICE", ""))
     p.add_argument(
         "--prefer-incoming-voice",
         action="store_true",

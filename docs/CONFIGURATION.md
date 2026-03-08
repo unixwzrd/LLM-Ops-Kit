@@ -79,7 +79,7 @@ Note:
 - `TTS_BRIDGE_PORT`: bind port for `tts-bridge`.
 - `TTS_BRIDGE_UPSTREAM_BASE`: upstream MLX Audio base URL.
 - `TTS_BRIDGE_MODEL`: default model path injected by bridge.
-- `TTS_BRIDGE_VOICE`: default voice injected by bridge.
+- `TTS_BRIDGE_VOICE`: default voice injected by bridge when clone refs are not present.
 - `TTS_BRIDGE_REF_AUDIO`: default reference audio file.
 - `TTS_BRIDGE_REF_TEXT`: default reference transcript file (or literal text if passed directly).
 - `TTS_BRIDGE_PYTHON_BIN`: python binary used by bridge launcher.

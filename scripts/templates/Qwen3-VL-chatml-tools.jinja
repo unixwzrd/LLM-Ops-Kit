@@ -174,16 +174,6 @@ When not calling tools:
             {%- if m.content %}
                 {{ render_content(m.content, 'assistant') }}
             {%- endif -%}
-            {%- if INCLUDE_TOOL_CALL_HISTORY -%}
-                {%- for tc in m.tool_calls -%}
-                    {%- set fn = tc.function if tc.function is defined else tc -%}
-                    {%- if fn.name != 'tts' -%}
-                        <tool_call>
-                        {"name":"{{ fn.name }}","arguments":{% if fn.arguments is string %}{{ fn.arguments }}{% else %}{{ fn.arguments | tojson }}{% endif %}}
-                        </tool_call>
-                    {%- endif -%}
-                {%- endfor -%}
-            {%- endif -%}
             <|im_end|>
         {%- endif -%}
     {%- elif m.role == 'tool' -%}
