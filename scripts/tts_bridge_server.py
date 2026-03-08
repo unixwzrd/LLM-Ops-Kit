@@ -10,13 +10,16 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import shutil
-import subprocess
 import sys
-import tempfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 from urllib import error, request
+
+
+UNSUPPORTED_FORMAT_FALLBACKS = {
+    "opus": "wav",
+    "ogg": "wav",
+}
 
 
 def _env(name: str, default: str = "") -> str:
@@ -45,50 +48,19 @@ def _content_type_for_format(fmt: str) -> str:
         return "audio/wav"
     if fmt == "mp3":
         return "audio/mpeg"
-    if fmt in ("opus", "ogg"):
+    if fmt in ("ogg", "opus"):
         return "audio/ogg"
     if fmt == "flac":
         return "audio/flac"
     return "application/octet-stream"
 
 
-def _plan_response_format(requested: str, fallback: str = "wav") -> tuple[str, str, bool]:
+def _normalize_response_format(requested: str, fallback: str = "wav") -> tuple[str, str | None]:
     requested = (requested or fallback or "wav").lower()
-    fallback = (fallback or "wav").lower()
-
-    # MLX Audio does not currently support opus output. For OpenAI-compatible
-    # callers, request wav upstream and transcode locally when possible.
-    if requested in ("opus", "ogg"):
-        return fallback, requested, shutil.which("ffmpeg") is not None
-
-    return requested, requested, False
-
-
-def _transcode_audio(audio_bytes: bytes, src_format: str, dst_format: str) -> bytes:
-    src_format = (src_format or "wav").lower()
-    dst_format = (dst_format or src_format).lower()
-    if dst_format == src_format:
-        return audio_bytes
-
-    ffmpeg = shutil.which("ffmpeg")
-    if not ffmpeg:
-        raise RuntimeError("ffmpeg_not_found")
-
-    with tempfile.TemporaryDirectory(prefix="tts-bridge-") as tmpdir:
-        src = os.path.join(tmpdir, f"input.{src_format}")
-        dst_ext = "ogg" if dst_format in ("opus", "ogg") else dst_format
-        dst = os.path.join(tmpdir, f"output.{dst_ext}")
-        with open(src, "wb") as f:
-            f.write(audio_bytes)
-
-        cmd = [ffmpeg, "-y", "-v", "error", "-i", src]
-        if dst_format in ("opus", "ogg"):
-            cmd += ["-c:a", "libopus", "-b:a", "48k", dst]
-        else:
-            cmd += [dst]
-        subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        with open(dst, "rb") as f:
-            return f.read()
+    normalized = UNSUPPORTED_FORMAT_FALLBACKS.get(requested, requested)
+    if normalized != requested:
+        return normalized, requested
+    return normalized, None
 
 
 class BridgeHandler(BaseHTTPRequestHandler):
@@ -120,8 +92,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
                         "response_format": cfg.get("response_format", "wav"),
                     },
                     "compat": {
-                        "ffmpeg": shutil.which("ffmpeg") is not None,
-                        "opus_transcode": True,
+                        "unsupported_response_formats": UNSUPPORTED_FORMAT_FALLBACKS,
                     },
                 },
             )
@@ -147,12 +118,12 @@ class BridgeHandler(BaseHTTPRequestHandler):
         output: dict[str, Any] = {}
 
         requested_format = incoming.get("response_format", cfg.get("response_format", "wav"))
-        upstream_format, final_format, should_transcode = _plan_response_format(
+        response_format, downgraded_from = _normalize_response_format(
             str(requested_format), str(cfg.get("response_format", "wav"))
         )
 
         output["input"] = incoming.get("input", "")
-        output["response_format"] = upstream_format
+        output["response_format"] = response_format
 
         model = cfg.get("model") or incoming.get("model", "")
         if model:
@@ -190,26 +161,12 @@ class BridgeHandler(BaseHTTPRequestHandler):
         try:
             with request.urlopen(req, timeout=cfg["timeout_seconds"]) as resp:  # noqa: S310
                 response_body = resp.read()
-                content_type = resp.headers.get("Content-Type") or _content_type_for_format(upstream_format)
-
-                if should_transcode:
-                    try:
-                        response_body = _transcode_audio(response_body, upstream_format, final_format)
-                        content_type = _content_type_for_format(final_format)
-                    except Exception as exc:  # noqa: BLE001
-                        self._json(
-                            502,
-                            {
-                                "error": f"transcode_error: {exc}",
-                                "requested_format": requested_format,
-                                "upstream_format": upstream_format,
-                            },
-                        )
-                        return
-
                 self.send_response(resp.status)
-                self.send_header("Content-Type", content_type)
+                self.send_header("Content-Type", _content_type_for_format(response_format))
                 self.send_header("Content-Length", str(len(response_body)))
+                if downgraded_from:
+                    self.send_header("X-TTS-Bridge-Requested-Format", downgraded_from)
+                    self.send_header("X-TTS-Bridge-Delivered-Format", response_format)
                 self.end_headers()
                 self.wfile.write(response_body)
         except error.HTTPError as exc:
