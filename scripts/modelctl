@@ -132,6 +132,10 @@ validate_model_settings() {
       done
       if [[ "${USE_CUSTOM_TEMPLATE:-0}" == "1" ]]; then
         require_non_empty CHAT_TEMPLATE
+        if [[ ! -f "$CHAT_TEMPLATE" ]]; then
+          echo "Configured CHAT_TEMPLATE does not exist: $CHAT_TEMPLATE" >&2
+          exit 2
+        fi
       fi
       ;;
     embedding)

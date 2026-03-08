@@ -31,13 +31,8 @@ USE_NO_WEBUI="${USE_NO_WEBUI:-1}"
 
 # Prompt/template settings
 USE_CUSTOM_TEMPLATE="${USE_CUSTOM_TEMPLATE:-1}"
-QWEN3_TEMPLATE_MODE="${QWEN3_TEMPLATE_MODE:-stable}"
 if [[ -z "${CHAT_TEMPLATE:-}" ]]; then
-  case "$QWEN3_TEMPLATE_MODE" in
-    stable|*)
-      CHAT_TEMPLATE="${AGENT_WORK_ROOT}/scripts/templates/Qwen3-VL-chatml-tools.jinja"
-      ;;
-  esac
+  CHAT_TEMPLATE="${AGENT_WORK_ROOT}/scripts/templates/Qwen3-VL-chatml-tools.jinja"
 fi
 VERBOSE_PROMPT="${VERBOSE_PROMPT:-0}"
 

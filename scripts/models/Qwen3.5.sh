@@ -33,16 +33,8 @@ USE_NO_WEBUI="${USE_NO_WEBUI:-1}"
 # Prompt/template settings
 VERBOSE_PROMPT="${VERBOSE_PROMPT:-0}"
 USE_CUSTOM_TEMPLATE="${USE_CUSTOM_TEMPLATE:-1}"
-QWEN35_TEMPLATE_MODE="${QWEN35_TEMPLATE_MODE:-std}"
 if [[ -z "${CHAT_TEMPLATE:-}" ]]; then
-  case "$QWEN35_TEMPLATE_MODE" in
-    new)
-      CHAT_TEMPLATE="${AGENT_WORK_ROOT}/scripts/templates/Qwen3.5-chatml-tools.jinja"
-      ;;
-    stable|*)
-      CHAT_TEMPLATE="${AGENT_WORK_ROOT}/scripts/templates/Qwen3.5-std-chatml-tools.jinja"
-      ;;
-  esac
+  CHAT_TEMPLATE="${AGENT_WORK_ROOT}/scripts/templates/Qwen3.5-chatml-tools.jinja"
 fi
 
 # Sampling presets (overridable by env)
