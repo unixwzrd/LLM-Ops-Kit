@@ -15,9 +15,9 @@ load_shell_env
 # Sync local LLM-Ops-Kit repo to a remote host with short-lived key loading.
 # Default: interactive + safe (no --delete unless requested).
 
-HOST="${SYNC_HOST:-${OPENCLAW_SYNC_HOST:-${OPENCLAW_UPSTREAM_HOST:-172.20.10.2}}}"
-USER_NAME="${SYNC_USER:-${OPENCLAW_SYNC_USER:-$USER}}"
-REMOTE_DIR="${SYNC_REMOTE_DIR:-${OPENCLAW_SYNC_REMOTE_DIR:-~/projects/LLM-Ops-Kit}}"
+HOST="${SYNC_HOST:-${LLMOPS_SYNC_HOST:-${LLMOPS_UPSTREAM_HOST:-172.20.10.2}}}"
+USER_NAME="${SYNC_USER:-${LLMOPS_SYNC_USER:-$USER}}"
+REMOTE_DIR="${SYNC_REMOTE_DIR:-${LLMOPS_SYNC_REMOTE_DIR:-~/projects/LLM-Ops-Kit}}"
 KEY_PATH="${SYNC_KEY_PATH:-$HOME/.ssh/id_ed25519_misfour_deploy}"
 TTL="${SYNC_KEY_TTL:-20m}"
 LOCAL_DIR="${SYNC_LOCAL_DIR:-$HOME/projects/LLM-Ops-Kit/}"
@@ -27,13 +27,13 @@ NO_AGENT=0
 NO_MANIFEST=0
 NO_LINKS=0
 QUIET=0
-STATE_FILE="${OPENCLAW_OPS_STATE_FILE:-$HOME/.llm-ops/runtime-state.env}"
-RUNTIME_MODE="${OPENCLAW_RUNTIME_MODE:-repo}" # repo|installed
-INSTALL_PREFIX="${OPENCLAW_OPS_INSTALL_BASE:-$HOME/.llm-ops}"
+STATE_FILE="${LLMOPS_STATE_FILE:-$HOME/.llm-ops/runtime-state.env}"
+RUNTIME_MODE="${LLMOPS_RUNTIME_MODE:-repo}" # repo|installed
+INSTALL_PREFIX="${LLMOPS_INSTALL_BASE:-$HOME/.llm-ops}"
 RUNTIME_MODE_EXPLICIT=0
 INSTALL_PREFIX_EXPLICIT=0
-ENV_RUNTIME_MODE="${OPENCLAW_RUNTIME_MODE:-}"
-ENV_INSTALL_PREFIX="${OPENCLAW_OPS_INSTALL_BASE:-}"
+ENV_RUNTIME_MODE="${LLMOPS_RUNTIME_MODE:-}"
+ENV_INSTALL_PREFIX="${LLMOPS_INSTALL_BASE:-}"
 
 usage() {
   cat <<USAGE
@@ -59,8 +59,8 @@ Options:
 
 Env overrides:
   SYNC_HOST, SYNC_USER, SYNC_REMOTE_DIR, SYNC_LOCAL_DIR, SYNC_KEY_PATH, SYNC_KEY_TTL
-  OPENCLAW_UPSTREAM_HOST, OPENCLAW_SYNC_USER, OPENCLAW_SYNC_REMOTE_DIR
-  OPENCLAW_RUNTIME_MODE, OPENCLAW_OPS_INSTALL_BASE, OPENCLAW_OPS_STATE_FILE
+  LLMOPS_UPSTREAM_HOST, LLMOPS_SYNC_USER, LLMOPS_SYNC_REMOTE_DIR
+  LLMOPS_RUNTIME_MODE, LLMOPS_INSTALL_BASE, LLMOPS_STATE_FILE
 USAGE
 }
 
@@ -94,11 +94,11 @@ done
 if [[ "$RUNTIME_MODE_EXPLICIT" -eq 0 && -z "$ENV_RUNTIME_MODE" && -f "$STATE_FILE" ]]; then
   # shellcheck disable=SC1090
   . "$STATE_FILE"
-  if [[ "${OPENCLAW_OPS_INSTALL_MODE:-}" == "installed" ]]; then
+  if [[ "${LLMOPS_INSTALL_MODE:-}" == "installed" ]]; then
     RUNTIME_MODE="installed"
   fi
-  if [[ "$INSTALL_PREFIX_EXPLICIT" -eq 0 && -z "$ENV_INSTALL_PREFIX" && -n "${OPENCLAW_OPS_INSTALL_BASE:-}" ]]; then
-    INSTALL_PREFIX="$OPENCLAW_OPS_INSTALL_BASE"
+  if [[ "$INSTALL_PREFIX_EXPLICIT" -eq 0 && -z "$ENV_INSTALL_PREFIX" && -n "${LLMOPS_INSTALL_BASE:-}" ]]; then
+    INSTALL_PREFIX="$LLMOPS_INSTALL_BASE"
   fi
 fi
 
@@ -142,7 +142,7 @@ if [[ -f "$manifest_file" ]]; then
   done < "$manifest_file"
   if [[ "$missing_manifest_sources" -gt 0 ]]; then
     echo "ERROR: local manifest precheck failed with $missing_manifest_sources missing source(s)." >&2
-    echo "Hint: check SYNC_LOCAL_DIR/OPENCLAW_SYNC_REMOTE_DIR overrides and current repo contents." >&2
+    echo "Hint: check SYNC_LOCAL_DIR/LLMOPS_SYNC_REMOTE_DIR overrides and current repo contents." >&2
     exit 1
   fi
 else

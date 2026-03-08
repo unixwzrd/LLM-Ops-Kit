@@ -1,7 +1,7 @@
 # shellcheck shell=bash
 # Model-specific defaults for Qwen3.5 (applied before model-kind defaults).
 # Fill only when still unset so external env can override.
-AGENT_WORK_ROOT="${OPENCLAW_AGENT_WORK_ROOT:-$HOME/projects/LLM-Ops-Kit}"
+AGENT_WORK_ROOT="${LLMOPS_AGENT_WORK_ROOT:-$HOME/projects/LLM-Ops-Kit}"
 
 # Identity/profile
 MODEL_TYPE="${MODEL_TYPE:-llm}"

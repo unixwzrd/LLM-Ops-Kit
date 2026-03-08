@@ -35,10 +35,10 @@ curl -sS http://127.0.0.1:11439/v1/audio/speech \
 
 Optional env overrides:
 
-- `OPENCLAW_TTS_HOST` (default `127.0.0.1`)
-- `OPENCLAW_TTS_PORT` (default `11439`)
-- `OPENCLAW_TTS_PYTHON` (default `python`)
-- `OPENCLAW_TTS_MODULE` (default `mlx_audio.server`)
+- `LLMOPS_TTS_HOST` (default `127.0.0.1`)
+- `LLMOPS_TTS_PORT` (default `11439`)
+- `LLMOPS_TTS_PYTHON` (default `python`)
+- `LLMOPS_TTS_MODULE` (default `mlx_audio.server`)
 
 Notes:
 

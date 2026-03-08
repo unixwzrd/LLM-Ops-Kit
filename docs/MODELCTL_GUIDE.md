@@ -95,9 +95,9 @@ Model profiles can implement preset selectors (for example `QWEN35_PRESET`) that
 ## Where logs/pids live
 
 - LLM/embedding PID name: `llama-$MODEL_PROFILE`
-- LLM/embedding log file: `$OPENCLAW_LOG_DIR/llama-server-$MODEL_PROFILE.log`
+- LLM/embedding log file: `$LLMOPS_LOG_DIR/llama-server-$MODEL_PROFILE.log`
 - TTS PID name: `tts-$MODEL_PROFILE`
-- TTS log file: `$OPENCLAW_LOG_DIR/tts-server-$MODEL_PROFILE.log`
-- State file: `$OPENCLAW_RUN_DIR/<pid_name>.state`
+- TTS log file: `$LLMOPS_LOG_DIR/tts-server-$MODEL_PROFILE.log`
+- State file: `$LLMOPS_RUN_DIR/<pid_name>.state`
 
 Use `status` to see active pid and log path.

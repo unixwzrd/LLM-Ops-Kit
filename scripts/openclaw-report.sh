@@ -15,8 +15,8 @@ ensure_runtime_dirs
 
 echo "OpenClaw Runtime Report"
 echo "timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-echo "run_dir: $OPENCLAW_RUN_DIR"
-echo "log_dir: $OPENCLAW_LOG_DIR"
+echo "run_dir: $LLMOPS_RUN_DIR"
+echo "log_dir: $LLMOPS_LOG_DIR"
 echo
 
 "$SCRIPT_DIR/openclaw-stack" status
@@ -24,10 +24,10 @@ echo
 
 echo "Recent logs:"
 for log in \
-  "$OPENCLAW_LOG_DIR/gateway.log" \
-  "$OPENCLAW_LOG_DIR/llama-server-Qwen3VL.log" \
-  "$OPENCLAW_LOG_DIR/llama-server-bge-small-en.log" \
-  "$OPENCLAW_LOG_DIR/model-proxy-tap.log"; do
+  "$LLMOPS_LOG_DIR/gateway.log" \
+  "$LLMOPS_LOG_DIR/llama-server-Qwen3VL.log" \
+  "$LLMOPS_LOG_DIR/llama-server-bge-small-en.log" \
+  "$LLMOPS_LOG_DIR/model-proxy-tap.log"; do
   if [[ -f "$log" ]]; then
     echo "--- $log"
     tail -n 5 "$log" || true

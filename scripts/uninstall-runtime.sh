@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-INSTALL_BASE="${OPENCLAW_OPS_INSTALL_BASE:-$HOME/.llm-ops}"
+INSTALL_BASE="${LLMOPS_INSTALL_BASE:-$HOME/.llm-ops}"
 INSTALL_DIR="$INSTALL_BASE/current"
 BIN_DIR="${BIN_DIR:-$HOME/bin}"
-STATE_FILE="${OPENCLAW_OPS_STATE_FILE:-$HOME/.llm-ops/runtime-state.env}"
+STATE_FILE="${LLMOPS_STATE_FILE:-$HOME/.llm-ops/runtime-state.env}"
 KEEP_FILES=0
 
 usage() {

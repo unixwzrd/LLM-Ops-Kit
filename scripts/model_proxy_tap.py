@@ -5,7 +5,7 @@ Logs request/response metadata and JSON bodies to NDJSON while proxying traffic.
 
 Typical use:
   model-proxy-tap --upstream http://<upstream-host>:<upstream-port> --listen-port 18080 \
-    --log ~/.llmops/logs/model-proxy.ndjson
+    --log ~/.llm-ops/logs/model-proxy.ndjson
 
 Then point OpenClaw llamacpp baseUrl to:
   http://127.0.0.1:18080/v1
@@ -558,7 +558,7 @@ def normalize_upstream(raw: str) -> tuple[str, int]:
 
 
 def parse_args() -> argparse.Namespace:
-    default_log_dir = os.path.expanduser("~/.llmops/logs")
+    default_log_dir = os.path.expanduser("~/.llm-ops/logs")
     p = argparse.ArgumentParser(description="OpenAI-compatible reverse proxy tap")
     p.add_argument("--listen-host", default="127.0.0.1")
     p.add_argument("--listen-port", "--port", dest="listen_port", type=int, help="Listen port (default: upstream port)")
@@ -592,7 +592,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
-    default_log_dir = os.path.expanduser("~/.llmops/logs")
+    default_log_dir = os.path.expanduser("~/.llm-ops/logs")
     args = parse_args()
     try:
         upstream_base, upstream_port = normalize_upstream(args.upstream)

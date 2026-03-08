@@ -22,7 +22,7 @@ Examples:
 Notes:
 
 - Prints effective `LOCAL_DIR`, `REMOTE_DIR`, `HOST`, and `USER` at runtime.
-- Host defaults are loaded from `~/.llmops/config.env` first, then `scripts/config/hosts.env` (and optional `scripts/config/hosts.local.env`) via shared shell env loading.
+- Host defaults are loaded from `~/.llm-ops/config.env` first, then `scripts/config/hosts.env` (and optional `scripts/config/hosts.local.env`) via shared shell env loading.
 - Runs a local manifest precheck before rsync and fails if any manifest source is missing.
 - Default behavior includes remote:
   - in `repo` mode:

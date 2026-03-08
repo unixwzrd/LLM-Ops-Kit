@@ -253,12 +253,12 @@ fi
 validate_model_settings
 if [[ "$MODEL_TYPE" == "tts" ]]; then
   pid_name="tts-$MODEL_PROFILE"
-  model_log_file="$OPENCLAW_LOG_DIR/tts-server-$MODEL_PROFILE.log"
+  model_log_file="$LLMOPS_LOG_DIR/tts-server-$MODEL_PROFILE.log"
 else
   pid_name="llama-$MODEL_PROFILE"
-  model_log_file="$OPENCLAW_LOG_DIR/llama-server-$MODEL_PROFILE.log"
+  model_log_file="$LLMOPS_LOG_DIR/llama-server-$MODEL_PROFILE.log"
 fi
-state_file="$OPENCLAW_RUN_DIR/$pid_name.state"
+state_file="$LLMOPS_RUN_DIR/$pid_name.state"
 
 write_model_state() {
   local pid="$1"

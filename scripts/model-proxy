@@ -14,9 +14,9 @@ SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
 action="${1:-status}"
 shift || true
 
-AGENT_WORK_ROOT="${OPENCLAW_AGENT_WORK_ROOT:-$HOME/projects/LLM-Ops-Kit}"
-DEFAULT_UPSTREAM_HOST="${OPENCLAW_UPSTREAM_HOST:-172.20.10.2}"
-DEFAULT_UPSTREAM_PORT="${OPENCLAW_UPSTREAM_PORT:-11434}"
+AGENT_WORK_ROOT="${LLMOPS_AGENT_WORK_ROOT:-$HOME/projects/LLM-Ops-Kit}"
+DEFAULT_UPSTREAM_HOST="${LLMOPS_UPSTREAM_HOST:-172.20.10.2}"
+DEFAULT_UPSTREAM_PORT="${LLMOPS_UPSTREAM_PORT:-11434}"
 DEFAULT_LISTEN_PORT="${MODEL_PROXY_LISTEN_PORT:-$DEFAULT_UPSTREAM_PORT}"
 PROXY_TAP_BIN="${MODEL_PROXY_TAP_BIN:-$AGENT_WORK_ROOT/bin/model-proxy-tap}"
 
@@ -39,9 +39,9 @@ Options:
   -h, --help: show this help.
 
 Default env-backed values:
-  OPENCLAW_AGENT_WORK_ROOT=${AGENT_WORK_ROOT}
-  OPENCLAW_UPSTREAM_HOST=${DEFAULT_UPSTREAM_HOST}
-  OPENCLAW_UPSTREAM_PORT=${DEFAULT_UPSTREAM_PORT}
+  LLMOPS_AGENT_WORK_ROOT=${AGENT_WORK_ROOT}
+  LLMOPS_UPSTREAM_HOST=${DEFAULT_UPSTREAM_HOST}
+  LLMOPS_UPSTREAM_PORT=${DEFAULT_UPSTREAM_PORT}
   MODEL_PROXY_LISTEN_PORT=${DEFAULT_LISTEN_PORT}
 
 Examples:
@@ -81,7 +81,7 @@ arg_value() {
 }
 
 runtime_file() {
-  printf '%s/%s\n' "$OPENCLAW_RUN_DIR" "$1"
+  printf '%s/%s\n' "$LLMOPS_RUN_DIR" "$1"
 }
 
 read_runtime() {
@@ -160,7 +160,7 @@ resolve_listen_port() {
     esac
   done
 
-  local persisted_port="$OPENCLAW_RUN_DIR/model-proxy-listen-port"
+  local persisted_port="$LLMOPS_RUN_DIR/model-proxy-listen-port"
   if [[ -f "$persisted_port" ]]; then
     local p
     p="$(tr -d '[:space:]' < "$persisted_port" || true)"
@@ -217,8 +217,8 @@ start_proxy() {
     return 0
   fi
 
-  LOG_OUT="$OPENCLAW_LOG_DIR/model-proxy-tap.log"
-  LOG_ERR="$OPENCLAW_LOG_DIR/model-proxy-tap.err.log"
+  LOG_OUT="$LLMOPS_LOG_DIR/model-proxy-tap.log"
+  LOG_ERR="$LLMOPS_LOG_DIR/model-proxy-tap.err.log"
 
   nohup "$PROXY_TAP_BIN" "${extra_args[@]}" > "$LOG_OUT" 2> "$LOG_ERR" &
   pid="$!"
@@ -241,12 +241,12 @@ start_proxy() {
   fi
 
   log="$(arg_value --log 2>/dev/null || true)"
-  log="${log:-$OPENCLAW_LOG_DIR/model-proxy.ndjson}"
+  log="${log:-$LLMOPS_LOG_DIR/model-proxy.ndjson}"
   tmpl="$(arg_value --chat-template 2>/dev/null || true)"
   raw_req="$(arg_value --raw-request-log 2>/dev/null || true)"
-  raw_req="${raw_req:-$OPENCLAW_LOG_DIR/model-proxy.raw.log}"
+  raw_req="${raw_req:-$LLMOPS_LOG_DIR/model-proxy.raw.log}"
   rendered="$(arg_value --rendered-prompt-log 2>/dev/null || true)"
-  rendered="${rendered:-$OPENCLAW_LOG_DIR/model-proxy.rendered.log}"
+  rendered="${rendered:-$LLMOPS_LOG_DIR/model-proxy.rendered.log}"
   raw_resp="$(arg_value --raw-response-log 2>/dev/null || true)"
   raw_resp="${raw_resp:-$raw_req}"
 
@@ -287,66 +287,76 @@ stop_proxy() {
 }
 
 status_proxy() {
+  local pid="" listen_host listen_port upstream log tmpl raw_req rendered raw_resp
+  local health="unknown" health_detail="" listener_pid=""
+
   if pid="$(read_pid model-proxy 2>/dev/null)"; then
     if is_pid_running "$pid"; then
       echo "model-proxy: running pid=$pid"
-      local listen_host listen_port upstream log tmpl raw_req rendered raw_resp
-      listen_host="$(read_runtime model-proxy-live-listen-host 2>/dev/null || true)"
-      listen_port="$(read_runtime model-proxy-live-listen-port 2>/dev/null || true)"
-      upstream="$(read_runtime model-proxy-live-upstream 2>/dev/null || true)"
-      log="$(read_runtime model-proxy-live-log 2>/dev/null || true)"
-      tmpl="$(read_runtime model-proxy-live-chat-template 2>/dev/null || true)"
-      raw_req="$(read_runtime model-proxy-live-raw-request-log 2>/dev/null || true)"
-      rendered="$(read_runtime model-proxy-live-rendered-prompt-log 2>/dev/null || true)"
-      raw_resp="$(read_runtime model-proxy-live-raw-response-log 2>/dev/null || true)"
-
-      listen_host="${listen_host:-127.0.0.1}"
-      log="${log:-$OPENCLAW_LOG_DIR/model-proxy.ndjson}"
-      raw_req="${raw_req:-$OPENCLAW_LOG_DIR/model-proxy.raw.log}"
-      rendered="${rendered:-$OPENCLAW_LOG_DIR/model-proxy.rendered.log}"
-      raw_resp="${raw_resp:-$raw_req}"
-
-      local health="unknown" health_detail=""
-      if [[ -n "$listen_port" ]]; then
-        if command -v curl >/dev/null 2>&1; then
-          local code
-          code="$(curl -sS -o /dev/null -w "%{http_code}" --max-time 2 "http://${listen_host}:${listen_port}/v1/models" 2>/tmp/model_proxy_status_err.$$ || true)"
-          if [[ "$code" =~ ^[0-9]{3}$ ]]; then
-            if [[ "$code" -ge 200 && "$code" -lt 300 ]]; then
-              health="ok"
-            else
-              health="down"
-            fi
-            health_detail="http_status=$code"
-          else
-            health="down"
-            health_detail="$(cat /tmp/model_proxy_status_err.$$ 2>/dev/null || true)"
-          fi
-          rm -f /tmp/model_proxy_status_err.$$ >/dev/null 2>&1 || true
-        else
-          health="unknown"
-          health_detail="curl not found"
-        fi
-      fi
-
-      echo "  listen_host=$listen_host"
-      echo "  listen_port=${listen_port:-<from-upstream/default>}"
-      echo "  upstream=${upstream:-<unset>}"
-      echo "  log=$log"
-      echo "  chat_template=${tmpl:-<none/default>}"
-      echo "  raw_request_log=$raw_req"
-      echo "  rendered_prompt_log=$rendered"
-      echo "  raw_response_log=${raw_resp:-<off>}"
-      echo "  health=$health"
-      if [[ -n "$health_detail" ]]; then
-        echo "  health_detail=$health_detail"
-      fi
-      return 0
+    else
+      echo "model-proxy: stale pid=$pid"
     fi
-    echo "model-proxy: stale pid=$pid"
-    return 1
+  else
+    echo "model-proxy: stopped"
   fi
-  echo "model-proxy: stopped"
+
+  listen_host="$(read_runtime model-proxy-live-listen-host 2>/dev/null || true)"
+  listen_port="$(read_runtime model-proxy-live-listen-port 2>/dev/null || true)"
+  upstream="$(read_runtime model-proxy-live-upstream 2>/dev/null || true)"
+  log="$(read_runtime model-proxy-live-log 2>/dev/null || true)"
+  tmpl="$(read_runtime model-proxy-live-chat-template 2>/dev/null || true)"
+  raw_req="$(read_runtime model-proxy-live-raw-request-log 2>/dev/null || true)"
+  rendered="$(read_runtime model-proxy-live-rendered-prompt-log 2>/dev/null || true)"
+  raw_resp="$(read_runtime model-proxy-live-raw-response-log 2>/dev/null || true)"
+
+  listen_host="${listen_host:-127.0.0.1}"
+  log="${log:-$LLMOPS_LOG_DIR/model-proxy.ndjson}"
+  raw_req="${raw_req:-$LLMOPS_LOG_DIR/model-proxy.raw.log}"
+  rendered="${rendered:-$LLMOPS_LOG_DIR/model-proxy.rendered.log}"
+  raw_resp="${raw_resp:-$raw_req}"
+
+  if [[ -n "$listen_port" ]] && command -v lsof >/dev/null 2>&1; then
+    listener_pid="$(lsof -nP -t -iTCP:"$listen_port" -sTCP:LISTEN 2>/dev/null | head -n 1 || true)"
+  fi
+
+  if [[ -n "$listen_port" ]]; then
+    if command -v curl >/dev/null 2>&1; then
+      local code
+      code="$(curl -sS -o /dev/null -w "%{http_code}" --max-time 2 "http://${listen_host}:${listen_port}/v1/models" 2>/tmp/model_proxy_status_err.$$ || true)"
+      if [[ "$code" =~ ^[0-9]{3}$ ]]; then
+        if [[ "$code" -ge 200 && "$code" -lt 300 ]]; then
+          health="ok"
+        else
+          health="down"
+        fi
+        health_detail="http_status=$code"
+      else
+        health="down"
+        health_detail="$(cat /tmp/model_proxy_status_err.$$ 2>/dev/null || true)"
+      fi
+      rm -f /tmp/model_proxy_status_err.$$ >/dev/null 2>&1 || true
+    else
+      health="unknown"
+      health_detail="curl not found"
+    fi
+  fi
+
+  echo "  listen=http://${listen_host}:${listen_port:-<from-upstream/default>}"
+  echo "  listener_pid=${listener_pid:-<none>}"
+  echo "  upstream=${upstream:-<unset>}"
+  echo "  log=$log"
+  echo "  chat_template=${tmpl:-<none/default>}"
+  echo "  raw_request_log=$raw_req"
+  echo "  rendered_prompt_log=$rendered"
+  echo "  raw_response_log=${raw_resp:-<off>}"
+  echo "  health=$health"
+  if [[ -n "$health_detail" ]]; then
+    echo "  health_detail=$health_detail"
+  fi
+
+  if [[ "$health" == "ok" ]]; then
+    return 0
+  fi
   return 1
 }
 

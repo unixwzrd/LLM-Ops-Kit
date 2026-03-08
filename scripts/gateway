@@ -16,9 +16,9 @@ action="${1:-status}"
 start_gateway() {
   load_shell_env
   ensure_runtime_dirs
-  PORT="${OPENCLAW_GATEWAY_PORT:-18789}"
-  LOG_OUT="$OPENCLAW_LOG_DIR/gateway.log"
-  LOG_ERR="$OPENCLAW_LOG_DIR/gateway.err.log"
+  PORT="${LLMOPS_GATEWAY_PORT:-18789}"
+  LOG_OUT="$LLMOPS_LOG_DIR/gateway.log"
+  LOG_ERR="$LLMOPS_LOG_DIR/gateway.err.log"
 
   if pid="$(read_pid gateway 2>/dev/null)" && is_pid_running "$pid"; then
     echo "gateway: already running pid=$pid"

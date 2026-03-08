@@ -1,13 +1,13 @@
 #! /usr/bin/env bash
 set -euo pipefail
 
-LLMOPS_HOME="${LLMOPS_HOME:-$HOME/.llmops}"
-OPENCLAW_RUN_DIR="${OPENCLAW_RUN_DIR:-$LLMOPS_HOME/run}"
-OPENCLAW_LOG_DIR="${OPENCLAW_LOG_DIR:-$LLMOPS_HOME/logs}"
-OPENCLAW_OPS_ROOT="${OPENCLAW_OPS_ROOT:-$(cd -P "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)}"
+LLMOPS_HOME="${LLMOPS_HOME:-$HOME/.llm-ops}"
+LLMOPS_RUN_DIR="${LLMOPS_RUN_DIR:-$LLMOPS_HOME/run}"
+LLMOPS_LOG_DIR="${LLMOPS_LOG_DIR:-$LLMOPS_HOME/logs}"
+LLMOPS_ROOT="${LLMOPS_ROOT:-$(cd -P "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)}"
 
 ensure_runtime_dirs() {
-  mkdir -p "$OPENCLAW_RUN_DIR" "$OPENCLAW_LOG_DIR"
+  mkdir -p "$LLMOPS_RUN_DIR" "$LLMOPS_LOG_DIR"
 }
 
 load_shell_env() {
@@ -15,13 +15,15 @@ load_shell_env() {
   # framework hooks (venv managers, prompt tooling) that break non-interactive
   # service wrappers. Load only explicit env files.
   local files=()
-  if [[ -n "${OPENCLAW_ENV_FILE:-}" ]]; then
-    files+=("$OPENCLAW_ENV_FILE")
+  if [[ -n "${LLMOPS_ENV_FILE:-}" ]]; then
+    files+=("$LLMOPS_ENV_FILE")
   fi
-  # Repo-local host/runtime overrides (optional, checked in by default).
-  files+=("$LLMOPS_HOME/config.env" "$LLMOPS_HOME/hosts.env")
-  files+=("$OPENCLAW_OPS_ROOT/config/hosts.env" "$OPENCLAW_OPS_ROOT/config/hosts.local.env")
+  # Base user env first, then repo defaults, then runtime-local overrides last.
+  # This lets ~/.llm-ops/config.env force service-specific settings without
+  # editing the shared ~/.env file.
   files+=("$HOME/.env")
+  files+=("$LLMOPS_ROOT/config/hosts.env" "$LLMOPS_ROOT/config/hosts.local.env")
+  files+=("$LLMOPS_HOME/config.env" "$LLMOPS_HOME/hosts.env")
   local f
   for f in "${files[@]}"; do
     if [[ -f "$f" ]]; then
@@ -34,8 +36,8 @@ load_shell_env() {
 cpu_count() {
   local n=""
 
-  if [[ -n "${OPENCLAW_CPU_COUNT_OVERRIDE:-}" ]]; then
-    n="$OPENCLAW_CPU_COUNT_OVERRIDE"
+  if [[ -n "${LLMOPS_CPU_COUNT_OVERRIDE:-}" ]]; then
+    n="$LLMOPS_CPU_COUNT_OVERRIDE"
   elif command -v getconf >/dev/null 2>&1; then
     n="$(getconf _NPROCESSORS_ONLN 2>/dev/null || true)"
   elif command -v nproc >/dev/null 2>&1; then
@@ -62,7 +64,7 @@ default_threads() {
 
 pid_file_for() {
   local name="$1"
-  printf '%s/%s.pid\n' "$OPENCLAW_RUN_DIR" "$name"
+  printf '%s/%s.pid\n' "$LLMOPS_RUN_DIR" "$name"
 }
 
 is_pid_running() {

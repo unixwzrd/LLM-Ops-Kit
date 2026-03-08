@@ -10,7 +10,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
+import subprocess
 import sys
+import tempfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 from urllib import error, request
@@ -34,6 +37,58 @@ def _mlx_speech_url(base: str) -> str:
     if base.endswith("/v1"):
         return f"{base}/audio/speech"
     return f"{base}/v1/audio/speech"
+
+
+def _content_type_for_format(fmt: str) -> str:
+    fmt = (fmt or "wav").lower()
+    if fmt == "wav":
+        return "audio/wav"
+    if fmt == "mp3":
+        return "audio/mpeg"
+    if fmt in ("opus", "ogg"):
+        return "audio/ogg"
+    if fmt == "flac":
+        return "audio/flac"
+    return "application/octet-stream"
+
+
+def _plan_response_format(requested: str, fallback: str = "wav") -> tuple[str, str, bool]:
+    requested = (requested or fallback or "wav").lower()
+    fallback = (fallback or "wav").lower()
+
+    # MLX Audio does not currently support opus output. For OpenAI-compatible
+    # callers, request wav upstream and transcode locally when possible.
+    if requested in ("opus", "ogg"):
+        return fallback, requested, shutil.which("ffmpeg") is not None
+
+    return requested, requested, False
+
+
+def _transcode_audio(audio_bytes: bytes, src_format: str, dst_format: str) -> bytes:
+    src_format = (src_format or "wav").lower()
+    dst_format = (dst_format or src_format).lower()
+    if dst_format == src_format:
+        return audio_bytes
+
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        raise RuntimeError("ffmpeg_not_found")
+
+    with tempfile.TemporaryDirectory(prefix="tts-bridge-") as tmpdir:
+        src = os.path.join(tmpdir, f"input.{src_format}")
+        dst_ext = "ogg" if dst_format in ("opus", "ogg") else dst_format
+        dst = os.path.join(tmpdir, f"output.{dst_ext}")
+        with open(src, "wb") as f:
+            f.write(audio_bytes)
+
+        cmd = [ffmpeg, "-y", "-v", "error", "-i", src]
+        if dst_format in ("opus", "ogg"):
+            cmd += ["-c:a", "libopus", "-b:a", "48k", dst]
+        else:
+            cmd += [dst]
+        subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        with open(dst, "rb") as f:
+            return f.read()
 
 
 class BridgeHandler(BaseHTTPRequestHandler):
@@ -62,6 +117,11 @@ class BridgeHandler(BaseHTTPRequestHandler):
                         "voice": cfg.get("voice", ""),
                         "ref_audio": cfg.get("ref_audio", ""),
                         "ref_text": cfg.get("ref_text", ""),
+                        "response_format": cfg.get("response_format", "wav"),
+                    },
+                    "compat": {
+                        "ffmpeg": shutil.which("ffmpeg") is not None,
+                        "opus_transcode": True,
                     },
                 },
             )
@@ -86,18 +146,18 @@ class BridgeHandler(BaseHTTPRequestHandler):
         cfg = self.server.bridge_config  # type: ignore[attr-defined]
         output: dict[str, Any] = {}
 
-        output["input"] = incoming.get("input", "")
-        output["response_format"] = incoming.get(
-            "response_format", cfg.get("response_format", "wav")
+        requested_format = incoming.get("response_format", cfg.get("response_format", "wav"))
+        upstream_format, final_format, should_transcode = _plan_response_format(
+            str(requested_format), str(cfg.get("response_format", "wav"))
         )
 
-        # Model resolution: configured default wins, then incoming.
+        output["input"] = incoming.get("input", "")
+        output["response_format"] = upstream_format
+
         model = cfg.get("model") or incoming.get("model", "")
         if model:
             output["model"] = model
 
-        # Voice resolution: configured voice wins by default to avoid OpenAI
-        # voices (alloy/nova/...) leaking into MLX requests.
         if cfg.get("prefer_incoming_voice"):
             voice = incoming.get("voice") or cfg.get("voice")
         else:
@@ -105,7 +165,6 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if voice:
             output["voice"] = voice
 
-        # Reference media resolution: incoming override wins, else configured.
         ref_audio = incoming.get("ref_audio") or cfg.get("ref_audio")
         if ref_audio:
             output["ref_audio"] = ref_audio
@@ -116,7 +175,6 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 ref_text = _read_text_file(ref_text)
             output["ref_text"] = ref_text
 
-        # Preserve optional known synthesis fields if present.
         for k in ("speed", "language", "verbose"):
             if k in incoming:
                 output[k] = incoming[k]
@@ -132,9 +190,25 @@ class BridgeHandler(BaseHTTPRequestHandler):
         try:
             with request.urlopen(req, timeout=cfg["timeout_seconds"]) as resp:  # noqa: S310
                 response_body = resp.read()
+                content_type = resp.headers.get("Content-Type") or _content_type_for_format(upstream_format)
+
+                if should_transcode:
+                    try:
+                        response_body = _transcode_audio(response_body, upstream_format, final_format)
+                        content_type = _content_type_for_format(final_format)
+                    except Exception as exc:  # noqa: BLE001
+                        self._json(
+                            502,
+                            {
+                                "error": f"transcode_error: {exc}",
+                                "requested_format": requested_format,
+                                "upstream_format": upstream_format,
+                            },
+                        )
+                        return
+
                 self.send_response(resp.status)
-                ct = resp.headers.get("Content-Type", "application/octet-stream")
-                self.send_header("Content-Type", ct)
+                self.send_header("Content-Type", content_type)
                 self.send_header("Content-Length", str(len(response_body)))
                 self.end_headers()
                 self.wfile.write(response_body)
@@ -149,7 +223,8 @@ class BridgeHandler(BaseHTTPRequestHandler):
             self._json(502, {"error": f"upstream_error: {exc}"})
 
     def log_message(self, fmt: str, *args: Any) -> None:
-        sys.stderr.write("%s - - [%s] %s\n" % (self.client_address[0], self.log_date_time_string(), fmt % args))
+        sys.stderr.write("%s - - [%s] %s
+" % (self.client_address[0], self.log_date_time_string(), fmt % args))
 
 
 def parse_args() -> argparse.Namespace:

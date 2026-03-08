@@ -21,19 +21,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - heals managed links from `~/projects/OpenClaw-Ops-Toolkit/...` to `~/projects/LLM-Ops-Kit/...`
     - preserves conflict behavior for non-symlink collisions.
   - Hardened `modelctl status`:
-    - persistent state file per model process (`$OPENCLAW_RUN_DIR/<pid_name>.state`)
+    - persistent state file per model process (`$LLMOPS_RUN_DIR/<pid_name>.state`)
     - PID command validation via `ps`
     - fast API responsiveness probe to `/v1/models`
     - state cleanup on stop.
-  - Moved toolkit-owned runtime defaults from `.openclaw` to `.llmops`:
-    - `OPENCLAW_RUN_DIR` default -> `~/.llmops/run`
-    - `OPENCLAW_LOG_DIR` default -> `~/.llmops/logs`
-    - config loading now prefers `~/.llmops/config.env`
+  - Moved toolkit-owned runtime defaults from `.openclaw` to `.llm-ops`:
+    - `LLMOPS_RUN_DIR` default -> `~/.llm-ops/run`
+    - `LLMOPS_LOG_DIR` default -> `~/.llm-ops/logs`
+    - config loading now prefers `~/.llm-ops/config.env`
     - removed implicit dependence on `~/.openclaw/.env` for toolkit scripts.
-  - Updated proxy and runbook defaults to `.llmops` paths.
-  - Updated `.env.example` to include `LLMOPS_HOME`, `OPENCLAW_RUN_DIR`, and `OPENCLAW_LOG_DIR`.
+  - Updated proxy and runbook defaults to `.llm-ops` paths.
+  - Updated `.env.example` to include `LLMOPS_HOME`, `LLMOPS_RUN_DIR`, and `LLMOPS_LOG_DIR`.
 - **Why:**
-  - Keep ownership boundaries clear: OpenClaw controls `.openclaw`, toolkit controls `.llmops`.
+  - Keep ownership boundaries clear: OpenClaw controls `.openclaw`, toolkit controls `.llm-ops`.
   - Improve operator reliability during host/network changes and repo-path migration.
   - Make status output more trustworthy than pidfile-only checks.
 

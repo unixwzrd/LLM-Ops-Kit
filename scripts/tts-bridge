@@ -26,7 +26,7 @@ REF_TEXT="${TTS_BRIDGE_REF_TEXT:-$HOME/LLM_Repository/TTS/Samples/Mia-Faith-Prof
 PY_BIN="${TTS_BRIDGE_PYTHON_BIN:-python}"
 
 pid_name="tts-bridge"
-log_file="$OPENCLAW_LOG_DIR/tts-bridge.log"
+log_file="$LLMOPS_LOG_DIR/tts-bridge.log"
 
 usage() {
   cat <<EOF
@@ -45,23 +45,89 @@ Env overrides:
 EOF
 }
 
+http_probe() {
+  local url="$1"
+  local detail_file status body code
+  detail_file="/tmp/tts_bridge_probe_$$.txt"
+  body="/tmp/tts_bridge_probe_body_$$.txt"
+  code="$(curl -sS -o "$body" -w '%{http_code}' --max-time 3 "$url" 2>"$detail_file" || true)"
+  if [[ "$code" =~ ^[0-9]{3}$ ]] && [[ "$code" != "000" ]]; then
+    if [[ "$code" -ge 200 && "$code" -lt 400 ]]; then
+      printf 'ok|http_status=%s\n' "$code"
+    else
+      printf 'down|http_status=%s\n' "$code"
+    fi
+  else
+    status="$(cat "$detail_file" 2>/dev/null || true)"
+    printf 'down|%s\n' "${status:-probe_failed}"
+  fi
+  rm -f "$detail_file" "$body" >/dev/null 2>&1 || true
+}
+
+upstream_models_url() {
+  if [[ "$UPSTREAM_BASE" == */v1 ]]; then
+    printf '%s/models\n' "$UPSTREAM_BASE"
+  else
+    printf '%s/v1/models\n' "$UPSTREAM_BASE"
+  fi
+}
+
+listener_pid() {
+  command -v lsof >/dev/null 2>&1 || return 1
+  lsof -nP -t -iTCP:"$LISTEN_PORT" -sTCP:LISTEN 2>/dev/null | head -n 1
+}
+
+bridge_health_url() {
+  printf 'http://%s:%s/health\n' "$LISTEN_HOST" "$LISTEN_PORT"
+}
+
 status_bridge() {
+  local pid="" bridge_url upstream_url bridge_probe upstream_probe bridge_state="down" upstream_state="down"
+  local bridge_detail="" upstream_detail="" port_pid=""
+  bridge_url="$(bridge_health_url)"
+  upstream_url="$(upstream_models_url)"
+
   if pid="$(read_pid "$pid_name" 2>/dev/null)"; then
     if is_pid_running "$pid"; then
       echo "$pid_name: running pid=$pid"
-      echo "  listen=http://$LISTEN_HOST:$LISTEN_PORT"
-      echo "  upstream=$UPSTREAM_BASE"
-      echo "  model=$MODEL_PATH"
-      echo "  voice=$VOICE_NAME"
-      echo "  ref_audio=$REF_AUDIO"
-      echo "  ref_text=$REF_TEXT"
-      echo "  log=$log_file"
-      return 0
+    else
+      echo "$pid_name: stale pid=$pid"
     fi
-    echo "$pid_name: stale pid=$pid"
-    return 1
+  else
+    echo "$pid_name: stopped"
   fi
-  echo "$pid_name: stopped"
+
+  port_pid="$(listener_pid || true)"
+  if [[ -n "$port_pid" ]]; then
+    echo "  listener_pid=$port_pid"
+  else
+    echo "  listener_pid=<none>"
+  fi
+
+  bridge_probe="$(http_probe "$bridge_url")"
+  bridge_state="${bridge_probe%%|*}"
+  bridge_detail="${bridge_probe#*|}"
+
+  upstream_probe="$(http_probe "$upstream_url")"
+  upstream_state="${upstream_probe%%|*}"
+  upstream_detail="${upstream_probe#*|}"
+
+  echo "  listen=$bridge_url"
+  echo "  upstream=$UPSTREAM_BASE"
+  echo "  upstream_models_endpoint=$upstream_url"
+  echo "  model=$MODEL_PATH"
+  echo "  voice=$VOICE_NAME"
+  echo "  ref_audio=$REF_AUDIO"
+  echo "  ref_text=$REF_TEXT"
+  echo "  log=$log_file"
+  echo "  health=$bridge_state"
+  echo "  health_detail=$bridge_detail"
+  echo "  upstream_health=$upstream_state"
+  echo "  upstream_health_detail=$upstream_detail"
+
+  if [[ "$bridge_state" == "ok" && "$upstream_state" == "ok" ]]; then
+    return 0
+  fi
   return 1
 }
 

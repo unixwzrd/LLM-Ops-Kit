@@ -52,25 +52,25 @@ Scripts use this precedence:
 
 1. CLI flags (when supported)
 2. Exported environment variables
-3. `~/.llmops/config.env` user config
+3. `~/.llm-ops/config.env` user config
 4. Repo defaults (`scripts/config/hosts.env`)
 5. Script defaults
 
 Note:
 - Toolkit scripts do not rely on `~/.openclaw/.env` by default.
-- Keep toolkit configuration in `~/.llmops/config.env`.
+- Keep toolkit configuration in `~/.llm-ops/config.env`.
 
 ## Core Environment Variables
 
-- `~/.llmops/config.env`: user-owned toolkit config file for host/IP/path overrides.
-- `LLMOPS_HOME`: toolkit state root (default `~/.llmops`).
-- `OPENCLAW_RUN_DIR`: runtime pid/state dir (default `$LLMOPS_HOME/run`).
-- `OPENCLAW_LOG_DIR`: toolkit log dir (default `$LLMOPS_HOME/logs`).
+- `~/.llm-ops/config.env`: user-owned toolkit config file for host/IP/path overrides.
+- `LLMOPS_HOME`: toolkit state root (default `~/.llm-ops`).
+- `LLMOPS_RUN_DIR`: runtime pid/state dir (default `$LLMOPS_HOME/run`).
+- `LLMOPS_LOG_DIR`: toolkit log dir (default `$LLMOPS_HOME/logs`).
 - `scripts/config/hosts.env`: centralized default host/IP file for wrappers (sync/model-proxy) in this repo.
-- `OPENCLAW_AGENT_WORK_ROOT`: canonical repo root used for template/tool paths.
-- `OPENCLAW_UPSTREAM_HOST`: default upstream model host for wrappers.
-- `OPENCLAW_SYNC_HOST`: optional dedicated sync host override (falls back to `OPENCLAW_UPSTREAM_HOST`).
-- `OPENCLAW_UPSTREAM_PORT`: default upstream model port for wrappers.
+- `LLMOPS_AGENT_WORK_ROOT`: canonical repo root used for template/tool paths.
+- `LLMOPS_UPSTREAM_HOST`: default upstream model host for wrappers.
+- `LLMOPS_SYNC_HOST`: optional dedicated sync host override (falls back to `LLMOPS_UPSTREAM_HOST`).
+- `LLMOPS_UPSTREAM_PORT`: default upstream model port for wrappers.
 - `MODEL_PROXY_LISTEN_HOST`: default bind host for proxy wrappers.
 - `MODEL_PROXY_LISTEN_PORT`: default bind port for proxy wrappers.
 - `MODEL_PROXY_TAP_BIN`: optional explicit path to `model-proxy-tap`.
@@ -97,14 +97,14 @@ Note:
 
 ```bash
 # Copy from .env.example and adapt values.
-OPENCLAW_AGENT_WORK_ROOT=~/projects/LLM-Ops-Kit
-OPENCLAW_UPSTREAM_HOST=<upstream-host>
-OPENCLAW_UPSTREAM_PORT=<upstream-port>
+LLMOPS_AGENT_WORK_ROOT=~/projects/LLM-Ops-Kit
+LLMOPS_UPSTREAM_HOST=<upstream-host>
+LLMOPS_UPSTREAM_PORT=<upstream-port>
 MODEL_PROXY_LISTEN_HOST=127.0.0.1
 MODEL_PROXY_LISTEN_PORT=<listen-port>
-LLMOPS_HOME=~/.llmops
-OPENCLAW_RUN_DIR=~/.llmops/run
-OPENCLAW_LOG_DIR=~/.llmops/logs
+LLMOPS_HOME=~/.llm-ops
+LLMOPS_RUN_DIR=~/.llm-ops/run
+LLMOPS_LOG_DIR=~/.llm-ops/logs
 
 SYNC_HOST=<sync-host>
 SYNC_USER=<your-user>
@@ -115,9 +115,9 @@ SYNC_LOCAL_DIR=~/projects/LLM-Ops-Kit/
 ## Local Example (Current Operator Setup)
 
 ```bash
-export OPENCLAW_AGENT_WORK_ROOT="$HOME/projects/LLM-Ops-Kit"
-export OPENCLAW_UPSTREAM_HOST="172.20.10.2"
-export OPENCLAW_UPSTREAM_PORT="11434"
+export LLMOPS_AGENT_WORK_ROOT="$HOME/projects/LLM-Ops-Kit"
+export LLMOPS_UPSTREAM_HOST="172.20.10.2"
+export LLMOPS_UPSTREAM_PORT="11434"
 export MODEL_PROXY_LISTEN_HOST="127.0.0.1"
 export MODEL_PROXY_LISTEN_PORT="11434"
 ```
@@ -125,9 +125,9 @@ export MODEL_PROXY_LISTEN_PORT="11434"
 ## Remote/Portable Example
 
 ```bash
-export OPENCLAW_AGENT_WORK_ROOT="$HOME/projects/LLM-Ops-Kit"
-export OPENCLAW_UPSTREAM_HOST="<upstream-host>"
-export OPENCLAW_UPSTREAM_PORT="<upstream-port>"
+export LLMOPS_AGENT_WORK_ROOT="$HOME/projects/LLM-Ops-Kit"
+export LLMOPS_UPSTREAM_HOST="<upstream-host>"
+export LLMOPS_UPSTREAM_PORT="<upstream-port>"
 export MODEL_PROXY_LISTEN_HOST="127.0.0.1"
 export MODEL_PROXY_LISTEN_PORT="<listen-port>"
 ```
@@ -148,8 +148,8 @@ Example flow:
 python -m pip install "git+https://github.com/unixwzrd/seckit.git"
 
 # 2) Store values
-seckit set --name OPENCLAW_UPSTREAM_HOST --value 172.20.10.2 --service openclaw --account default
-seckit set --name OPENCLAW_UPSTREAM_PORT --value 11434 --service openclaw --account default
+seckit set --name LLMOPS_UPSTREAM_HOST --value 172.20.10.2 --service openclaw --account default
+seckit set --name LLMOPS_UPSTREAM_PORT --value 11434 --service openclaw --account default
 seckit set --name MODEL_PROXY_LISTEN_HOST --value 127.0.0.1 --service openclaw --account default
 seckit set --name MODEL_PROXY_LISTEN_PORT --value 11434 --service openclaw --account default
 
@@ -172,15 +172,15 @@ Use [`.env.example`](../.env.example) as a starting template for your local envi
 Recommended user-owned config path:
 
 ```bash
-mkdir -p ~/.llmops
-cat > ~/.llmops/config.env <<'EOF'
-OPENCLAW_UPSTREAM_HOST=10.0.0.67
-OPENCLAW_SYNC_HOST=10.0.0.67
-OPENCLAW_UPSTREAM_PORT=11434
+mkdir -p ~/.llm-ops
+cat > ~/.llm-ops/config.env <<'EOF'
+LLMOPS_UPSTREAM_HOST=10.0.0.67
+LLMOPS_SYNC_HOST=10.0.0.67
+LLMOPS_UPSTREAM_PORT=11434
 MODEL_PROXY_LISTEN_HOST=127.0.0.1
 MODEL_PROXY_LISTEN_PORT=11434
-LLMOPS_HOME=$HOME/.llmops
-OPENCLAW_RUN_DIR=$HOME/.llmops/run
-OPENCLAW_LOG_DIR=$HOME/.llmops/logs
+LLMOPS_HOME=$HOME/.llm-ops
+LLMOPS_RUN_DIR=$HOME/.llm-ops/run
+LLMOPS_LOG_DIR=$HOME/.llm-ops/logs
 EOF
 ```

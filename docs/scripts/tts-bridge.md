@@ -1,7 +1,7 @@
 # tts-bridge
 
 **Created**: 2026-03-03
-**Updated**: 2026-03-03
+**Updated**: 2026-03-08
 
 Run a local OpenAI-compatible TTS bridge that forwards to your MLX Audio server and injects a configured voice clone payload (`model`, `voice`, `ref_audio`, `ref_text`).
 
@@ -18,7 +18,7 @@ Port note:
 
 - `11440` (bridge) and `11439` (upstream MLX) are defaults, not requirements.
 - Any free/open ports will work.
-- If you change ports, keep `TTS_BRIDGE_UPSTREAM_BASE` and OpenClaw `messages.tts.openai.baseUrl` in sync.
+- If you change ports, keep `TTS_BRIDGE_UPSTREAM_BASE` and OpenClaw TTS base URL in sync.
 
 Default voice clone sample:
 
@@ -35,6 +35,14 @@ Environment overrides:
 - `TTS_BRIDGE_REF_AUDIO`
 - `TTS_BRIDGE_REF_TEXT`
 - `TTS_BRIDGE_PYTHON_BIN`
+
+Status output:
+
+- Reports wrapper PID state plus the live listener PID on the configured port.
+- Reports effective `listen` and `upstream` values.
+- Probes bridge health via `/health`.
+- Probes upstream health via `/v1/models`.
+- Returns non-zero when bridge or upstream health is down.
 
 OpenClaw wiring:
 

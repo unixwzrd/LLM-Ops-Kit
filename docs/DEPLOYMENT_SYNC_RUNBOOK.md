@@ -158,7 +158,7 @@ If OpenClaw injects a warning like `Post-Compaction Audit`, extract the missing 
 rg -n "Post-Compaction Audit|required startup files were not read|  - " ~/.openclaw/logs/gateway.log
 
 # Rendered proxy prompt/response stream (optional)
-rg -n "Post-Compaction Audit|required startup files were not read|  - " ~/.llmops/logs/model-proxy.rendered.log
+rg -n "Post-Compaction Audit|required startup files were not read|  - " ~/.llm-ops/logs/model-proxy.rendered.log
 
 # Compact view: only missing file/pattern lines
 rg -n "Post-Compaction Audit|required startup files were not read|  - " ~/.openclaw/logs/gateway.log \

@@ -64,10 +64,10 @@ Port note:
 
 Override via environment (optional):
 
-- `OPENCLAW_TTS_HOST`
-- `OPENCLAW_TTS_PORT`
-- `OPENCLAW_TTS_PYTHON`
-- `OPENCLAW_TTS_MODULE`
+- `LLMOPS_TTS_HOST`
+- `LLMOPS_TTS_PORT`
+- `LLMOPS_TTS_PYTHON`
+- `LLMOPS_TTS_MODULE`
 
 ## API Smoke Test
 
