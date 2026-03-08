@@ -66,14 +66,14 @@ Note:
 - `LLMOPS_HOME`: toolkit state root (default `~/.llmops`).
 - `OPENCLAW_RUN_DIR`: runtime pid/state dir (default `$LLMOPS_HOME/run`).
 - `OPENCLAW_LOG_DIR`: toolkit log dir (default `$LLMOPS_HOME/logs`).
-- `scripts/config/hosts.env`: centralized default host/IP file for wrappers (sync/proxy) in this repo.
+- `scripts/config/hosts.env`: centralized default host/IP file for wrappers (sync/model-proxy) in this repo.
 - `OPENCLAW_AGENT_WORK_ROOT`: canonical repo root used for template/tool paths.
 - `OPENCLAW_UPSTREAM_HOST`: default upstream model host for wrappers.
 - `OPENCLAW_SYNC_HOST`: optional dedicated sync host override (falls back to `OPENCLAW_UPSTREAM_HOST`).
 - `OPENCLAW_UPSTREAM_PORT`: default upstream model port for wrappers.
-- `OPENCLAW_PROXY_LISTEN_HOST`: default bind host for proxy wrappers.
-- `OPENCLAW_PROXY_LISTEN_PORT`: default bind port for proxy wrappers.
-- `OPENCLAW_PROXY_TAP_BIN`: optional explicit path to `openai-proxy-tap`.
+- `MODEL_PROXY_LISTEN_HOST`: default bind host for proxy wrappers.
+- `MODEL_PROXY_LISTEN_PORT`: default bind port for proxy wrappers.
+- `MODEL_PROXY_TAP_BIN`: optional explicit path to `model-proxy-tap`.
 - `OPENAI_TTS_BASE_URL`: OpenClaw OpenAI-TTS provider base URL (for example `http://127.0.0.1:11440/v1`).
 - `TTS_BRIDGE_HOST`: bind host for `tts-bridge`.
 - `TTS_BRIDGE_PORT`: bind port for `tts-bridge`.
@@ -100,8 +100,8 @@ Note:
 OPENCLAW_AGENT_WORK_ROOT=~/projects/LLM-Ops-Kit
 OPENCLAW_UPSTREAM_HOST=<upstream-host>
 OPENCLAW_UPSTREAM_PORT=<upstream-port>
-OPENCLAW_PROXY_LISTEN_HOST=127.0.0.1
-OPENCLAW_PROXY_LISTEN_PORT=<listen-port>
+MODEL_PROXY_LISTEN_HOST=127.0.0.1
+MODEL_PROXY_LISTEN_PORT=<listen-port>
 LLMOPS_HOME=~/.llmops
 OPENCLAW_RUN_DIR=~/.llmops/run
 OPENCLAW_LOG_DIR=~/.llmops/logs
@@ -118,8 +118,8 @@ SYNC_LOCAL_DIR=~/projects/LLM-Ops-Kit/
 export OPENCLAW_AGENT_WORK_ROOT="$HOME/projects/LLM-Ops-Kit"
 export OPENCLAW_UPSTREAM_HOST="172.20.10.2"
 export OPENCLAW_UPSTREAM_PORT="11434"
-export OPENCLAW_PROXY_LISTEN_HOST="127.0.0.1"
-export OPENCLAW_PROXY_LISTEN_PORT="11434"
+export MODEL_PROXY_LISTEN_HOST="127.0.0.1"
+export MODEL_PROXY_LISTEN_PORT="11434"
 ```
 
 ## Remote/Portable Example
@@ -128,8 +128,8 @@ export OPENCLAW_PROXY_LISTEN_PORT="11434"
 export OPENCLAW_AGENT_WORK_ROOT="$HOME/projects/LLM-Ops-Kit"
 export OPENCLAW_UPSTREAM_HOST="<upstream-host>"
 export OPENCLAW_UPSTREAM_PORT="<upstream-port>"
-export OPENCLAW_PROXY_LISTEN_HOST="127.0.0.1"
-export OPENCLAW_PROXY_LISTEN_PORT="<listen-port>"
+export MODEL_PROXY_LISTEN_HOST="127.0.0.1"
+export MODEL_PROXY_LISTEN_PORT="<listen-port>"
 ```
 
 ## Optional: Secrets Kit Integration
@@ -145,13 +145,13 @@ Example flow:
 
 ```bash
 # 1) Install (example from GitHub)
-python3 -m pip install "git+https://github.com/unixwzrd/seckit.git"
+python -m pip install "git+https://github.com/unixwzrd/seckit.git"
 
 # 2) Store values
 seckit set --name OPENCLAW_UPSTREAM_HOST --value 172.20.10.2 --service openclaw --account default
 seckit set --name OPENCLAW_UPSTREAM_PORT --value 11434 --service openclaw --account default
-seckit set --name OPENCLAW_PROXY_LISTEN_HOST --value 127.0.0.1 --service openclaw --account default
-seckit set --name OPENCLAW_PROXY_LISTEN_PORT --value 11434 --service openclaw --account default
+seckit set --name MODEL_PROXY_LISTEN_HOST --value 127.0.0.1 --service openclaw --account default
+seckit set --name MODEL_PROXY_LISTEN_PORT --value 11434 --service openclaw --account default
 
 # 3) Export at runtime
 eval "$(seckit export --format shell --service openclaw --account default)"
@@ -177,8 +177,8 @@ cat > ~/.llmops/config.env <<'EOF'
 OPENCLAW_UPSTREAM_HOST=10.0.0.67
 OPENCLAW_SYNC_HOST=10.0.0.67
 OPENCLAW_UPSTREAM_PORT=11434
-OPENCLAW_PROXY_LISTEN_HOST=127.0.0.1
-OPENCLAW_PROXY_LISTEN_PORT=11434
+MODEL_PROXY_LISTEN_HOST=127.0.0.1
+MODEL_PROXY_LISTEN_PORT=11434
 LLMOPS_HOME=$HOME/.llmops
 OPENCLAW_RUN_DIR=$HOME/.llmops/run
 OPENCLAW_LOG_DIR=$HOME/.llmops/logs

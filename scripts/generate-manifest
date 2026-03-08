@@ -8,7 +8,7 @@ MANIFEST_FILE="${MANIFEST_FILE:-$SCRIPT_DIR/runtime-links.manifest}"
 is_excluded_script() {
   local name="$1"
   case "$name" in
-    modelctl|generate-manifest|deploy-runtime-links.sh|verify-runtime-links.sh|setup-ssh-deploy-key.sh|post-commit-sync.sample|sanitized-daily-report.sh|jinja-snapshot.sh|node-hygiene.sh|openai_proxy_tap.py|render_chatml_prompt.py)
+    modelctl|generate-manifest|deploy-runtime-links.sh|verify-runtime-links.sh|setup-ssh-deploy-key.sh|post-commit-sync.sample|sanitized-daily-report.sh|jinja-snapshot.sh|node-hygiene.sh|model_proxy_tap.py|render_chatml_prompt.py)
       return 0
       ;;
     *.py|*.sample)

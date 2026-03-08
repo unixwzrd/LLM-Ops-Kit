@@ -86,7 +86,7 @@ curl -sS http://127.0.0.1:11439/v1/audio/speech \
 
 Use `tts-bridge` so OpenClaw can keep using OpenAI-style TTS requests while your local bridge injects MLX-specific fields (`model`, `voice`, `ref_audio`, `ref_text`).
 
-Operationally, this behaves like `proxy`: start/stop/restart/status via a wrapper script with PID and log tracking.
+Operationally, this behaves like `model-proxy`: start/stop/restart/status via a wrapper script with PID and log tracking.
 
 ```bash
 ~/bin/tts-bridge start

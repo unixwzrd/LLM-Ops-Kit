@@ -1,7 +1,7 @@
 # LLM-Ops-Kit
 
 **Created**: 2026-02-20
-**Updated**: 2026-03-03
+**Updated**: 2026-03-07
 
 
 Operational toolkit for running, deploying, and maintaining a local OpenClaw stack across hosts.
@@ -10,7 +10,7 @@ Operational toolkit for running, deploying, and maintaining a local OpenClaw sta
 
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-informational)](#) [![Shell](https://img.shields.io/badge/Shell-bash-blue)](#) [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-- [LLM-Ops-Kit](#openclaw-ops-toolkit)
+- [LLM-Ops-Kit](#llm-ops-kit)
   - [Why This Repo Exists](#why-this-repo-exists)
   - [Requirements](#requirements)
   - [Recommended Models](#recommended-models)
@@ -33,7 +33,7 @@ Operational toolkit for running, deploying, and maintaining a local OpenClaw sta
 
 `LLM-Ops-Kit` is the operator layer around a local OpenClaw install:
 
-- Unified startup/shutdown/status scripts for gateway, proxy, TTS, LLM, and embeddings
+- Unified startup/shutdown/status scripts for gateway, model-proxy, TTS, LLM, and embeddings
 - Model profile management (`Qwen3`, `Qwen3.5`, `BGEen`) via one launcher architecture
 - Deployment helpers for cross-host sync and runtime link management
 - Practical runbooks and changelog-driven operations
@@ -117,14 +117,14 @@ Full setup + troubleshooting guide:
 ~/bin/gateway start
 ~/bin/Qwen3 start
 ~/bin/BGEen start
-~/bin/proxy start
+~/bin/model-proxy start
 ```
 
 ## Runtime Command Surface
 
 ```bash
 ~/bin/gateway [start|stop|restart|status]
-~/bin/proxy [start|stop|restart|status]
+~/bin/model-proxy [start|stop|restart|status]
 ~/bin/tts [start|stop|restart|status]
 ~/bin/tts-bridge [start|stop|restart|status]
 ~/bin/Qwen3TTS [start|stop|restart|status|settings|verify|test]
@@ -136,7 +136,7 @@ Full setup + troubleshooting guide:
 ~/bin/modelctl <ModelProfile> [start|stop|restart|status|settings|verify|test]
 ~/bin/install-runtime [--source <repo-path>] [--prefix <install-base>] [--bin-dir <bin-dir>] [--no-links]
 ~/bin/uninstall-runtime [--prefix <install-base>] [--bin-dir <bin-dir>] [--state-file <path>] [--keep-files]
-~/bin/openclaw-stack [start|stop|restart|status] [all|gateway|llm|embedding|tts|proxy|models]
+~/bin/openclaw-stack [start|stop|restart|status] [all|gateway|llm|embedding|tts|model-proxy|models]
 ~/bin/openclaw-report
 ```
 

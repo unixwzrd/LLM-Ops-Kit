@@ -57,7 +57,7 @@ Embedding-only:
 
 TTS-only:
 
-- `TTS_PYTHON_BIN` (example `python3`)
+- `TTS_PYTHON_BIN` (example `python`)
 - `TTS_SERVER_MODULE` (example `mlx_audio.server`)
 
 ## 3) Launcher creation (automatic)

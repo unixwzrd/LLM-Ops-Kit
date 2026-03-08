@@ -97,7 +97,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Updated and completed `docs/SAFE_PUBLISH_CHECKLIST.md`.
   - Ran release validation gate:
     - `bash -n scripts/*.sh`
-    - `python3 -m py_compile scripts/*.py`
+    - `python -m py_compile scripts/*.py`
     - `scripts/generate-manifest`
     - `scripts/deploy-runtime-links.sh`
     - `scripts/verify-runtime-links.sh`

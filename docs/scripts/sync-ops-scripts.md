@@ -16,7 +16,7 @@ Examples:
 ~/bin/sync-ops-scripts --dry-run
 ~/bin/sync-ops-scripts --delete --no-links
 ~/bin/sync-ops-scripts --delete --runtime-mode installed
-~/bin/sync-ops-scripts --delete --runtime-mode installed --install-prefix ~/.openclaw-ops
+~/bin/sync-ops-scripts --delete --runtime-mode installed --install-prefix ~/.llm-ops
 ```
 
 Notes:
@@ -32,7 +32,7 @@ Notes:
   - in `installed` mode:
     - `install-runtime.sh --source <remote_repo> --prefix <install_prefix>`
 - If `--runtime-mode` is not provided, sync auto-detects installed mode from:
-  - `~/.openclaw-ops/runtime-state.env`
+  - `~/.llm-ops/runtime-state.env`
 - `verify-runtime-links.sh` now checks manifest links plus any dead symlink in `~/bin`.
 - If deploy fails, verify is not run (the sync command exits on first failure).
 - During repo rename migration, deploy auto-heals managed symlinks that still target `~/projects/OpenClaw-Ops-Toolkit/...` to `~/projects/LLM-Ops-Kit/...`.

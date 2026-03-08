@@ -85,12 +85,12 @@ All commands are extensionless and action-driven.
 
 ```bash
 ~/bin/gateway [start|stop|restart|status]
-~/bin/proxy [start|stop|restart|status]
+~/bin/model-proxy [start|stop|restart|status]
 ~/bin/tts-bridge [start|stop|restart|status]
 ~/bin/Qwen3 [start|stop|restart|status]
 ~/bin/Qwen3.5 [start|stop|restart|status]
 ~/bin/BGEen [start|stop|restart|status]
-~/bin/openclaw-stack [start|stop|restart|status] [all|gateway|llm|embedding|proxy|models]
+~/bin/openclaw-stack [start|stop|restart|status] [all|gateway|llm|embedding|model-proxy|models]
 ~/bin/openclaw-report
 ```
 
@@ -99,7 +99,7 @@ Typical bring-up order:
 ```bash
 ~/bin/gateway start
 ~/bin/Qwen3 start
-~/bin/proxy start
+~/bin/model-proxy start
 # Start embedding only if needed
 ~/bin/BGEen start
 ```
@@ -158,7 +158,7 @@ If OpenClaw injects a warning like `Post-Compaction Audit`, extract the missing 
 rg -n "Post-Compaction Audit|required startup files were not read|  - " ~/.openclaw/logs/gateway.log
 
 # Rendered proxy prompt/response stream (optional)
-rg -n "Post-Compaction Audit|required startup files were not read|  - " ~/.llmops/logs/openai-proxy.rendered.log
+rg -n "Post-Compaction Audit|required startup files were not read|  - " ~/.llmops/logs/model-proxy.rendered.log
 
 # Compact view: only missing file/pattern lines
 rg -n "Post-Compaction Audit|required startup files were not read|  - " ~/.openclaw/logs/gateway.log \

@@ -11,10 +11,10 @@ Install a durable runtime payload outside your git checkout, then link commands 
 
 Default install path:
 
-- `~/.openclaw-ops/current`
+- `~/.llm-ops/current`
 
 Default runtime state file:
 
-- `~/.openclaw-ops/runtime-state.env`
+- `~/.llm-ops/runtime-state.env`
 
 This is useful when you do not want runtime commands to break if `~/projects/LLM-Ops-Kit` is moved or deleted.

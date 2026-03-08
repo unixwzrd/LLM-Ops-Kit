@@ -27,7 +27,7 @@ for log in \
   "$OPENCLAW_LOG_DIR/gateway.log" \
   "$OPENCLAW_LOG_DIR/llama-server-Qwen3VL.log" \
   "$OPENCLAW_LOG_DIR/llama-server-bge-small-en.log" \
-  "$OPENCLAW_LOG_DIR/openai-proxy-tap.log"; do
+  "$OPENCLAW_LOG_DIR/model-proxy-tap.log"; do
   if [[ -f "$log" ]]; then
     echo "--- $log"
     tail -n 5 "$log" || true

@@ -2,9 +2,23 @@
 set -euo pipefail
 
 MODE="symlink"
-if [[ "${1:-}" == "--sync" ]]; then
-  MODE="sync"
-fi
+REPLACE_MANAGED_LINKS=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --sync)
+      MODE="sync"
+      shift
+      ;;
+    --replace-managed-links)
+      REPLACE_MANAGED_LINKS=1
+      shift
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      exit 2
+      ;;
+  esac
+done
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MANIFEST_FILE="${MANIFEST_FILE:-$SCRIPT_DIR/runtime-links.manifest}"
@@ -19,6 +33,19 @@ if [[ ! -f "$MANIFEST_FILE" ]]; then
 fi
 
 conflicts=0
+
+is_managed_link_target() {
+  local p="$1"
+  case "$p" in
+    "$HOME"/projects/LLM-Ops-Kit/*|\
+    "$HOME"/projects/OpenClaw-Ops-Toolkit/*|\
+    "$HOME"/.llm-ops/current/*|\
+    "$HOME"/.openclaw-ops/current/*)
+      return 0
+      ;;
+  esac
+  return 1
+}
 
 link_one() {
   local target="$1"
@@ -39,6 +66,11 @@ link_one() {
         if [[ "$healed" == "$src" ]]; then
           ln -sfn "$src" "$target"
           echo "HEALED_RENAME_LINK: $target -> $src"
+          return 0
+        fi
+        if [[ "$REPLACE_MANAGED_LINKS" -eq 1 ]] && is_managed_link_target "$actual"; then
+          ln -sfn "$src" "$target"
+          echo "REPLACED_MANAGED_LINK: $target -> $src (was $actual)"
           return 0
         fi
         echo "CONFLICT: $target -> $actual (expected $src); skipped." >&2
@@ -73,7 +105,7 @@ done < "$MANIFEST_FILE"
 
 # Remove deprecated names in BIN_DIR only.
 for old in \
-  "$BIN_DIR/openclaw-start.sh" "$BIN_DIR/sync-agent-work" "$BIN_DIR/sync-agent-work.sh" "$BIN_DIR/sync-OpenClaw-Ops-Toolkit" "$BIN_DIR/sync-OpenClaw-Ops-Toolkit.sh" "$BIN_DIR/sync-LLM-Ops-Kit" "$BIN_DIR/sync-LLM-Ops-Kit.sh" "$BIN_DIR/sync-ops-scripts.sh" "$BIN_DIR/node-hygiene.sh" \
+  "$BIN_DIR/proxy" "$BIN_DIR/openai-proxy-tap" "$BIN_DIR/openclaw-start.sh" "$BIN_DIR/sync-agent-work" "$BIN_DIR/sync-agent-work.sh" "$BIN_DIR/sync-OpenClaw-Ops-Toolkit" "$BIN_DIR/sync-OpenClaw-Ops-Toolkit.sh" "$BIN_DIR/sync-LLM-Ops-Kit" "$BIN_DIR/sync-LLM-Ops-Kit.sh" "$BIN_DIR/sync-ops-scripts.sh" "$BIN_DIR/node-hygiene.sh" \
   "$BIN_DIR/openclaw-report.sh" "$BIN_DIR/openclaw-stack.sh" \
   "$BIN_DIR/StartQwen3" "$BIN_DIR/StartBGEen" "$BIN_DIR/StopQwen3" "$BIN_DIR/StopBGEen" \
   "$BIN_DIR/run-openclaw-server.sh" "$BIN_DIR/run-openclaw-embedding.sh"; do

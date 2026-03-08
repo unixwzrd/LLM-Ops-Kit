@@ -4,11 +4,11 @@
 BGEen|scripts/BGEen
 gateway|scripts/gateway
 install-runtime|scripts/install-runtime.sh
+model-proxy-tap|bin/model-proxy-tap
+model-proxy|scripts/model-proxy
 modelctl|scripts/modelctl
-openai-proxy-tap|bin/openai-proxy-tap
 openclaw-report|scripts/openclaw-report.sh
 openclaw-stack|scripts/openclaw-stack
-proxy|scripts/proxy
 Qwen3.5|scripts/Qwen3.5
 Qwen3|scripts/Qwen3
 Qwen3TTS|scripts/Qwen3TTS

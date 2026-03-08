@@ -12,7 +12,7 @@ Remove runtime command links created by `install-runtime`, and optionally remove
 Notes:
 
 - By default, this removes links from `~/bin` and deletes:
-  - `~/.openclaw-ops/current`
+  - `~/.llm-ops/current`
 - Also removes runtime state:
-  - `~/.openclaw-ops/runtime-state.env`
+  - `~/.llm-ops/runtime-state.env`
 - Use `--keep-files` to remove links only.

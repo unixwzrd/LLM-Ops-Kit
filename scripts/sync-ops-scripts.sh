@@ -27,9 +27,9 @@ NO_AGENT=0
 NO_MANIFEST=0
 NO_LINKS=0
 QUIET=0
-STATE_FILE="${OPENCLAW_OPS_STATE_FILE:-$HOME/.openclaw-ops/runtime-state.env}"
+STATE_FILE="${OPENCLAW_OPS_STATE_FILE:-$HOME/.llm-ops/runtime-state.env}"
 RUNTIME_MODE="${OPENCLAW_RUNTIME_MODE:-repo}" # repo|installed
-INSTALL_PREFIX="${OPENCLAW_OPS_INSTALL_BASE:-$HOME/.openclaw-ops}"
+INSTALL_PREFIX="${OPENCLAW_OPS_INSTALL_BASE:-$HOME/.llm-ops}"
 RUNTIME_MODE_EXPLICIT=0
 INSTALL_PREFIX_EXPLICIT=0
 ENV_RUNTIME_MODE="${OPENCLAW_RUNTIME_MODE:-}"
@@ -53,7 +53,7 @@ Options:
   --no-links               Skip remote deploy+verify link steps after sync
   --runtime-mode <mode>    Remote runtime mode: repo (default) or installed
   --install-prefix <path>  Remote install prefix for installed mode
-  --state-file <path>      Local runtime state file (default: ~/.openclaw-ops/runtime-state.env)
+  --state-file <path>      Local runtime state file (default: ~/.llm-ops/runtime-state.env)
   --quiet                  Less output
   -h, --help               Show this help
 

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """OpenAI-TTS-compatible bridge to MLX Audio.
 
 Accepts OpenAI-style POST /v1/audio/speech and forwards to an MLX endpoint,
@@ -37,7 +37,7 @@ def _mlx_speech_url(base: str) -> str:
 
 
 class BridgeHandler(BaseHTTPRequestHandler):
-    server_version = "openai-tts-bridge/1.0"
+    server_version = "tts-bridge/1.0"
 
     def _json(self, code: int, obj: dict[str, Any]) -> None:
         payload = json.dumps(obj).encode("utf-8")

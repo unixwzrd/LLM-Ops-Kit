@@ -43,7 +43,7 @@ Primary operator commands (from `~/bin`):
 - Start Qwen3.5 llm: `~/bin/Qwen3.5 start`
 - Start embedding only: `~/bin/BGEen start`
 - Start TTS server: `~/bin/tts start` (or `~/bin/Qwen3TTS start`)
-- Start proxy only: `~/bin/proxy start`
+- Start proxy only: `~/bin/model-proxy start`
 - Stop model directly: `~/bin/Qwen3 stop` / `~/bin/Qwen3.5 stop` / `~/bin/BGEen stop`
 - Stack status: `~/bin/openclaw-stack status`
 - Deploy symlinks: `/usr/local/bin/bash ~/projects/LLM-Ops-Kit/scripts/deploy-runtime-links.sh`

@@ -14,6 +14,8 @@ SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
 ACTION="${1:-status}"
 shift || true
 
+load_shell_env
+
 LISTEN_HOST="${TTS_BRIDGE_HOST:-127.0.0.1}"
 LISTEN_PORT="${TTS_BRIDGE_PORT:-11440}"
 UPSTREAM_BASE="${TTS_BRIDGE_UPSTREAM_BASE:-http://127.0.0.1:11439/v1}"
@@ -21,7 +23,7 @@ MODEL_PATH="${TTS_BRIDGE_MODEL:-$HOME/LLM_Repository/TTS/Qwen3-TTS-12Hz-0.6B-Cus
 VOICE_NAME="${TTS_BRIDGE_VOICE:-serena}"
 REF_AUDIO="${TTS_BRIDGE_REF_AUDIO:-$HOME/LLM_Repository/TTS/Samples/Mia-Faith-Prof-Emotive-60s-Sample-Mastered-01.wav}"
 REF_TEXT="${TTS_BRIDGE_REF_TEXT:-$HOME/LLM_Repository/TTS/Samples/Mia-Faith-Prof-Emotive-60s-Sample-Mastered-01.txt}"
-PY_BIN="${TTS_BRIDGE_PYTHON_BIN:-python3}"
+PY_BIN="${TTS_BRIDGE_PYTHON_BIN:-python}"
 
 pid_name="tts-bridge"
 log_file="$OPENCLAW_LOG_DIR/tts-bridge.log"
@@ -39,7 +41,7 @@ Env overrides:
   TTS_BRIDGE_PREFER_INCOMING_VOICE (default: 0; set 1 to honor incoming voice)
   TTS_BRIDGE_REF_AUDIO        (default: Mia-Faith 60s wav)
   TTS_BRIDGE_REF_TEXT         (default: matching .txt transcript)
-  TTS_BRIDGE_PYTHON_BIN       (default: python3)
+  TTS_BRIDGE_PYTHON_BIN       (default: python)
 EOF
 }
 
@@ -65,18 +67,25 @@ status_bridge() {
 
 start_bridge() {
   ensure_runtime_dirs
-  load_shell_env
 
   if status_bridge >/dev/null 2>&1; then
     echo "$pid_name: already running"
     return 0
   fi
 
-  [[ -e "$MODEL_PATH" ]] || { echo "tts-bridge: model path not found: $MODEL_PATH" >&2; exit 1; }
-  [[ -f "$REF_AUDIO" ]] || { echo "tts-bridge: ref audio not found: $REF_AUDIO" >&2; exit 1; }
-  [[ -f "$REF_TEXT" ]] || { echo "tts-bridge: ref text not found: $REF_TEXT" >&2; exit 1; }
+  # MODEL_PATH/REF_AUDIO/REF_TEXT are forwarded to upstream MLX server and may
+  # refer to paths that exist only on the upstream host.
+  if [[ ! -e "$MODEL_PATH" ]]; then
+    echo "tts-bridge: warning: model path not found locally (will still forward): $MODEL_PATH" >&2
+  fi
+  if [[ ! -f "$REF_AUDIO" ]]; then
+    echo "tts-bridge: warning: ref audio not found locally (will still forward): $REF_AUDIO" >&2
+  fi
+  if [[ ! -f "$REF_TEXT" ]]; then
+    echo "tts-bridge: warning: ref text not found locally (will still forward): $REF_TEXT" >&2
+  fi
 
-  nohup "$PY_BIN" "$SCRIPT_DIR/openai_tts_bridge.py" \
+  nohup "$PY_BIN" "$SCRIPT_DIR/tts_bridge_server.py" \
     --listen-host "$LISTEN_HOST" \
     --listen-port "$LISTEN_PORT" \
     --upstream-base "$UPSTREAM_BASE" \

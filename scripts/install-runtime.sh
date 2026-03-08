@@ -1,14 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SOURCE="${BASH_SOURCE[0]}"
+while [[ -h "$SOURCE" ]]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
 SOURCE_DIR_DEFAULT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 SOURCE_DIR="${OPENCLAW_OPS_SOURCE_DIR:-$SOURCE_DIR_DEFAULT}"
-INSTALL_BASE="${OPENCLAW_OPS_INSTALL_BASE:-$HOME/.openclaw-ops}"
+INSTALL_BASE="${OPENCLAW_OPS_INSTALL_BASE:-$HOME/.llm-ops}"
 INSTALL_DIR="$INSTALL_BASE/current"
 BIN_DIR="${BIN_DIR:-$HOME/bin}"
-STATE_FILE="${OPENCLAW_OPS_STATE_FILE:-$HOME/.openclaw-ops/runtime-state.env}"
+STATE_FILE="${OPENCLAW_OPS_STATE_FILE:-$HOME/.llm-ops/runtime-state.env}"
 NO_LINKS=0
 
 usage() {
@@ -17,9 +23,9 @@ Usage: $(basename "$0") [options]
 
 Options:
   --source <path>      Source repo directory (default: $SOURCE_DIR_DEFAULT)
-  --prefix <path>      Install base dir (default: ~/.openclaw-ops)
+  --prefix <path>      Install base dir (default: ~/.llm-ops)
   --bin-dir <path>     Runtime bin dir (default: ~/bin)
-  --state-file <path>  Runtime state file (default: ~/.openclaw-ops/runtime-state.env)
+  --state-file <path>  Runtime state file (default: ~/.llm-ops/runtime-state.env)
   --no-links           Install files only; skip link deploy/verify
   -h, --help           Show this help
 USAGE
@@ -68,7 +74,7 @@ echo "Installed runtime to: $INSTALL_DIR"
 if [[ "$NO_LINKS" -eq 0 ]]; then
   pushd "$INSTALL_DIR/scripts" >/dev/null
   ./generate-manifest
-  BIN_DIR="$BIN_DIR" REPO_DIR="$INSTALL_DIR" ./deploy-runtime-links.sh
+  BIN_DIR="$BIN_DIR" REPO_DIR="$INSTALL_DIR" ./deploy-runtime-links.sh --replace-managed-links
   BIN_DIR="$BIN_DIR" REPO_DIR="$INSTALL_DIR" ./verify-runtime-links.sh
   popd >/dev/null
 fi

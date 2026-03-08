@@ -1,10 +1,10 @@
 
-# OpenAI Proxy Tap Runbook
+# Model Proxy Tap Runbook
 
 **Created**: 2026-02-22
 **Updated**: 2026-03-01
 
-- [OpenAI Proxy Tap Runbook](#openai-proxy-tap-runbook)
+- [Model Proxy Tap Runbook](#model-proxy-tap-runbook)
   - [Purpose](#purpose)
   - [Start Proxy (Default)](#start-proxy-default)
   - [Start Proxy With Rendered Prompt Logging](#start-proxy-with-rendered-prompt-logging)
@@ -30,30 +30,30 @@ Capture what OpenClaw sends to the model with enough observability to debug prom
 ## Start Proxy (Default)
 
 ```bash
-~/bin/openai-proxy-tap
+~/bin/model-proxy-tap
 ```
 
-Default wrapper values (`~/bin/openai-proxy-tap`):
+Default wrapper values (`~/bin/model-proxy-tap`):
 
 - `UPSTREAM=http://<upstream-host>:<upstream-port>`
 - `LISTEN_HOST=127.0.0.1`
 - `LISTEN_PORT=18080`
-- `LOG_PATH=~/.llmops/logs/openai-proxy.ndjson`
-- `RAW_LOG=~/.llmops/logs/openai-proxy.raw.log` (combined request + response)
-- `RENDERED_PROMPT_LOG=~/.llmops/logs/openai-proxy.rendered.log`
+- `LOG_PATH=~/.llmops/logs/model-proxy.ndjson`
+- `RAW_LOG=~/.llmops/logs/model-proxy.raw.log` (combined request + response)
+- `RENDERED_PROMPT_LOG=~/.llmops/logs/model-proxy.rendered.log`
 - `LATEST_IMAGE_ONLY=1`
 - `LOG_FSYNC=0`
 
 Sample output:
 
 ```text
-openai-proxy-tap listening on http://127.0.0.1:18080 -> http://<upstream-host>:<upstream-port> ...
+model-proxy-tap listening on http://127.0.0.1:18080 -> http://<upstream-host>:<upstream-port> ...
 ```
 
 ## Start Proxy With Rendered Prompt Logging
 
 ```bash
-~/bin/openai-proxy-tap --chat-template ~/projects/LLM-Ops-Kit/scripts/templates/chatml-tools.jinja
+~/bin/model-proxy-tap --chat-template ~/projects/LLM-Ops-Kit/scripts/templates/chatml-tools.jinja
 ```
 
 Note: template-load status is reflected in NDJSON fields (`rendered_prompt` / `rendered_prompt_error`).
@@ -61,7 +61,7 @@ Note: template-load status is reflected in NDJSON fields (`rendered_prompt` / `r
 ## Strict Flush Mode
 
 ```bash
-LOG_FSYNC=1 ~/bin/openai-proxy-tap
+LOG_FSYNC=1 ~/bin/model-proxy-tap
 ```
 
 No special banner is guaranteed for fsync mode; verify by expected log durability behavior.
@@ -77,7 +77,7 @@ LISTEN_PORT=18080
 ## Direct Logs (No jq)
 
 ```bash
-tail -F ~/.llmops/logs/openai-proxy.raw.log
+tail -F ~/.llmops/logs/model-proxy.raw.log
 ```
 
 Sample output:
@@ -89,7 +89,7 @@ Sample output:
 ```
 
 ```bash
-tail -F ~/.llmops/logs/openai-proxy.rendered.log
+tail -F ~/.llmops/logs/model-proxy.rendered.log
 ```
 
 Sample output:
@@ -113,7 +113,7 @@ Use this pattern so commands work whether lines are plain JSON objects or JSON s
 ## Live Traffic View
 
 ```bash
-tail -F ~/.llmops/logs/openai-proxy.ndjson | jq --unbuffered -r '
+tail -F ~/.llmops/logs/model-proxy.ndjson | jq --unbuffered -r '
   (fromjson? // .)
   | select(.path=="/v1/chat/completions")
   | [.ts, .event, (.response_status // "-"), (.duration_ms // "-")]
@@ -130,7 +130,7 @@ Sample output:
 ## Role / Tool Summary View
 
 ```bash
-tail -F ~/.llmops/logs/openai-proxy.ndjson | jq --unbuffered -r '
+tail -F ~/.llmops/logs/model-proxy.ndjson | jq --unbuffered -r '
   (fromjson? // .)
   | select(.event=="request_start" and .path=="/v1/chat/completions")
   | .request_summary as $s
@@ -152,7 +152,7 @@ Sample output:
 ## Rendered Prompt (Human Readable)
 
 ```bash
-tail -F ~/.llmops/logs/openai-proxy.ndjson | jq --unbuffered -r '
+tail -F ~/.llmops/logs/model-proxy.ndjson | jq --unbuffered -r '
   (fromjson? // .)
   | select(.event=="request_start" and .path=="/v1/chat/completions")
   | .ts as $ts
@@ -180,7 +180,7 @@ Sample output:
 ## Rendered Prompt (Only Body)
 
 ```bash
-tail -F ~/.llmops/logs/openai-proxy.ndjson | jq --unbuffered -r '
+tail -F ~/.llmops/logs/model-proxy.ndjson | jq --unbuffered -r '
   (fromjson? // .)
   | select(.event=="request_start" and .path=="/v1/chat/completions")
   | .rendered_prompt'
@@ -203,7 +203,7 @@ jq -s -r '
   | map(select(.event=="request_start" and .path=="/v1/chat/completions"))
   | last
   | .rendered_prompt // ""
-' ~/.llmops/logs/openai-proxy.ndjson > /tmp/last-rendered-prompt.txt
+' ~/.llmops/logs/model-proxy.ndjson > /tmp/last-rendered-prompt.txt
 ```
 
 Sample output:
@@ -218,7 +218,7 @@ wc -l /tmp/last-rendered-prompt.txt
 ## Framed Raw Request Stream
 
 ```bash
-tail -F ~/.llmops/logs/openai-proxy.ndjson | jq --unbuffered -r '
+tail -F ~/.llmops/logs/model-proxy.ndjson | jq --unbuffered -r '
   (fromjson? // .)
   | select(.event=="request_start" and .path=="/v1/chat/completions")
   | [
@@ -234,7 +234,7 @@ tail -F ~/.llmops/logs/openai-proxy.ndjson | jq --unbuffered -r '
 ## Combined Raw File (Recommended)
 
 ```bash
-tail -F ~/.llmops/logs/openai-proxy.raw.log
+tail -F ~/.llmops/logs/model-proxy.raw.log
 ```
 
 Sample output:
@@ -261,7 +261,7 @@ Sample output:
 ## Full Pretty Request/Response Blocks
 
 ```bash
-tail -F ~/.llmops/logs/openai-proxy.ndjson | jq --unbuffered -r '
+tail -F ~/.llmops/logs/model-proxy.ndjson | jq --unbuffered -r '
   (fromjson? // .)
   | [.ts, (.event // ""), .path, "=== REQUEST ===", (.request_text // ""), "=== RESPONSE ===", (.response_text // ""), ""]
   | join("\n")'
@@ -284,7 +284,7 @@ request_start
 - If you see `jq: ... INVALID_CHARACTER`, remove trailing spaces after `\` or use single-line commands.
 - If no output appears, verify proxy is active and OpenClaw `baseUrl` points to `http://127.0.0.1:18080/v1`.
 - If you get only `request_start` and no `request_end`, request is still in-flight or hung upstream.
-- `openai-proxy.rendered.log` is populated only when proxy runs with `--chat-template`.
+- `model-proxy.rendered.log` is populated only when proxy runs with `--chat-template`.
 - If outputs look duplicated, confirm you do not have multiple `tail -F ... | jq ...` pipelines running.
 
 ## Clean Restart + 3-Request Validation

@@ -5,12 +5,12 @@
 
 ## Purpose
 
-Control grouped service lifecycle (gateway/proxy/models).
+Control grouped service lifecycle (gateway/model-proxy/models).
 
 ## Syntax
 
 ```bash
-~/bin/openclaw-stack [start|stop|restart|status] [all|gateway|llm|embedding|proxy|models]
+~/bin/openclaw-stack [start|stop|restart|status] [all|gateway|llm|embedding|model-proxy|models]
 ```
 
 ## Examples

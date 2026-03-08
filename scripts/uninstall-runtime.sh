@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-INSTALL_BASE="${OPENCLAW_OPS_INSTALL_BASE:-$HOME/.openclaw-ops}"
+INSTALL_BASE="${OPENCLAW_OPS_INSTALL_BASE:-$HOME/.llm-ops}"
 INSTALL_DIR="$INSTALL_BASE/current"
 BIN_DIR="${BIN_DIR:-$HOME/bin}"
-STATE_FILE="${OPENCLAW_OPS_STATE_FILE:-$HOME/.openclaw-ops/runtime-state.env}"
+STATE_FILE="${OPENCLAW_OPS_STATE_FILE:-$HOME/.llm-ops/runtime-state.env}"
 KEEP_FILES=0
 
 usage() {
@@ -12,9 +12,9 @@ usage() {
 Usage: $(basename "$0") [options]
 
 Options:
-  --prefix <path>    Install base dir (default: ~/.openclaw-ops)
+  --prefix <path>    Install base dir (default: ~/.llm-ops)
   --bin-dir <path>   Runtime bin dir (default: ~/bin)
-  --state-file <path> Runtime state file (default: ~/.openclaw-ops/runtime-state.env)
+  --state-file <path> Runtime state file (default: ~/.llm-ops/runtime-state.env)
   --keep-files       Keep installed runtime files; remove links only
   -h, --help         Show this help
 USAGE

@@ -12,7 +12,7 @@
 ## Components
 
 - OpenClaw runtime (`gateway`)
-- OpenAI proxy tap (`proxy`)
+- Model proxy wrapper (`model-proxy`) + tap (`model-proxy-tap`)
 - TTS service (`tts` via `mlx_audio.server`)
 - LLM service (`Qwen3` / `Qwen3.5` via `llama-server`)
 - Embedding service (`BGEen` via `llama-server --embedding`)

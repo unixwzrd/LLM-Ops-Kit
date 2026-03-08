@@ -6,7 +6,7 @@
 Mini-manpages for key operator commands.
 
 - [`gateway.md`](./gateway.md)
-- [`proxy.md`](./proxy.md)
+- [`model-proxy.md`](./model-proxy.md)
 - [`tts.md`](./tts.md)
 - [`tts-bridge.md`](./tts-bridge.md)
 - [`Qwen3.md`](./Qwen3.md)

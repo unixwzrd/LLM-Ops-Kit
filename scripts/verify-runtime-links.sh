@@ -69,7 +69,7 @@ done < <(find "$BIN_DIR" -maxdepth 1 -type l -print)
 rm -f "$manifest_targets_file"
 
 for old in \
-  "$BIN_DIR/openclaw-start.sh" "$BIN_DIR/sync-agent-work" "$BIN_DIR/sync-agent-work.sh" "$BIN_DIR/sync-OpenClaw-Ops-Toolkit" "$BIN_DIR/sync-OpenClaw-Ops-Toolkit.sh" "$BIN_DIR/sync-LLM-Ops-Kit" "$BIN_DIR/sync-LLM-Ops-Kit.sh" "$BIN_DIR/sync-ops-scripts.sh" "$BIN_DIR/node-hygiene.sh" \
+  "$BIN_DIR/proxy" "$BIN_DIR/openai-proxy-tap" "$BIN_DIR/openclaw-start.sh" "$BIN_DIR/sync-agent-work" "$BIN_DIR/sync-agent-work.sh" "$BIN_DIR/sync-OpenClaw-Ops-Toolkit" "$BIN_DIR/sync-OpenClaw-Ops-Toolkit.sh" "$BIN_DIR/sync-LLM-Ops-Kit" "$BIN_DIR/sync-LLM-Ops-Kit.sh" "$BIN_DIR/sync-ops-scripts.sh" "$BIN_DIR/node-hygiene.sh" \
   "$BIN_DIR/openclaw-report.sh" "$BIN_DIR/openclaw-stack.sh" \
   "$BIN_DIR/StartQwen3" "$BIN_DIR/StartBGEen" "$BIN_DIR/StopQwen3" "$BIN_DIR/StopBGEen" \
   "$BIN_DIR/run-openclaw-server.sh" "$BIN_DIR/run-openclaw-embedding.sh"; do

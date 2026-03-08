@@ -37,7 +37,7 @@ Optional env overrides:
 
 - `OPENCLAW_TTS_HOST` (default `127.0.0.1`)
 - `OPENCLAW_TTS_PORT` (default `11439`)
-- `OPENCLAW_TTS_PYTHON` (default `python3`)
+- `OPENCLAW_TTS_PYTHON` (default `python`)
 - `OPENCLAW_TTS_MODULE` (default `mlx_audio.server`)
 
 Notes:

@@ -26,7 +26,7 @@ See `docs/CONFIGURATION.md` for environment overrides before first run.
 ~/bin/gateway start
 ~/bin/Qwen3 start
 ~/bin/BGEen start
-~/bin/proxy start
+~/bin/model-proxy start
 # Optional for local OpenAI-style TTS via MLX bridge:
 # ~/bin/Qwen3TTS start
 # ~/bin/tts-bridge start
