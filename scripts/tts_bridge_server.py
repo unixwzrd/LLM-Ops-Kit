@@ -162,8 +162,6 @@ class BridgeHandler(BaseHTTPRequestHandler):
 
         ref_text = incoming.get("ref_text") or cfg.get("ref_text")
         if ref_text:
-            if isinstance(ref_text, str) and os.path.isfile(ref_text):
-                ref_text = _read_text_file(ref_text)
             output["ref_text"] = ref_text
 
         for k in ("speed", "language", "verbose"):

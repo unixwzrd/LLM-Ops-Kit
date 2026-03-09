@@ -20,7 +20,6 @@ LISTEN_HOST="${TTS_BRIDGE_HOST:-127.0.0.1}"
 LISTEN_PORT="${TTS_BRIDGE_PORT:-11440}"
 UPSTREAM_BASE="${TTS_BRIDGE_UPSTREAM_BASE:-}"
 MODEL_PATH="${TTS_BRIDGE_MODEL:-$HOME/LLM_Repository/TTS/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit}"
-VOICE_NAME="${TTS_BRIDGE_VOICE:-}"
 REF_AUDIO="${TTS_BRIDGE_REF_AUDIO:-$HOME/LLM_Repository/TTS/Samples/Mia-Faith-Prof-Emotive-60s-Sample-Mastered-01.wav}"
 REF_TEXT="${TTS_BRIDGE_REF_TEXT:-$HOME/LLM_Repository/TTS/Samples/Mia-Faith-Prof-Emotive-60s-Sample-Mastered-01.txt}"
 PY_BIN="${TTS_BRIDGE_PYTHON_BIN:-python}"
@@ -37,7 +36,7 @@ Env overrides:
   TTS_BRIDGE_PORT             (default: 11440)
   TTS_BRIDGE_UPSTREAM_BASE    (required from ~/.llm-ops/config.env or explicit env)
   TTS_BRIDGE_MODEL            (default: Qwen3-TTS local path)
-  TTS_BRIDGE_VOICE            (default: empty; required fallback for CustomVoice unless caller sends voice)
+  TTS_BRIDGE_VOICE            (ignored by wrapper; bridge code selects/normalizes the effective voice)
   TTS_BRIDGE_PREFER_INCOMING_VOICE (default: 0; set 1 to honor incoming voice)
   TTS_BRIDGE_REF_AUDIO        (default: Mia-Faith 60s wav)
   TTS_BRIDGE_REF_TEXT         (default: matching .txt transcript)
@@ -116,7 +115,7 @@ status_bridge() {
   echo "  upstream=$UPSTREAM_BASE"
   echo "  upstream_models_endpoint=$upstream_url"
   echo "  model=$MODEL_PATH"
-  echo "  voice=$VOICE_NAME"
+  echo "  voice=<bridge-selected>"
   echo "  ref_audio=$REF_AUDIO"
   echo "  ref_text=$REF_TEXT"
   echo "  log=$log_file"
@@ -169,7 +168,6 @@ start_bridge() {
     --listen-port "$LISTEN_PORT" \
     --upstream-base "$UPSTREAM_BASE" \
     --model "$MODEL_PATH" \
-    --voice "$VOICE_NAME" \
     --ref-audio "$REF_AUDIO" \
     --ref-text "$REF_TEXT" \
     "$@" \
