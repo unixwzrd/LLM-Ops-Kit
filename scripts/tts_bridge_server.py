@@ -186,8 +186,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
             self._json(502, {"error": f"upstream_error: {exc}"})
 
     def log_message(self, fmt: str, *args: Any) -> None:
-        sys.stderr.write("%s - - [%s] %s
-" % (self.client_address[0], self.log_date_time_string(), fmt % args))
+        sys.stderr.write("%s - - [%s] %s\n" % (self.client_address[0], self.log_date_time_string(), fmt % args))
 
 
 def parse_args() -> argparse.Namespace:
