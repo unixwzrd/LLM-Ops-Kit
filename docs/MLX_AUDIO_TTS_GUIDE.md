@@ -142,7 +142,7 @@ Example request:
 AUDIO="$HOME/LLM_Repository/TTS/Samples/Mia-Faith-Sample.wav"
 TEXT="${AUDIO%.wav}.txt"
 MODEL="$HOME/LLM_Repository/TTS/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit"
-OUT="/tmp/mia-clone.wav"
+OUT="/tmp/test-tts-clone.wav"
 
 REF_TEXT="$(cat "$TEXT")"
 
