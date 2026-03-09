@@ -84,19 +84,19 @@ Quick direct MLX Audio clone request:
 AUDIO="$HOME/LLM_Repository/TTS/Samples/Mia-Faith-Sample.wav"
 TEXT="${AUDIO%.wav}.txt"
 MODEL="$HOME/LLM_Repository/TTS/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit"
+VOICE="serena"
 OUT="/tmp/mia-clone.wav"
 
-REF_TEXT="$(cat "$TEXT")"
-
-curl -sS http://127.0.0.1:18081/v1/audio/speech \
+curl -sS http://10.0.0.67:11439/v1/audio/speech \
   -H 'Content-Type: application/json' \
   -d "$(jq -n \
     --arg model "$MODEL" \
     --arg input "Hey Mike, this is a quick clone check." \
+    --arg voice "$VOICE" \
     --arg ref_audio "$AUDIO" \
-    --arg ref_text "$REF_TEXT" \
+    --arg ref_text "$TEXT" \
     --arg response_format "wav" \
-    '{model:$model,input:$input,ref_audio:$ref_audio,ref_text:$ref_text,response_format:$response_format}')" \
+    '{model:$model,input:$input,voice:$voice,ref_audio:$ref_audio,ref_text:$ref_text,response_format:$response_format}')" \
   --output "$OUT"
 ```
 
@@ -104,13 +104,15 @@ Full setup + troubleshooting guide:
 
 - [MLX_AUDIO_TTS_GUIDE](docs/MLX_AUDIO_TTS_GUIDE.md)
 
-The `18081` endpoint above is a direct `mlx_audio.server` example, not the `tts-bridge` listener. If you are testing the OpenClaw bridge path, use the local bridge port configured in `~/.llm-ops/config.env`.
+The `10.0.0.67:11439` endpoint above is a direct `mlx_audio.server` example for a remote model host, not the `tts-bridge` listener. If you are testing the OpenClaw bridge path, use the local bridge port configured in `~/.llm-ops/config.env`.
 
 Bridge compatibility notes:
 
 - `tts-bridge` keeps OpenClaw on an OpenAI-compatible TTS surface while translating MLX-specific defaults.
-- For `CustomVoice` models it now sends `voice` plus clone refs, failing fast if no usable voice is available.
+- For `CustomVoice` models it must send `voice` plus clone refs.
 - Unsupported request formats such as `opus` and `ogg` are normalized to `wav`.
+- Supported speaker names for the current Qwen3TTS CustomVoice setup are:
+  - `serena`, `vivian`, `uncle_fu`, `ryan`, `aiden`, `ono_anna`, `sohee`, `eric`, `dylan`
 
 ## Quick Start
 

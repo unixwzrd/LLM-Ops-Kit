@@ -120,7 +120,7 @@ And set provider in `~/.openclaw/openclaw.json`:
       "openai": {
         "baseUrl": "http://127.0.0.1:11440/v1",
         "model": "${HOME}/LLM_Repository/TTS/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit",
-        "voice": "Chelsie"
+        "voice": "serena"
       }
     }
   }
@@ -142,21 +142,35 @@ Example request:
 AUDIO="$HOME/LLM_Repository/TTS/Samples/Mia-Faith-Sample.wav"
 TEXT="${AUDIO%.wav}.txt"
 MODEL="$HOME/LLM_Repository/TTS/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit"
+VOICE="serena"
 OUT="/tmp/test-tts-clone.wav"
 
-REF_TEXT="$(cat "$TEXT")"
-
-curl -sS http://127.0.0.1:11439/v1/audio/speech \
+curl -sS http://10.0.0.67:11439/v1/audio/speech \
   -H 'Content-Type: application/json' \
   -d "$(jq -n \
     --arg model "$MODEL" \
     --arg input "Hey Mike, this is a quick clone check." \
+    --arg voice "$VOICE" \
     --arg ref_audio "$AUDIO" \
-    --arg ref_text "$REF_TEXT" \
+    --arg ref_text "$TEXT" \
     --arg response_format "wav" \
-    '{model:$model,input:$input,ref_audio:$ref_audio,ref_text:$ref_text,response_format:$response_format}')" \
+    '{model:$model,input:$input,voice:$voice,ref_audio:$ref_audio,ref_text:$ref_text,response_format:$response_format}')" \
   --output "$OUT"
 ```
+
+For this deployment, `ref_audio` and `ref_text` are server-side paths on the MLX host. Do not inline the transcript text into the JSON payload.
+
+Supported speaker names for the current Qwen3TTS CustomVoice setup:
+
+- `serena`
+- `vivian`
+- `uncle_fu`
+- `ryan`
+- `aiden`
+- `ono_anna`
+- `sohee`
+- `eric`
+- `dylan`
 
 ## Best Practices for Clone Samples
 

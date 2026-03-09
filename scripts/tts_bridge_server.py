@@ -151,6 +151,12 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 output[k] = incoming[k]
 
         upstream_url = _mlx_speech_url(cfg["upstream_base"])
+        print(
+            "tts-bridge upstream payload: "
+            + json.dumps(output, ensure_ascii=False),
+            file=sys.stderr,
+            flush=True,
+        )
         body = json.dumps(output).encode("utf-8")
         req = request.Request(
             upstream_url,
