@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MANIFEST_FILE="${MANIFEST_FILE:-$SCRIPT_DIR/runtime-links.manifest}"
 
 BIN_DIR="${BIN_DIR:-$HOME/bin}"
-REPO_DIR="${REPO_DIR:-$HOME/projects/LLM-Ops-Kit}"
+RUNTIME_DIR="${RUNTIME_DIR:-${REPO_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}}"
 
 if [[ ! -f "$MANIFEST_FILE" ]]; then
   echo "Manifest not found: $MANIFEST_FILE" >&2
@@ -41,7 +41,7 @@ check_one() {
 while IFS='|' read -r target_rel src_rel; do
   [[ -z "${target_rel:-}" ]] && continue
   [[ "$target_rel" =~ ^[[:space:]]*# ]] && continue
-  check_one "$BIN_DIR/$target_rel" "$REPO_DIR/$src_rel"
+  check_one "$BIN_DIR/$target_rel" "$RUNTIME_DIR/$src_rel"
 done < "$MANIFEST_FILE"
 
 # Flag stale managed links no longer represented in manifest.
@@ -56,7 +56,7 @@ while IFS= read -r link_path; do
   [[ -n "$link_path" ]] || continue
   target="$(readlink "$link_path" 2>/dev/null || true)"
   case "$target" in
-    "$REPO_DIR"/scripts/*|"$REPO_DIR"/bin/*)
+    "$RUNTIME_DIR"/scripts/*|"$RUNTIME_DIR"/bin/*)
       name="$(basename "$link_path")"
       if ! grep -qxF "$name" "$manifest_targets_file"; then
         echo "STALE_MANAGED_LINK: $link_path -> $target"

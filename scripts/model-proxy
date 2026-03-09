@@ -14,11 +14,10 @@ SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
 action="${1:-status}"
 shift || true
 
-AGENT_WORK_ROOT="${LLMOPS_AGENT_WORK_ROOT:-$HOME/projects/LLM-Ops-Kit}"
-DEFAULT_UPSTREAM_HOST="${LLMOPS_UPSTREAM_HOST:-172.20.10.2}"
-DEFAULT_UPSTREAM_PORT="${LLMOPS_UPSTREAM_PORT:-11434}"
+DEFAULT_UPSTREAM_HOST="${LLMOPS_UPSTREAM_HOST:-}"
+DEFAULT_UPSTREAM_PORT="${LLMOPS_UPSTREAM_PORT:-}"
 DEFAULT_LISTEN_PORT="${MODEL_PROXY_LISTEN_PORT:-$DEFAULT_UPSTREAM_PORT}"
-PROXY_TAP_BIN="${MODEL_PROXY_TAP_BIN:-$AGENT_WORK_ROOT/bin/model-proxy-tap}"
+PROXY_TAP_BIN="${MODEL_PROXY_TAP_BIN:-$LLMOPS_ROOT/bin/model-proxy-tap}"
 
 # Accept GNU-style action aliases (e.g. `model-proxy --status`).
 case "$action" in
@@ -39,15 +38,14 @@ Options:
   -h, --help: show this help.
 
 Default env-backed values:
-  LLMOPS_AGENT_WORK_ROOT=${AGENT_WORK_ROOT}
-  LLMOPS_UPSTREAM_HOST=${DEFAULT_UPSTREAM_HOST}
-  LLMOPS_UPSTREAM_PORT=${DEFAULT_UPSTREAM_PORT}
-  MODEL_PROXY_LISTEN_PORT=${DEFAULT_LISTEN_PORT}
+  LLMOPS_ROOT=${LLMOPS_ROOT}
+  LLMOPS_UPSTREAM_HOST=<required from ~/.llm-ops/config.env or explicit env>
+  LLMOPS_UPSTREAM_PORT=<required from ~/.llm-ops/config.env or explicit env>
+  MODEL_PROXY_LISTEN_PORT=<optional; defaults to upstream port>
 
 Examples:
-  model-proxy start
-  model-proxy restart --upstream http://${DEFAULT_UPSTREAM_HOST}:${DEFAULT_UPSTREAM_PORT}
-  model-proxy restart --listen-port ${DEFAULT_LISTEN_PORT} --upstream http://${DEFAULT_UPSTREAM_HOST}:${DEFAULT_UPSTREAM_PORT}
+  model-proxy restart --upstream http://<configured-upstream-host>:<configured-upstream-port>
+  model-proxy restart --listen-port <listen-port> --upstream http://<configured-upstream-host>:<configured-upstream-port>
 USAGE
 }
 
@@ -211,6 +209,7 @@ kill_port_listener() {
 start_proxy() {
   load_shell_env
   ensure_runtime_dirs
+  prune_runtime_artifacts
 
   if pid="$(read_pid model-proxy 2>/dev/null)" && is_pid_running "$pid"; then
     echo "model-proxy: already running pid=$pid"
@@ -219,6 +218,17 @@ start_proxy() {
 
   LOG_OUT="$LLMOPS_LOG_DIR/model-proxy-tap.log"
   LOG_ERR="$LLMOPS_LOG_DIR/model-proxy-tap.err.log"
+  prepare_log_file "$LOG_OUT"
+  prepare_log_file "$LOG_ERR"
+
+  if ! printf '%s\n' "${extra_args[@]}" | rg -q -- '^--upstream($|=)' && [[ -z "$DEFAULT_UPSTREAM_HOST" || -z "$DEFAULT_UPSTREAM_PORT" ]]; then
+    print_missing_config_hint \
+      "model-proxy: missing upstream configuration" \
+      LLMOPS_UPSTREAM_HOST \
+      LLMOPS_UPSTREAM_PORT \
+      MODEL_PROXY_LISTEN_PORT
+    return 2
+  fi
 
   nohup "$PROXY_TAP_BIN" "${extra_args[@]}" > "$LOG_OUT" 2> "$LOG_ERR" &
   pid="$!"
@@ -349,6 +359,9 @@ status_proxy() {
   echo "  raw_request_log=$raw_req"
   echo "  rendered_prompt_log=$rendered"
   echo "  raw_response_log=${raw_resp:-<off>}"
+  echo "  runtime_mode=$(runtime_mode)"
+  echo "  runtime_root=$(runtime_asset_root)"
+  echo "  retention=$(retention_summary_line)"
   echo "  health=$health"
   if [[ -n "$health_detail" ]]; then
     echo "  health_detail=$health_detail"

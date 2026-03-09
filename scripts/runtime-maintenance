@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SOURCE="${BASH_SOURCE[0]}"
+while [[ -h "$SOURCE" ]]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+# shellcheck disable=SC1091
+. "$SCRIPT_DIR/lib/common.sh"
+
+ACTION="${1:-status}"
+shift || true
+
+usage() {
+  cat <<EOF
+Usage: runtime-maintenance [status|rotate|prune|run]
+
+status  Show current runtime root, retention policy, and disk usage.
+rotate  Rotate known active logs if they exceed the configured size threshold.
+prune   Prune rotated logs and runtime backups according to retention policy.
+run     Rotate and prune in one pass.
+EOF
+}
+
+known_logs() {
+  printf '%s\n' \
+    "$LLMOPS_LOG_DIR/gateway.log" \
+    "$LLMOPS_LOG_DIR/gateway.err.log" \
+    "$LLMOPS_LOG_DIR/model-proxy-tap.log" \
+    "$LLMOPS_LOG_DIR/model-proxy-tap.err.log" \
+    "$LLMOPS_LOG_DIR/tts-bridge.log"
+  if [[ -d "$LLMOPS_LOG_DIR" ]]; then
+    find "$LLMOPS_LOG_DIR" -maxdepth 1 -type f \( -name 'llama-server-*.log' -o -name 'tts-server-*.log' \) | sort
+  fi
+}
+
+rotate_known_logs() {
+  local log_file
+  while IFS= read -r log_file; do
+    [[ -n "$log_file" ]] || continue
+    rotate_log_if_needed "$log_file"
+    prune_rotated_logs "$log_file"
+  done < <(known_logs)
+}
+
+print_status() {
+  ensure_runtime_dirs
+  echo "runtime_mode=$(runtime_mode)"
+  echo "runtime_root=$(runtime_asset_root)"
+  echo "logs_dir=$LLMOPS_LOG_DIR"
+  echo "logs_bytes=$(dir_usage_bytes "$LLMOPS_LOG_DIR")"
+  echo "backups_dir=$LLMOPS_BACKUP_DIR"
+  echo "backups_bytes=$(dir_usage_bytes "$LLMOPS_BACKUP_DIR")"
+  echo "retention=$(retention_summary_line)"
+}
+
+case "$ACTION" in
+  status)
+    print_status
+    ;;
+  rotate)
+    ensure_runtime_dirs
+    rotate_known_logs
+    print_status
+    ;;
+  prune)
+    ensure_runtime_dirs
+    rotate_known_logs
+    prune_runtime_backups
+    print_status
+    ;;
+  run)
+    ensure_runtime_dirs
+    rotate_known_logs
+    prune_runtime_backups
+    print_status
+    ;;
+  -h|--help|help)
+    usage
+    ;;
+  *)
+    echo "Invalid action: $ACTION" >&2
+    usage >&2
+    exit 2
+    ;;
+esac

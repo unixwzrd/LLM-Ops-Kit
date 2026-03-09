@@ -1,7 +1,7 @@
 # Configuration Guide
 
 **Created**: 2026-02-28  
-**Updated**: 2026-03-06
+**Updated**: 2026-03-08
 
 - [Configuration Guide](#configuration-guide)
   - [What This Doc Is For](#what-this-doc-is-for)
@@ -66,8 +66,8 @@ Note:
 - `LLMOPS_HOME`: toolkit state root (default `~/.llm-ops`).
 - `LLMOPS_RUN_DIR`: runtime pid/state dir (default `$LLMOPS_HOME/run`).
 - `LLMOPS_LOG_DIR`: toolkit log dir (default `$LLMOPS_HOME/logs`).
-- `scripts/config/hosts.env`: centralized default host/IP file for wrappers (sync/model-proxy) in this repo.
-- `LLMOPS_AGENT_WORK_ROOT`: canonical repo root used for template/tool paths.
+- `LLMOPS_ROOT`: canonical runtime asset root, resolved from the installed runtime payload or explicit override.
+- `scripts/config/hosts.env`: centralized default host/IP file for wrappers (sync/model-proxy) in the active runtime payload.
 - `LLMOPS_UPSTREAM_HOST`: default upstream model host for wrappers.
 - `LLMOPS_SYNC_HOST`: optional dedicated sync host override (falls back to `LLMOPS_UPSTREAM_HOST`).
 - `LLMOPS_UPSTREAM_PORT`: default upstream model port for wrappers.
@@ -79,10 +79,15 @@ Note:
 - `TTS_BRIDGE_PORT`: bind port for `tts-bridge`.
 - `TTS_BRIDGE_UPSTREAM_BASE`: upstream MLX Audio base URL.
 - `TTS_BRIDGE_MODEL`: default model path injected by bridge.
-- `TTS_BRIDGE_VOICE`: default voice injected by bridge when clone refs are not present.
+- `TTS_BRIDGE_VOICE`: default voice injected by bridge. Required fallback for `CustomVoice` bridge setups unless the caller always sends `voice`.
 - `TTS_BRIDGE_REF_AUDIO`: default reference audio file.
 - `TTS_BRIDGE_REF_TEXT`: default reference transcript file (or literal text if passed directly).
 - `TTS_BRIDGE_PYTHON_BIN`: python binary used by bridge launcher.
+- `LLMOPS_LOG_ROTATE_BYTES`: rotate active logs after this many bytes.
+- `LLMOPS_LOG_ROTATE_KEEP`: number of rotated logs to keep per active log.
+- `LLMOPS_LOG_ROTATE_MAX_AGE_DAYS`: optional max age for rotated logs.
+- `LLMOPS_BACKUP_KEEP`: number of runtime install backups to keep.
+- `LLMOPS_BACKUP_MAX_AGE_DAYS`: optional max age for runtime install backups.
 
 ## Sync Variables
 
@@ -97,7 +102,6 @@ Note:
 
 ```bash
 # Copy from .env.example and adapt values.
-LLMOPS_AGENT_WORK_ROOT=~/projects/LLM-Ops-Kit
 LLMOPS_UPSTREAM_HOST=<upstream-host>
 LLMOPS_UPSTREAM_PORT=<upstream-port>
 MODEL_PROXY_LISTEN_HOST=127.0.0.1
@@ -105,6 +109,9 @@ MODEL_PROXY_LISTEN_PORT=<listen-port>
 LLMOPS_HOME=~/.llm-ops
 LLMOPS_RUN_DIR=~/.llm-ops/run
 LLMOPS_LOG_DIR=~/.llm-ops/logs
+LLMOPS_LOG_ROTATE_BYTES=10485760
+LLMOPS_LOG_ROTATE_KEEP=5
+LLMOPS_BACKUP_KEEP=5
 
 SYNC_HOST=<sync-host>
 SYNC_USER=<your-user>
@@ -112,20 +119,18 @@ SYNC_REMOTE_DIR=~/projects/LLM-Ops-Kit
 SYNC_LOCAL_DIR=~/projects/LLM-Ops-Kit/
 ```
 
-## Local Example (Current Operator Setup)
+## Local Example (Examples Only)
 
 ```bash
-export LLMOPS_AGENT_WORK_ROOT="$HOME/projects/LLM-Ops-Kit"
-export LLMOPS_UPSTREAM_HOST="172.20.10.2"
+export LLMOPS_UPSTREAM_HOST="<example-upstream-host>"
 export LLMOPS_UPSTREAM_PORT="11434"
 export MODEL_PROXY_LISTEN_HOST="127.0.0.1"
 export MODEL_PROXY_LISTEN_PORT="11434"
 ```
 
-## Remote/Portable Example
+## Remote/Portable Example (Examples Only)
 
 ```bash
-export LLMOPS_AGENT_WORK_ROOT="$HOME/projects/LLM-Ops-Kit"
 export LLMOPS_UPSTREAM_HOST="<upstream-host>"
 export LLMOPS_UPSTREAM_PORT="<upstream-port>"
 export MODEL_PROXY_LISTEN_HOST="127.0.0.1"
@@ -148,7 +153,7 @@ Example flow:
 python -m pip install "git+https://github.com/unixwzrd/seckit.git"
 
 # 2) Store values
-seckit set --name LLMOPS_UPSTREAM_HOST --value 172.20.10.2 --service openclaw --account default
+seckit set --name LLMOPS_UPSTREAM_HOST --value <example-upstream-host> --service openclaw --account default
 seckit set --name LLMOPS_UPSTREAM_PORT --value 11434 --service openclaw --account default
 seckit set --name MODEL_PROXY_LISTEN_HOST --value 127.0.0.1 --service openclaw --account default
 seckit set --name MODEL_PROXY_LISTEN_PORT --value 11434 --service openclaw --account default
@@ -174,13 +179,16 @@ Recommended user-owned config path:
 ```bash
 mkdir -p ~/.llm-ops
 cat > ~/.llm-ops/config.env <<'EOF'
-LLMOPS_UPSTREAM_HOST=10.0.0.67
-LLMOPS_SYNC_HOST=10.0.0.67
+LLMOPS_UPSTREAM_HOST=<example-upstream-host>
+LLMOPS_SYNC_HOST=<example-upstream-host>
 LLMOPS_UPSTREAM_PORT=11434
 MODEL_PROXY_LISTEN_HOST=127.0.0.1
 MODEL_PROXY_LISTEN_PORT=11434
 LLMOPS_HOME=$HOME/.llm-ops
 LLMOPS_RUN_DIR=$HOME/.llm-ops/run
 LLMOPS_LOG_DIR=$HOME/.llm-ops/logs
+LLMOPS_LOG_ROTATE_BYTES=10485760
+LLMOPS_LOG_ROTATE_KEEP=5
+LLMOPS_BACKUP_KEEP=5
 EOF
 ```

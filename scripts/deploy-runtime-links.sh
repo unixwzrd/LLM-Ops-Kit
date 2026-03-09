@@ -24,7 +24,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MANIFEST_FILE="${MANIFEST_FILE:-$SCRIPT_DIR/runtime-links.manifest}"
 
 BIN_DIR="${BIN_DIR:-$HOME/bin}"
-REPO_DIR="${REPO_DIR:-$HOME/projects/LLM-Ops-Kit}"
+RUNTIME_DIR="${RUNTIME_DIR:-${REPO_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}}"
 mkdir -p "$BIN_DIR"
 
 if [[ ! -f "$MANIFEST_FILE" ]]; then
@@ -95,7 +95,7 @@ while IFS='|' read -r target_rel src_rel; do
   [[ "$target_rel" =~ ^[[:space:]]*# ]] && continue
 
   target="$BIN_DIR/$target_rel"
-  src="$REPO_DIR/$src_rel"
+  src="$RUNTIME_DIR/$src_rel"
   if [[ ! -e "$src" ]]; then
     echo "SKIP_MISSING_SOURCE: $target -> $src" >&2
     continue

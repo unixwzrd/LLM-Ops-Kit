@@ -542,6 +542,7 @@ zsdoc/data
 *.pyc
 logs/
 tmp/
+AGENTS.macOSd
 
 .codex/*
 .cursor/rules/*
@@ -558,3 +559,4 @@ identity/device-auth.json
 docs/reports/
 *.local.md
 docs/internal/
+

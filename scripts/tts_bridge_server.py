@@ -63,6 +63,10 @@ def _normalize_response_format(requested: str, fallback: str = "wav") -> tuple[s
     return normalized, None
 
 
+def _is_custom_voice_model(model: str) -> bool:
+    return "customvoice" in (model or "").replace("-", "").replace("_", "").lower()
+
+
 class BridgeHandler(BaseHTTPRequestHandler):
     server_version = "tts-bridge/1.0"
 
@@ -139,16 +143,25 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 ref_text = _read_text_file(ref_text)
             output["ref_text"] = ref_text
 
-        # When clone refs are present, avoid forcing a named speaker. Current
-        # Qwen3-TTS routes named-speaker CustomVoice requests differently than
-        # ref-audio/ref-text cloning requests.
-        has_clone_ref = bool(ref_audio) and bool(ref_text)
+        is_custom_voice = _is_custom_voice_model(str(model))
         voice = ""
-        if not has_clone_ref:
-            if cfg.get("prefer_incoming_voice"):
-                voice = incoming.get("voice") or cfg.get("voice")
-            else:
-                voice = cfg.get("voice") or incoming.get("voice")
+        if is_custom_voice:
+            voice = incoming.get("voice") or cfg.get("voice") or ""
+            if not voice:
+                self._json(
+                    400,
+                    {
+                        "error": (
+                            "bridge_compat_error: effective model requires a voice for CustomVoice requests; "
+                            "provide 'voice' or configure TTS_BRIDGE_VOICE"
+                        )
+                    },
+                )
+                return
+        elif cfg.get("prefer_incoming_voice"):
+            voice = incoming.get("voice") or cfg.get("voice")
+        else:
+            voice = cfg.get("voice") or incoming.get("voice")
         if voice:
             output["voice"] = voice
 
@@ -193,7 +206,7 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="OpenAI TTS -> MLX bridge")
     p.add_argument("--listen-host", default=_env("TTS_BRIDGE_HOST", "127.0.0.1"))
     p.add_argument("--listen-port", type=int, default=int(_env("TTS_BRIDGE_PORT", "11440")))
-    p.add_argument("--upstream-base", default=_env("TTS_BRIDGE_UPSTREAM_BASE", "http://127.0.0.1:11439/v1"))
+    p.add_argument("--upstream-base", default=_env("TTS_BRIDGE_UPSTREAM_BASE", ""))
     p.add_argument("--model", default=_env("TTS_BRIDGE_MODEL", ""))
     p.add_argument("--voice", default=_env("TTS_BRIDGE_VOICE", ""))
     p.add_argument(
@@ -210,6 +223,12 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    if not args.upstream_base:
+        print(
+            "tts-bridge: missing TTS_BRIDGE_UPSTREAM_BASE; set it in ~/.llm-ops/config.env or pass --upstream-base",
+            file=sys.stderr,
+        )
+        return 2
     config = {
         "listen_host": args.listen_host,
         "listen_port": args.listen_port,

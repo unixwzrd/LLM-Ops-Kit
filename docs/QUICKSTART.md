@@ -1,11 +1,12 @@
 # Quickstart (10 Minutes)
 
 **Created**: 2026-02-26
-**Updated**: 2026-03-03
+**Updated**: 2026-03-08
 
 - [Quickstart (10 Minutes)](#quickstart-10-minutes)
   - [Requirements](#requirements)
-  - [Local bring-up](#local-bring-up)
+  - [Remote Models, Local Gateway](#remote-models-local-gateway)
+  - [Fully Local Models and Gateway](#fully-local-models-and-gateway)
   - [Remote sync + deploy](#remote-sync--deploy)
   - [Common checks](#common-checks)
 
@@ -18,17 +19,43 @@
 
 See `docs/CONFIGURATION.md` for environment overrides before first run.
 
-## Local bring-up
+## Remote Models, Local Gateway
+
+Use this when OpenClaw, `gateway`, `model-proxy`, and `tts-bridge` run locally, while the LLM, embeddings, and MLX TTS run on a remote model host.
+
+Set these first in `~/.llm-ops/config.env`:
 
 ```bash
-/usr/local/bin/bash ~/projects/LLM-Ops-Kit/scripts/deploy-runtime-links.sh
-/usr/local/bin/bash ~/projects/LLM-Ops-Kit/scripts/verify-runtime-links.sh
+export LLMOPS_UPSTREAM_HOST=<remote-model-host>
+export LLMOPS_UPSTREAM_PORT=11434
+export LLMOPS_SYNC_HOST=<remote-model-host>
+export MODEL_PROXY_LISTEN_HOST=127.0.0.1
+export MODEL_PROXY_LISTEN_PORT=11434
+export TTS_BRIDGE_PORT=11439
+export TTS_BRIDGE_UPSTREAM_BASE=http://<remote-model-host>:11439/v1
+```
+
+```bash
+~/bin/install-runtime --source ~/projects/LLM-Ops-Kit
 ~/bin/gateway start
-~/bin/Qwen3 start
+~/bin/model-proxy restart --upstream http://<remote-model-host>:11434
+~/bin/tts-bridge start
+```
+
+## Fully Local Models and Gateway
+
+Use this when the LLM, embeddings, MLX TTS server, and OpenClaw all run on the same host.
+
+- Do not bind `model-proxy` or `tts-bridge` to the same local port as the local model server they forward to.
+- If you do not need protocol adaptation or tap logging, start the model servers directly and skip the bridge/proxy wrappers.
+
+```bash
+~/bin/install-runtime --source ~/projects/LLM-Ops-Kit
+~/bin/Qwen3.5 start
 ~/bin/BGEen start
-~/bin/model-proxy start
-# Optional for local OpenAI-style TTS via MLX bridge:
+# Optional:
 # ~/bin/Qwen3TTS start
+# ~/bin/model-proxy restart --listen-port 11440 --upstream http://127.0.0.1:11434
 # ~/bin/tts-bridge start
 ```
 
@@ -36,8 +63,6 @@ See `docs/CONFIGURATION.md` for environment overrides before first run.
 
 ```bash
 ~/bin/sync-ops-scripts --delete
-ssh <host> '/usr/local/bin/bash ~/projects/LLM-Ops-Kit/scripts/deploy-runtime-links.sh'
-ssh <host> '/usr/local/bin/bash ~/projects/LLM-Ops-Kit/scripts/verify-runtime-links.sh'
 ```
 
 ## Common checks
@@ -46,6 +71,8 @@ ssh <host> '/usr/local/bin/bash ~/projects/LLM-Ops-Kit/scripts/verify-runtime-li
 ~/bin/openclaw-stack status
 ~/bin/Qwen3 settings
 ~/bin/BGEen settings
+~/bin/model-proxy status
+~/bin/tts-bridge status
 ```
 
 If anything looks off, go to `docs/TROUBLESHOOTING.md`.

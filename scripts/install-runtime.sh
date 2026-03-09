@@ -74,9 +74,16 @@ echo "Installed runtime to: $INSTALL_DIR"
 if [[ "$NO_LINKS" -eq 0 ]]; then
   pushd "$INSTALL_DIR/scripts" >/dev/null
   ./generate-manifest
-  BIN_DIR="$BIN_DIR" REPO_DIR="$INSTALL_DIR" ./deploy-runtime-links.sh --replace-managed-links
-  BIN_DIR="$BIN_DIR" REPO_DIR="$INSTALL_DIR" ./verify-runtime-links.sh
+  BIN_DIR="$BIN_DIR" RUNTIME_DIR="$INSTALL_DIR" ./deploy-runtime-links.sh --replace-managed-links
+  BIN_DIR="$BIN_DIR" RUNTIME_DIR="$INSTALL_DIR" ./verify-runtime-links.sh
   popd >/dev/null
+fi
+
+if [[ -f "$INSTALL_DIR/scripts/lib/common.sh" ]]; then
+  # shellcheck disable=SC1090
+  . "$INSTALL_DIR/scripts/lib/common.sh"
+  load_shell_env
+  prune_runtime_backups
 fi
 
 mkdir -p "$(dirname "$STATE_FILE")"

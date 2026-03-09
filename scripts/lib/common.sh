@@ -4,10 +4,18 @@ set -euo pipefail
 LLMOPS_HOME="${LLMOPS_HOME:-$HOME/.llm-ops}"
 LLMOPS_RUN_DIR="${LLMOPS_RUN_DIR:-$LLMOPS_HOME/run}"
 LLMOPS_LOG_DIR="${LLMOPS_LOG_DIR:-$LLMOPS_HOME/logs}"
-LLMOPS_ROOT="${LLMOPS_ROOT:-$(cd -P "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)}"
+LLMOPS_ROOT="${LLMOPS_ROOT:-$(cd -P "$(dirname "${BASH_SOURCE[0]}")/../.." >/dev/null 2>&1 && pwd)}"
+LLMOPS_CONFIG_DIR="${LLMOPS_CONFIG_DIR:-$LLMOPS_HOME/config}"
+LLMOPS_BACKUP_DIR="${LLMOPS_BACKUP_DIR:-$LLMOPS_HOME/backups}"
+
+LLMOPS_LOG_ROTATE_BYTES="${LLMOPS_LOG_ROTATE_BYTES:-10485760}"
+LLMOPS_LOG_ROTATE_KEEP="${LLMOPS_LOG_ROTATE_KEEP:-5}"
+LLMOPS_LOG_ROTATE_MAX_AGE_DAYS="${LLMOPS_LOG_ROTATE_MAX_AGE_DAYS:-14}"
+LLMOPS_BACKUP_KEEP="${LLMOPS_BACKUP_KEEP:-5}"
+LLMOPS_BACKUP_MAX_AGE_DAYS="${LLMOPS_BACKUP_MAX_AGE_DAYS:-30}"
 
 ensure_runtime_dirs() {
-  mkdir -p "$LLMOPS_RUN_DIR" "$LLMOPS_LOG_DIR"
+  mkdir -p "$LLMOPS_RUN_DIR" "$LLMOPS_LOG_DIR" "$LLMOPS_BACKUP_DIR" "$LLMOPS_CONFIG_DIR"
 }
 
 load_shell_env() {
@@ -30,6 +38,171 @@ load_shell_env() {
       # shellcheck disable=SC1090
       . "$f"
     fi
+  done
+}
+
+runtime_mode() {
+  local state_file mode
+  state_file="${LLMOPS_STATE_FILE:-$LLMOPS_HOME/runtime-state.env}"
+  mode="${LLMOPS_RUNTIME_MODE:-}"
+  if [[ -n "$mode" ]]; then
+    printf '%s\n' "$mode"
+    return 0
+  fi
+  if [[ -f "$state_file" ]]; then
+    mode="$(sed -n 's/^LLMOPS_INSTALL_MODE=//p' "$state_file" | tail -n 1)"
+  fi
+  printf '%s\n' "${mode:-installed}"
+}
+
+runtime_asset_root() {
+  printf '%s\n' "$LLMOPS_ROOT"
+}
+
+file_size_bytes() {
+  local path="$1"
+  [[ -f "$path" ]] || { printf '0\n'; return 0; }
+  wc -c < "$path" | tr -d '[:space:]'
+}
+
+rotate_log_if_needed() {
+  local log_file="$1"
+  local max_bytes size stamp rotated
+  max_bytes="${2:-$LLMOPS_LOG_ROTATE_BYTES}"
+  [[ -n "$log_file" ]] || return 0
+  [[ -f "$log_file" ]] || return 0
+  [[ "$max_bytes" =~ ^[0-9]+$ ]] || return 0
+  (( max_bytes > 0 )) || return 0
+
+  size="$(file_size_bytes "$log_file")"
+  [[ "$size" =~ ^[0-9]+$ ]] || size=0
+  (( size < max_bytes )) && return 0
+
+  stamp="$(date +%Y%m%d-%H%M%S)"
+  rotated="${log_file}.${stamp}"
+  mv "$log_file" "$rotated"
+}
+
+prune_rotated_logs() {
+  local log_file="$1"
+  local keep="${2:-$LLMOPS_LOG_ROTATE_KEEP}"
+  local max_age_days="${3:-$LLMOPS_LOG_ROTATE_MAX_AGE_DAYS}"
+  local dir base count=0
+  local -a rotated=()
+
+  [[ -n "$log_file" ]] || return 0
+  dir="$(dirname "$log_file")"
+  base="$(basename "$log_file")"
+  [[ -d "$dir" ]] || return 0
+
+  while IFS= read -r path; do
+    [[ -n "$path" ]] || continue
+    rotated+=("$path")
+  done < <(find "$dir" -maxdepth 1 -type f -name "${base}.*" | sort -r)
+
+  if [[ "$max_age_days" =~ ^[0-9]+$ ]] && (( max_age_days > 0 )); then
+    find "$dir" -maxdepth 1 -type f -name "${base}.*" -mtime +"$max_age_days" -exec rm -f {} +
+    rotated=()
+    while IFS= read -r path; do
+      [[ -n "$path" ]] || continue
+      rotated+=("$path")
+    done < <(find "$dir" -maxdepth 1 -type f -name "${base}.*" | sort -r)
+  fi
+
+  if [[ "$keep" =~ ^[0-9]+$ ]] && (( keep >= 0 )); then
+    for path in "${rotated[@]}"; do
+      count=$((count + 1))
+      if (( count > keep )); then
+        rm -f "$path"
+      fi
+    done
+  fi
+}
+
+prepare_log_file() {
+  local log_file="$1"
+  ensure_runtime_dirs
+  rotate_log_if_needed "$log_file"
+  prune_rotated_logs "$log_file"
+  touch "$log_file"
+}
+
+prune_runtime_backups() {
+  local keep="${1:-$LLMOPS_BACKUP_KEEP}"
+  local max_age_days="${2:-$LLMOPS_BACKUP_MAX_AGE_DAYS}"
+  local count=0 path
+  local -a backups=()
+
+  [[ -d "$LLMOPS_BACKUP_DIR" ]] || return 0
+
+  if [[ "$max_age_days" =~ ^[0-9]+$ ]] && (( max_age_days > 0 )); then
+    find "$LLMOPS_BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d -mtime +"$max_age_days" -exec rm -rf {} +
+  fi
+
+  while IFS= read -r path; do
+    [[ -n "$path" ]] || continue
+    backups+=("$path")
+  done < <(find "$LLMOPS_BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d | sort -r)
+
+  if [[ "$keep" =~ ^[0-9]+$ ]] && (( keep >= 0 )); then
+    for path in "${backups[@]}"; do
+      count=$((count + 1))
+      if (( count > keep )); then
+        rm -rf "$path"
+      fi
+    done
+  fi
+}
+
+prune_runtime_artifacts() {
+  ensure_runtime_dirs
+  prune_runtime_backups
+}
+
+retention_summary_line() {
+  printf 'logs rotate=%s keep=%s age_days=%s backups keep=%s age_days=%s\n' \
+    "$LLMOPS_LOG_ROTATE_BYTES" \
+    "$LLMOPS_LOG_ROTATE_KEEP" \
+    "$LLMOPS_LOG_ROTATE_MAX_AGE_DAYS" \
+    "$LLMOPS_BACKUP_KEEP" \
+    "$LLMOPS_BACKUP_MAX_AGE_DAYS"
+}
+
+dir_usage_bytes() {
+  local path="$1"
+  [[ -d "$path" ]] || { printf '0\n'; return 0; }
+  du -sk "$path" 2>/dev/null | awk '{print $1 * 1024}'
+}
+
+config_hint_file() {
+  printf '%s/config.env\n' "$LLMOPS_HOME"
+}
+
+print_missing_config_hint() {
+  local message="$1"
+  shift || true
+  local var
+  echo "$message" >&2
+  echo "Set the required value(s) in $(config_hint_file) or pass them explicitly." >&2
+  echo "Example:" >&2
+  for var in "$@"; do
+    case "$var" in
+      LLMOPS_UPSTREAM_HOST|LLMOPS_SYNC_HOST)
+        echo "  export $var=<example-upstream-host>" >&2
+        ;;
+      LLMOPS_UPSTREAM_PORT|MODEL_PROXY_LISTEN_PORT|TTS_BRIDGE_PORT)
+        echo "  export $var=<port>" >&2
+        ;;
+      TTS_BRIDGE_UPSTREAM_BASE)
+        echo "  export $var=http://<example-upstream-host>:<port>/v1" >&2
+        ;;
+      MODEL_PROXY_LISTEN_HOST|TTS_BRIDGE_HOST)
+        echo "  export $var=127.0.0.1" >&2
+        ;;
+      *)
+        echo "  export $var=<value>" >&2
+        ;;
+    esac
   done
 }
 

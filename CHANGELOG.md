@@ -1,12 +1,49 @@
 # Agent Ops Changelog
 
 **Created**: 2026-02-20
-**Updated**: 2026-03-06
+**Updated**: 2026-03-08
 
 All notable changes to LLM-Ops-Kit will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+### 2026-03-08 — Installed-runtime default + CustomVoice bridge fix + retention controls
+
+- **Scope:** `LLM-Ops-Kit/scripts`, `LLM-Ops-Kit/docs`, `LLM-Ops-Kit/README.md`, `LLM-Ops-Kit/CHANGELOG.md`
+- **Category:** `runtime`, `tts`, `deployment`, `maintenance`, `documentation`
+- **What changed:**
+  - Fixed `tts-bridge` compatibility for `mlx_audio` `CustomVoice` models:
+    - detect `CustomVoice` from the effective model id
+    - always send `voice` for `CustomVoice`
+    - keep forwarding `ref_audio` and `ref_text`
+    - fail fast in the bridge with a clear compatibility error if no usable `voice` is available
+    - keep normalizing unsupported formats such as `opus` and `ogg` to `wav`
+  - Expanded bridge observability:
+    - `/health` reports effective defaults and compatibility fallbacks
+    - `tts-bridge status` now prints runtime mode, runtime root, and retention policy
+  - Decoupled runtime asset resolution from the source checkout:
+    - `LLMOPS_ROOT` now resolves to the actual runtime root, not `scripts/`
+    - `Qwen3` and `Qwen3.5` templates now resolve from the runtime root
+    - `model-proxy` now resolves `model-proxy-tap` from the runtime root
+    - `modelctl settings` now prints `RUNTIME_MODE` and `RUNTIME_ROOT`
+  - Removed more silent repo-coupled behavior:
+    - installed runtime remains the default normal operating mode
+    - `sync-ops-scripts` now defaults to `installed` mode unless repo mode is explicitly requested
+    - link deployment and verification now use `RUNTIME_DIR` semantics instead of assuming a checkout path
+  - Added built-in log rotation and backup pruning:
+    - shared retention helpers in `scripts/lib/common.sh`
+    - wrappers now rotate/prune known logs on startup
+    - install flow now prunes old runtime backups under `~/.llm-ops/backups`
+    - new `runtime-maintenance` command provides `status|rotate|prune|run`
+  - Updated docs and top-level README to describe:
+    - installed-runtime-first operation
+    - `CustomVoice` bridge requirements
+    - retention settings and maintenance command
+- **Why:**
+  - Stop `tts-bridge` from passing invalid `CustomVoice` requests upstream and crashing `mlx_audio`.
+  - Make the installed runtime self-contained so removing or moving the source checkout does not break normal operations.
+  - Prevent silent disk growth from logs and install backups.
 
 ### 2026-03-06 — Runtime ownership boundary + rename finalization + status hardening
 

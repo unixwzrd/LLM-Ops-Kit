@@ -86,6 +86,12 @@ curl -sS http://127.0.0.1:11439/v1/audio/speech \
 
 Use `tts-bridge` so OpenClaw can keep using OpenAI-style TTS requests while your local bridge injects MLX-specific fields (`model`, `voice`, `ref_audio`, `ref_text`).
 
+Important `CustomVoice` note:
+
+- Current `mlx_audio` `CustomVoice` requests require `voice`, even when `ref_audio` and `ref_text` are present.
+- The bridge keeps clone refs and injects `voice` from the incoming request or `TTS_BRIDGE_VOICE`.
+- Unsupported response formats such as `opus` and `ogg` are normalized to `wav`.
+
 Operationally, this behaves like `model-proxy`: start/stop/restart/status via a wrapper script with PID and log tracking.
 
 ```bash
@@ -101,7 +107,7 @@ export OPENAI_TTS_BASE_URL=http://127.0.0.1:11440/v1
 
 Bridge port note:
 
-- `11440` is also just a default example for the bridge.
+- `11440` is an example only, not a required default.
 - You can use any free/open port for the bridge; just update `messages.tts.openai.baseUrl` to match.
 
 And set provider in `~/.openclaw/openclaw.json`:
@@ -114,12 +120,14 @@ And set provider in `~/.openclaw/openclaw.json`:
       "openai": {
         "baseUrl": "http://127.0.0.1:11440/v1",
         "model": "${HOME}/LLM_Repository/TTS/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit",
-        "voice": "serena"
+        "voice": "Chelsie"
       }
     }
   }
 }
 ```
+
+Treat the `11440` value above as an example only. Use whatever local bridge port you configured in `~/.llm-ops/config.env`.
 
 ## Voice Clone Workflow
 

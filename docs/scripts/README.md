@@ -9,6 +9,7 @@ Mini-manpages for key operator commands.
 - [`model-proxy.md`](./model-proxy.md)
 - [`tts.md`](./tts.md)
 - [`tts-bridge.md`](./tts-bridge.md)
+- [`runtime-maintenance.md`](./runtime-maintenance.md)
 - [`Qwen3.md`](./Qwen3.md)
 - [`Qwen3.5.md`](./Qwen3.5.md)
 - [`BGEen.md`](./BGEen.md)

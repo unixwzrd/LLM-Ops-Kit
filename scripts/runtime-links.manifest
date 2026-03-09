@@ -12,6 +12,7 @@ openclaw-stack|scripts/openclaw-stack
 Qwen3.5|scripts/Qwen3.5
 Qwen3|scripts/Qwen3
 Qwen3TTS|scripts/Qwen3TTS
+runtime-maintenance|scripts/runtime-maintenance
 sync-ops-scripts|scripts/sync-ops-scripts.sh
 tts-bridge|scripts/tts-bridge
 tts|scripts/tts

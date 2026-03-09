@@ -1,8 +1,6 @@
 # shellcheck shell=bash
 # Model-specific defaults for Qwen3.5 (applied before model-kind defaults).
 # Fill only when still unset so external env can override.
-AGENT_WORK_ROOT="${LLMOPS_AGENT_WORK_ROOT:-$HOME/projects/LLM-Ops-Kit}"
-
 # Identity/profile
 MODEL_TYPE="${MODEL_TYPE:-llm}"
 MODEL_PROFILE="${MODEL_PROFILE:-Qwen3_5}"
@@ -34,7 +32,7 @@ USE_NO_WEBUI="${USE_NO_WEBUI:-1}"
 VERBOSE_PROMPT="${VERBOSE_PROMPT:-0}"
 USE_CUSTOM_TEMPLATE="${USE_CUSTOM_TEMPLATE:-1}"
 if [[ -z "${CHAT_TEMPLATE:-}" ]]; then
-  CHAT_TEMPLATE="${AGENT_WORK_ROOT}/scripts/templates/Qwen3.5-chatml-tools.jinja"
+  CHAT_TEMPLATE="${LLMOPS_ROOT}/scripts/templates/Qwen3.5-chatml-tools.jinja"
 fi
 
 # Sampling presets (overridable by env)

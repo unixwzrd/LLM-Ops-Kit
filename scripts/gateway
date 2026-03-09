@@ -19,6 +19,9 @@ start_gateway() {
   PORT="${LLMOPS_GATEWAY_PORT:-18789}"
   LOG_OUT="$LLMOPS_LOG_DIR/gateway.log"
   LOG_ERR="$LLMOPS_LOG_DIR/gateway.err.log"
+  prune_runtime_artifacts
+  prepare_log_file "$LOG_OUT"
+  prepare_log_file "$LOG_ERR"
 
   if pid="$(read_pid gateway 2>/dev/null)" && is_pid_running "$pid"; then
     echo "gateway: already running pid=$pid"
@@ -53,15 +56,35 @@ stop_gateway() {
 }
 
 status_gateway() {
+  local port
+  port="${LLMOPS_GATEWAY_PORT:-18789}"
   if pid="$(read_pid gateway 2>/dev/null)"; then
     if is_pid_running "$pid"; then
       echo "gateway: running pid=$pid"
+      echo "  port=$port"
+      echo "  log=$LLMOPS_LOG_DIR/gateway.log"
+      echo "  err_log=$LLMOPS_LOG_DIR/gateway.err.log"
+      echo "  runtime_mode=$(runtime_mode)"
+      echo "  runtime_root=$(runtime_asset_root)"
+      echo "  retention=$(retention_summary_line)"
       return 0
     fi
     echo "gateway: stale pid=$pid"
+    echo "  port=$port"
+    echo "  log=$LLMOPS_LOG_DIR/gateway.log"
+    echo "  err_log=$LLMOPS_LOG_DIR/gateway.err.log"
+    echo "  runtime_mode=$(runtime_mode)"
+    echo "  runtime_root=$(runtime_asset_root)"
+    echo "  retention=$(retention_summary_line)"
     return 1
   fi
   echo "gateway: stopped"
+  echo "  port=$port"
+  echo "  log=$LLMOPS_LOG_DIR/gateway.log"
+  echo "  err_log=$LLMOPS_LOG_DIR/gateway.err.log"
+  echo "  runtime_mode=$(runtime_mode)"
+  echo "  runtime_root=$(runtime_asset_root)"
+  echo "  retention=$(retention_summary_line)"
   return 1
 }
 

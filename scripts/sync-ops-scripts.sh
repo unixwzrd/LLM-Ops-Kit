@@ -15,7 +15,7 @@ load_shell_env
 # Sync local LLM-Ops-Kit repo to a remote host with short-lived key loading.
 # Default: interactive + safe (no --delete unless requested).
 
-HOST="${SYNC_HOST:-${LLMOPS_SYNC_HOST:-${LLMOPS_UPSTREAM_HOST:-172.20.10.2}}}"
+HOST="${SYNC_HOST:-${LLMOPS_SYNC_HOST:-${LLMOPS_UPSTREAM_HOST:-}}}"
 USER_NAME="${SYNC_USER:-${LLMOPS_SYNC_USER:-$USER}}"
 REMOTE_DIR="${SYNC_REMOTE_DIR:-${LLMOPS_SYNC_REMOTE_DIR:-~/projects/LLM-Ops-Kit}}"
 KEY_PATH="${SYNC_KEY_PATH:-$HOME/.ssh/id_ed25519_misfour_deploy}"
@@ -28,7 +28,7 @@ NO_MANIFEST=0
 NO_LINKS=0
 QUIET=0
 STATE_FILE="${LLMOPS_STATE_FILE:-$HOME/.llm-ops/runtime-state.env}"
-RUNTIME_MODE="${LLMOPS_RUNTIME_MODE:-repo}" # repo|installed
+RUNTIME_MODE="${LLMOPS_RUNTIME_MODE:-installed}" # repo|installed
 INSTALL_PREFIX="${LLMOPS_INSTALL_BASE:-$HOME/.llm-ops}"
 RUNTIME_MODE_EXPLICIT=0
 INSTALL_PREFIX_EXPLICIT=0
@@ -51,7 +51,7 @@ Options:
   --no-agent               Don't auto-start/load ssh-agent
   --no-manifest            Skip runtime-links.manifest auto-generation
   --no-links               Skip remote deploy+verify link steps after sync
-  --runtime-mode <mode>    Remote runtime mode: repo (default) or installed
+  --runtime-mode <mode>    Remote runtime mode: installed (default) or repo
   --install-prefix <path>  Remote install prefix for installed mode
   --state-file <path>      Local runtime state file (default: ~/.llm-ops/runtime-state.env)
   --quiet                  Less output
@@ -90,6 +90,11 @@ while [[ $# -gt 0 ]]; do
     *) echo "Unknown option: $1" >&2; usage; exit 2 ;;
   esac
 done
+
+if [[ -z "$HOST" ]]; then
+  print_missing_config_hint "Missing sync host." LLMOPS_SYNC_HOST LLMOPS_UPSTREAM_HOST
+  exit 2
+fi
 
 if [[ "$RUNTIME_MODE_EXPLICIT" -eq 0 && -z "$ENV_RUNTIME_MODE" && -f "$STATE_FILE" ]]; then
   # shellcheck disable=SC1090
@@ -237,9 +242,9 @@ if [[ "$NO_LINKS" -eq 0 ]]; then
       log "Regenerating runtime manifest on remote"
       ssh "${SSH_BASE_ARGS[@]}" "$SSH_TARGET" "/usr/local/bin/bash \"$remote_generate\""
       log "Deploying runtime links on remote"
-      ssh "${SSH_BASE_ARGS[@]}" "$SSH_TARGET" "/usr/local/bin/bash \"$remote_deploy\""
+      ssh "${SSH_BASE_ARGS[@]}" "$SSH_TARGET" "RUNTIME_DIR=\"$REMOTE_DIR_ABS\" /usr/local/bin/bash \"$remote_deploy\""
       log "Verifying runtime links on remote"
-      ssh "${SSH_BASE_ARGS[@]}" "$SSH_TARGET" "/usr/local/bin/bash \"$remote_verify\""
+      ssh "${SSH_BASE_ARGS[@]}" "$SSH_TARGET" "RUNTIME_DIR=\"$REMOTE_DIR_ABS\" /usr/local/bin/bash \"$remote_verify\""
       log "Remote deploy+verify complete (repo mode)"
     fi
   fi

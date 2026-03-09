@@ -153,6 +153,8 @@ validate_model_settings() {
 
 print_model_settings() {
   echo "modelctl settings ($model_name)"
+  echo "  RUNTIME_MODE=$(runtime_mode)"
+  echo "  RUNTIME_ROOT=$(runtime_asset_root)"
   echo "  MODEL_PROFILE=$MODEL_PROFILE"
   echo "  MODEL_TYPE=$MODEL_TYPE"
   echo "  MODEL=$MODEL"
@@ -360,6 +362,8 @@ start_model() {
   fi
 
   LOG_FILE="$model_log_file"
+  prune_runtime_artifacts
+  prepare_log_file "$LOG_FILE"
   EXTRA_ARGS=()
   MM_FLAGS=()
   TEMPLATE_FLAGS=()

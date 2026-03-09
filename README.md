@@ -1,7 +1,7 @@
 # LLM-Ops-Kit
 
 **Created**: 2026-02-20
-**Updated**: 2026-03-07
+**Updated**: 2026-03-08
 
 
 Operational toolkit for running, deploying, and maintaining a local OpenClaw stack across hosts.
@@ -36,6 +36,8 @@ Operational toolkit for running, deploying, and maintaining a local OpenClaw sta
 - Unified startup/shutdown/status scripts for gateway, model-proxy, TTS, LLM, and embeddings
 - Model profile management (`Qwen3`, `Qwen3.5`, `BGEen`) via one launcher architecture
 - Deployment helpers for cross-host sync and runtime link management
+- Installed-runtime defaults under `~/.llm-ops/current`, with repo mode kept for explicit developer workflows
+- Built-in runtime maintenance for log rotation and install-backup retention
 - Practical runbooks and changelog-driven operations
 - Prompt/template and observability tooling for debugging real runtime behavior
 
@@ -66,6 +68,7 @@ These are the profiles currently documented and validated in this toolkit:
 Notes:
 
 - `Qwen3TTS` profile defaults point to the 0.6B CustomVoice model for lower memory use.
+- `mlx_audio` `CustomVoice` currently requires `voice` even when clone refs are present; `tts-bridge` handles that compatibility requirement.
 - For Qwen3.5 LLM profile details and overrides, see `scripts/models/Qwen3.5.sh`.
 - For TTS profile defaults and host/port, see `scripts/models/Qwen3TTS.sh`.
 
@@ -75,7 +78,7 @@ Notes:
 
 - `POST /v1/audio/speech`
 
-Quick clone request:
+Quick direct MLX Audio clone request:
 
 ```bash
 AUDIO="$HOME/LLM_Repository/TTS/Samples/Mia-Faith-Sample.wav"
@@ -101,17 +104,26 @@ Full setup + troubleshooting guide:
 
 - [MLX_AUDIO_TTS_GUIDE](docs/MLX_AUDIO_TTS_GUIDE.md)
 
+The `18081` endpoint above is a direct `mlx_audio.server` example, not the `tts-bridge` listener. If you are testing the OpenClaw bridge path, use the local bridge port configured in `~/.llm-ops/config.env`.
+
+Bridge compatibility notes:
+
+- `tts-bridge` keeps OpenClaw on an OpenAI-compatible TTS surface while translating MLX-specific defaults.
+- For `CustomVoice` models it now sends `voice` plus clone refs, failing fast if no usable voice is available.
+- Unsupported request formats such as `opus` and `ogg` are normalized to `wav`.
+
 ## Quick Start
 
 ```bash
 # 1) Sync repo to target host (if needed)
 ~/bin/sync-ops-scripts --delete
 
-# 2) Deploy runtime commands into ~/bin
-/usr/local/bin/bash ~/projects/LLM-Ops-Kit/scripts/deploy-runtime-links.sh
+# 2) Install runtime payload and deploy commands into ~/bin
+~/bin/install-runtime --source ~/projects/LLM-Ops-Kit
 
-# 3) Verify links
-/usr/local/bin/bash ~/projects/LLM-Ops-Kit/scripts/verify-runtime-links.sh
+# 3) Verify model settings / runtime root
+~/bin/Qwen3.5 settings
+~/bin/Qwen3 settings
 
 # 4) Start services
 ~/bin/gateway start
@@ -119,6 +131,8 @@ Full setup + troubleshooting guide:
 ~/bin/BGEen start
 ~/bin/model-proxy start
 ```
+
+Installed runtime is the default operating mode. After install, normal operation should not depend on the source checkout still existing at `~/projects/LLM-Ops-Kit`.
 
 ## Runtime Command Surface
 
@@ -138,7 +152,14 @@ Full setup + troubleshooting guide:
 ~/bin/uninstall-runtime [--prefix <install-base>] [--bin-dir <bin-dir>] [--state-file <path>] [--keep-files]
 ~/bin/openclaw-stack [start|stop|restart|status] [all|gateway|llm|embedding|tts|model-proxy|models]
 ~/bin/openclaw-report
+~/bin/runtime-maintenance [status|rotate|prune|run]
 ```
+
+Operational notes:
+
+- `modelctl settings` now prints `RUNTIME_MODE` and `RUNTIME_ROOT`.
+- `gateway`, `model-proxy`, and `tts-bridge` status now print retention settings.
+- Runtime logs rotate in place and install backups under `~/.llm-ops/backups` are pruned by policy.
 
 ## Link Management (Single Source of Truth)
 
@@ -163,7 +184,7 @@ Model defaults live under:
 Current profiles:
 
 - `Qwen3` (LLM)
-- `Qwen3.5` (LLM, preset + template mode support)
+- `Qwen3.5` (LLM)
 - `BGEen` (embeddings)
 - `Qwen3TTS` (TTS via MLX Audio server)
 
@@ -196,6 +217,7 @@ A future optional path is to add `pyproject.toml` and package wrappers for insta
 - [GLOSSARY](docs/GLOSSARY.md) — core terms used across docs
 - [SAFE_PUBLISH_CHECKLIST](docs/internal/SAFE_PUBLISH_CHECKLIST.md) — canonical pre-publish safety checks (internal)
 - [Scripts README](docs/scripts/README.md) — per-command script guides
+- [`docs/scripts/tts-bridge.md`](docs/scripts/tts-bridge.md) — bridge behavior, CustomVoice compatibility, and status fields
 - [MLX_AUDIO_TTS_GUIDE](docs/MLX_AUDIO_TTS_GUIDE.md) — end-to-end MLX Audio setup and voice-clone workflow
 
 Internal planning/docs are kept under `docs/internal/` and are not required for runtime operation.
@@ -240,7 +262,7 @@ If this project saves you time or helps you run local AI infrastructure more rel
 Copyright 2026  
 [unixwzrd@unixwzrd.ai](mailto:unixwzrd@unixwzrd.ai)
 
-[MIT License](LICENSE)
+[MIT License](LICENSE.md)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 

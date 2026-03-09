@@ -18,7 +18,7 @@ load_shell_env
 
 LISTEN_HOST="${TTS_BRIDGE_HOST:-127.0.0.1}"
 LISTEN_PORT="${TTS_BRIDGE_PORT:-11440}"
-UPSTREAM_BASE="${TTS_BRIDGE_UPSTREAM_BASE:-http://127.0.0.1:11439/v1}"
+UPSTREAM_BASE="${TTS_BRIDGE_UPSTREAM_BASE:-}"
 MODEL_PATH="${TTS_BRIDGE_MODEL:-$HOME/LLM_Repository/TTS/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit}"
 VOICE_NAME="${TTS_BRIDGE_VOICE:-}"
 REF_AUDIO="${TTS_BRIDGE_REF_AUDIO:-$HOME/LLM_Repository/TTS/Samples/Mia-Faith-Prof-Emotive-60s-Sample-Mastered-01.wav}"
@@ -35,9 +35,9 @@ Usage: tts-bridge [start|stop|restart|status] [-- <extra python args>]
 Env overrides:
   TTS_BRIDGE_HOST             (default: 127.0.0.1)
   TTS_BRIDGE_PORT             (default: 11440)
-  TTS_BRIDGE_UPSTREAM_BASE    (default: http://127.0.0.1:11439/v1)
+  TTS_BRIDGE_UPSTREAM_BASE    (required from ~/.llm-ops/config.env or explicit env)
   TTS_BRIDGE_MODEL            (default: Qwen3-TTS local path)
-  TTS_BRIDGE_VOICE            (default: empty; only used when not cloning)
+  TTS_BRIDGE_VOICE            (default: empty; required fallback for CustomVoice unless caller sends voice)
   TTS_BRIDGE_PREFER_INCOMING_VOICE (default: 0; set 1 to honor incoming voice)
   TTS_BRIDGE_REF_AUDIO        (default: Mia-Faith 60s wav)
   TTS_BRIDGE_REF_TEXT         (default: matching .txt transcript)
@@ -120,6 +120,9 @@ status_bridge() {
   echo "  ref_audio=$REF_AUDIO"
   echo "  ref_text=$REF_TEXT"
   echo "  log=$log_file"
+  echo "  runtime_mode=$(runtime_mode)"
+  echo "  runtime_root=$(runtime_asset_root)"
+  echo "  retention=$(retention_summary_line)"
   echo "  health=$bridge_state"
   echo "  health_detail=$bridge_detail"
   echo "  upstream_health=$upstream_state"
@@ -133,6 +136,16 @@ status_bridge() {
 
 start_bridge() {
   ensure_runtime_dirs
+  prune_runtime_artifacts
+  prepare_log_file "$log_file"
+
+  if [[ -z "$UPSTREAM_BASE" ]]; then
+    print_missing_config_hint \
+      "tts-bridge: missing TTS_BRIDGE_UPSTREAM_BASE" \
+      TTS_BRIDGE_UPSTREAM_BASE \
+      TTS_BRIDGE_PORT
+    return 2
+  fi
 
   if status_bridge >/dev/null 2>&1; then
     echo "$pid_name: already running"
