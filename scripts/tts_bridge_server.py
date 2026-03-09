@@ -15,11 +15,25 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 from urllib import error, request
 
-
 UNSUPPORTED_FORMAT_FALLBACKS = {
     "opus": "wav",
     "ogg": "wav",
 }
+
+SUPPORTED_CUSTOM_VOICES = {
+    "chelsie",
+    "serena",
+    "vivian",
+    "uncle_fu",
+    "ryan",
+    "aiden",
+    "ono_anna",
+    "sohee",
+    "eric",
+    "dylan",
+}
+
+DEFAULT_CUSTOM_VOICE = "chelsie"
 
 
 def _env(name: str, default: str = "") -> str:
@@ -61,6 +75,13 @@ def _normalize_response_format(requested: str, fallback: str = "wav") -> tuple[s
     if normalized != requested:
         return normalized, requested
     return normalized, None
+
+
+def _normalize_custom_voice(voice: str) -> str:
+    candidate = (voice or "").strip().lower()
+    if candidate in SUPPORTED_CUSTOM_VOICES:
+        return candidate
+    return DEFAULT_CUSTOM_VOICE
 
 
 class BridgeHandler(BaseHTTPRequestHandler):
@@ -133,8 +154,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
             voice = incoming.get("voice") or cfg.get("voice")
         else:
             voice = cfg.get("voice") or incoming.get("voice")
-        if voice:
-            output["voice"] = voice
+        output["voice"] = _normalize_custom_voice(str(voice or ""))
 
         ref_audio = incoming.get("ref_audio") or cfg.get("ref_audio")
         if ref_audio:
@@ -151,9 +171,12 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 output[k] = incoming[k]
 
         upstream_url = _mlx_speech_url(cfg["upstream_base"])
+        debug_output = dict(output)
+        if "input" in debug_output:
+            debug_output["input"] = "<redacted input text>"
         print(
             "tts-bridge upstream payload: "
-            + json.dumps(output, ensure_ascii=False),
+            + json.dumps(debug_output, ensure_ascii=False),
             file=sys.stderr,
             flush=True,
         )
@@ -195,7 +218,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--listen-port", type=int, default=int(_env("TTS_BRIDGE_PORT", "11440")))
     p.add_argument("--upstream-base", default=_env("TTS_BRIDGE_UPSTREAM_BASE", "http://127.0.0.1:11439/v1"))
     p.add_argument("--model", default=_env("TTS_BRIDGE_MODEL", ""))
-    p.add_argument("--voice", default=_env("TTS_BRIDGE_VOICE", "serena"))
+    p.add_argument("--voice", default=_env("TTS_BRIDGE_VOICE", ""))
     p.add_argument(
         "--prefer-incoming-voice",
         action="store_true",
