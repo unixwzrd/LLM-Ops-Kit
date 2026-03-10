@@ -50,7 +50,7 @@ This repo is intentionally focused on **operations and reproducibility**, not ra
 - `llama.cpp` server binary available at `/usr/local/bin/llama-server` (project: <https://github.com/ggml-org/llama.cpp>)
 - `mlx-audio` installed for local TTS server (`python -m mlx_audio.server`) (project: <https://github.com/Blaizzy/mlx-audio>)
   - See [Notes:](#notes) on PR for OpenAI API compatability and better voice cloning.
-- Optional but recommended for secret handling: `seckit` (example repo: <https://github.com/unixwzrd/seckit>)
+- Optional but recommended for secret handling: `seckit` from `Secrets-Kit` (<https://github.com/unixwzrd/Secrets-Kit>)
 - Bash scripts use `#!/usr/bin/env bash`
 - Compatibility target: Bash 3.2+ (macOS system bash), Bash 5+ recommended
 - Standard CLI tools: `ssh`, `rsync`, `jq`, `sed`, `awk`, `perl`
@@ -124,17 +124,21 @@ Bridge compatibility notes:
 ## Quick Start
 
 ```bash
-# 1) Sync repo to target host (if needed)
-~/bin/sync-ops-scripts --delete
+# 1) Clone the repo
+git clone https://github.com/unixwzrd/LLM-Ops-Kit.git ~/projects/LLM-Ops-Kit
+cd ~/projects/LLM-Ops-Kit
 
 # 2) Install runtime payload and deploy commands into ~/bin
-~/bin/install-runtime --source ~/projects/LLM-Ops-Kit
+./scripts/install-runtime --source "$PWD"
 
-# 3) Verify model settings / runtime root
+# 3) Sync repo to target host (if needed)
+~/bin/sync-ops-scripts --delete
+
+# 4) Verify model settings / runtime root
 ~/bin/Qwen3.5 settings
 ~/bin/Qwen3 settings
 
-# 4) Start services
+# 5) Start services
 ~/bin/gateway start
 ~/bin/Qwen3 start
 ~/bin/BGEen start

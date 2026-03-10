@@ -5,6 +5,14 @@
 
 Install a durable runtime payload outside your git checkout, then link commands from `~/bin`.
 
+Typical first-time install:
+
+```bash
+git clone https://github.com/unixwzrd/LLM-Ops-Kit.git ~/projects/LLM-Ops-Kit
+cd ~/projects/LLM-Ops-Kit
+./scripts/install-runtime --source "$PWD"
+```
+
 ```bash
 ~/bin/install-runtime [--source <repo-path>] [--prefix <install-base>] [--bin-dir <bin-dir>] [--state-file <path>] [--no-links]
 ```

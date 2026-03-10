@@ -39,6 +39,30 @@ load_shell_env() {
       . "$f"
     fi
   done
+  maybe_load_seckit_env
+}
+
+maybe_load_seckit_env() {
+  local enabled bin service account export_cmd
+  enabled="${LLMOPS_USE_SECKIT:-0}"
+  [[ "$enabled" == "1" ]] || return 0
+
+  bin="${LLMOPS_SECKIT_BIN:-seckit}"
+  service="${LLMOPS_SECKIT_SERVICE:-openclaw}"
+  account="${LLMOPS_SECKIT_ACCOUNT:-default}"
+
+  if ! command -v "$bin" >/dev/null 2>&1; then
+    echo "warning: Secrets Kit enabled but '$bin' is not available; skipping secret export" >&2
+    return 0
+  fi
+
+  if ! export_cmd="$("$bin" export --format shell --service "$service" --account "$account" --all 2>&1)"; then
+    echo "warning: Secrets Kit export failed for service=$service account=$account; skipping secret export" >&2
+    echo "$export_cmd" >&2
+    return 0
+  fi
+  [[ -n "$export_cmd" ]] || return 0
+  eval "$export_cmd"
 }
 
 runtime_mode() {

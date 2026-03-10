@@ -19,6 +19,18 @@
 
 See `docs/CONFIGURATION.md` for environment overrides before first run.
 
+## First-Time Install
+
+Clone the repo first, then install the runtime from that checkout:
+
+```bash
+git clone https://github.com/unixwzrd/LLM-Ops-Kit.git ~/projects/LLM-Ops-Kit
+cd ~/projects/LLM-Ops-Kit
+./scripts/install-runtime --source "$PWD"
+```
+
+After that, use the linked commands in `~/bin`.
+
 ## Remote Models, Local Gateway
 
 Use this when OpenClaw, `gateway`, `model-proxy`, and `tts-bridge` run locally, while the LLM, embeddings, and MLX TTS run on a remote model host.
@@ -36,7 +48,7 @@ export TTS_BRIDGE_UPSTREAM_BASE=http://<remote-model-host>:11439/v1
 ```
 
 ```bash
-~/bin/install-runtime --source ~/projects/LLM-Ops-Kit
+cd ~/projects/LLM-Ops-Kit
 ~/bin/gateway start
 ~/bin/model-proxy restart --upstream http://<remote-model-host>:11434
 ~/bin/tts-bridge start
@@ -48,6 +60,18 @@ What `install-runtime` does:
 - writes runtime state to `~/.llm-ops/runtime-state.env`
 - deploys command links into `~/bin`
 
+Optional `Secrets Kit` setup:
+
+```bash
+cat >> ~/.llm-ops/config.env <<'EOF'
+LLMOPS_USE_SECKIT=1
+LLMOPS_SECKIT_SERVICE=openclaw
+LLMOPS_SECKIT_ACCOUNT=miafour
+EOF
+```
+
+When enabled, wrappers such as `gateway`, `model-proxy`, and `tts-bridge` will import secret values from `seckit` automatically during startup.
+
 ## Fully Local Models and Gateway
 
 Use this when the LLM, embeddings, MLX TTS server, and OpenClaw all run on the same host.
@@ -56,7 +80,7 @@ Use this when the LLM, embeddings, MLX TTS server, and OpenClaw all run on the s
 - If you do not need protocol adaptation or tap logging, start the model servers directly and skip the bridge/proxy wrappers.
 
 ```bash
-~/bin/install-runtime --source ~/projects/LLM-Ops-Kit
+cd ~/projects/LLM-Ops-Kit
 ~/bin/Qwen3.5 start
 ~/bin/BGEen start
 # Optional:
@@ -70,6 +94,7 @@ The installed runtime still lives under `~/.llm-ops/current`; `~/bin` only conta
 ## Remote sync + deploy
 
 ```bash
+cd ~/projects/LLM-Ops-Kit
 ~/bin/sync-ops-scripts --delete
 ```
 

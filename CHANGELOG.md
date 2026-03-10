@@ -8,6 +8,23 @@ All notable changes to LLM-Ops-Kit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### 2026-03-10 — Optional Secrets Kit runtime loading
+
+- **Scope:** `LLM-Ops-Kit/scripts/lib/common.sh`, `LLM-Ops-Kit/docs/CONFIGURATION.md`, `LLM-Ops-Kit/docs/QUICKSTART.md`
+- **Category:** `security`, `configuration`, `runtime`
+- **What changed:**
+  - Added optional `seckit` integration at the shared runtime env-loader layer.
+  - New supported knobs:
+    - `LLMOPS_USE_SECKIT=1`
+    - `LLMOPS_SECKIT_BIN`
+    - `LLMOPS_SECKIT_SERVICE`
+    - `LLMOPS_SECKIT_ACCOUNT`
+  - When enabled, wrappers now import secret values from `seckit export --format shell --service ... --account ... --all` during startup.
+  - Documented the supported flow for keeping API secrets in `seckit` while leaving non-secret host, port, and path values in `~/.llm-ops/config.env`.
+- **Why:**
+  - Make `Secrets Kit` usable across `gateway`, `model-proxy`, and `tts-bridge` without requiring manual `eval` in the caller shell.
+  - Keep secret management optional and runtime-scoped instead of forcing a new prerequisite.
+
 ### 2026-03-10 — TTS bridge client-disconnect handling
 
 - **Scope:** `LLM-Ops-Kit/scripts/tts_bridge_server.py`

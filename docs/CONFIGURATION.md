@@ -83,6 +83,10 @@ Note:
 - `TTS_BRIDGE_REF_AUDIO`: default reference audio file.
 - `TTS_BRIDGE_REF_TEXT`: default reference transcript file (or literal text if passed directly).
 - `TTS_BRIDGE_PYTHON_BIN`: python binary used by bridge launcher.
+- `LLMOPS_USE_SECKIT`: set to `1` to load secrets from `seckit` during wrapper startup.
+- `LLMOPS_SECKIT_BIN`: optional `seckit` binary path or command name (default `seckit`).
+- `LLMOPS_SECKIT_SERVICE`: `seckit` service namespace used during export (default `openclaw`).
+- `LLMOPS_SECKIT_ACCOUNT`: `seckit` account namespace used during export (default `default`).
 - `LLMOPS_LOG_ROTATE_BYTES`: rotate active logs after this many bytes.
 - `LLMOPS_LOG_ROTATE_KEEP`: number of rotated logs to keep per active log.
 - `LLMOPS_LOG_ROTATE_MAX_AGE_DAYS`: optional max age for rotated logs.
@@ -139,36 +143,40 @@ export MODEL_PROXY_LISTEN_PORT="<listen-port>"
 
 ## Optional: Secrets Kit Integration
 
-If you do not want sensitive values in `.env` files, use `seckit` and export values into the runtime shell.
+If you do not want sensitive values in `.env` files, use `seckit` and let the shared LLM-Ops-Kit runtime loader import those values during startup.
 
 Project:
 
-- `seckit` (set to your canonical repo URL once published)
-- Example URL: `https://github.com/unixwzrd/seckit`
+- `seckit` from `Secrets-Kit`
+- Example URL: `https://github.com/unixwzrd/Secrets-Kit`
 
 Example flow:
 
 ```bash
 # 1) Install (example from GitHub)
-python -m pip install "git+https://github.com/unixwzrd/seckit.git"
+python -m pip install "git+https://github.com/unixwzrd/Secrets-Kit.git"
 
-# 2) Store values
-seckit set --name LLMOPS_UPSTREAM_HOST --value <example-upstream-host> --service openclaw --account default
-seckit set --name LLMOPS_UPSTREAM_PORT --value 11434 --service openclaw --account default
-seckit set --name MODEL_PROXY_LISTEN_HOST --value 127.0.0.1 --service openclaw --account default
-seckit set --name MODEL_PROXY_LISTEN_PORT --value 11434 --service openclaw --account default
+# 2) Store secret values
+echo 'sk-example' | seckit set --name OPENAI_API_KEY --stdin --kind api_key --service openclaw --account miafour
+echo 'el-example' | seckit set --name ELEVENLABS_API_KEY --stdin --kind api_key --service openclaw --account miafour
 
-# 3) Export at runtime
-eval "$(seckit export --format shell --service openclaw --account default)"
+# 3) Tell LLM-Ops-Kit to load them during startup
+cat >> ~/.llm-ops/config.env <<'EOF'
+LLMOPS_USE_SECKIT=1
+LLMOPS_SECKIT_SERVICE=openclaw
+LLMOPS_SECKIT_ACCOUNT=miafour
+EOF
 
-# 4) Start stack with exported settings
+# 4) Start stack normally
 ~/bin/openclaw-stack restart all
 ```
 
 Notes:
 
-- Keep `.env` for non-sensitive defaults and local convenience.
-- Keep tokens/secrets in `seckit` only.
+- Keep non-secret host, port, and path settings in `~/.llm-ops/config.env`.
+- Keep tokens and API secrets in `seckit`.
+- When enabled, the shared runtime loader imports `seckit` exports before `gateway`, `model-proxy`, `tts-bridge`, and related wrappers start.
+- If `seckit` is missing or export fails, wrappers log a warning and continue without imported secrets.
 
 ## Bootstrapping
 
