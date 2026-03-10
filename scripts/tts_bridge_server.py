@@ -87,13 +87,30 @@ def _normalize_custom_voice(voice: str) -> str:
 class BridgeHandler(BaseHTTPRequestHandler):
     server_version = "tts-bridge/1.0"
 
+    def _client_gone(self, exc: BaseException) -> bool:
+        return isinstance(exc, (BrokenPipeError, ConnectionResetError))
+
+    def _write_bytes(self, payload: bytes) -> bool:
+        try:
+            self.wfile.write(payload)
+            return True
+        except Exception as exc:  # noqa: BLE001
+            if self._client_gone(exc):
+                return False
+            raise
+
     def _json(self, code: int, obj: dict[str, Any]) -> None:
         payload = json.dumps(obj).encode("utf-8")
-        self.send_response(code)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(payload)))
-        self.end_headers()
-        self.wfile.write(payload)
+        try:
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+        except Exception as exc:  # noqa: BLE001
+            if self._client_gone(exc):
+                return
+            raise
+        self._write_bytes(payload)
 
     def do_GET(self) -> None:  # noqa: N802
         if self.path in ("/health", "/v1/health"):
@@ -188,22 +205,34 @@ class BridgeHandler(BaseHTTPRequestHandler):
         try:
             with request.urlopen(req, timeout=cfg["timeout_seconds"]) as resp:  # noqa: S310
                 response_body = resp.read()
-                self.send_response(resp.status)
-                self.send_header("Content-Type", _content_type_for_format(response_format))
-                self.send_header("Content-Length", str(len(response_body)))
-                if downgraded_from:
-                    self.send_header("X-TTS-Bridge-Requested-Format", downgraded_from)
-                    self.send_header("X-TTS-Bridge-Delivered-Format", response_format)
-                self.end_headers()
-                self.wfile.write(response_body)
+                try:
+                    self.send_response(resp.status)
+                    self.send_header("Content-Type", _content_type_for_format(response_format))
+                    self.send_header("Content-Length", str(len(response_body)))
+                    if downgraded_from:
+                        self.send_header("X-TTS-Bridge-Requested-Format", downgraded_from)
+                        self.send_header("X-TTS-Bridge-Delivered-Format", response_format)
+                    self.end_headers()
+                except Exception as exc:  # noqa: BLE001
+                    if self._client_gone(exc):
+                        return
+                    raise
+                self._write_bytes(response_body)
         except error.HTTPError as exc:
             err_body = exc.read()
-            self.send_response(exc.code)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(err_body)))
-            self.end_headers()
-            self.wfile.write(err_body)
+            try:
+                self.send_response(exc.code)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(err_body)))
+                self.end_headers()
+            except Exception as write_exc:  # noqa: BLE001
+                if self._client_gone(write_exc):
+                    return
+                raise
+            self._write_bytes(err_body)
         except Exception as exc:  # noqa: BLE001
+            if self._client_gone(exc):
+                return
             self._json(502, {"error": f"upstream_error: {exc}"})
 
     def log_message(self, fmt: str, *args: Any) -> None:

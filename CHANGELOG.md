@@ -8,7 +8,18 @@ All notable changes to LLM-Ops-Kit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-### 2026-03-08 — Installed-runtime default + CustomVoice bridge fix + retention controls
+### 2026-03-10 — TTS bridge client-disconnect handling
+
+- **Scope:** `LLM-Ops-Kit/scripts/tts_bridge_server.py`
+- **Category:** `tts`, `runtime`, `stability`
+- **What changed:**
+  - Hardened `tts-bridge` response handling for client disconnects during `/v1/audio/speech`
+  - Treats `BrokenPipeError` and `ConnectionResetError` as normal disconnects instead of trying to emit a second fallback response
+  - Reduces noisy traceback spam when OpenClaw abandons an in-flight TTS request and closes the socket early
+- **Why:**
+  - Keep bridge logs focused on real upstream failures instead of secondary disconnect noise from already-closed client connections.
+
+### 2026-03-09 — Installed-runtime default + CustomVoice bridge fix + retention controls
 
 - **Scope:** `LLM-Ops-Kit/scripts`, `LLM-Ops-Kit/docs`, `LLM-Ops-Kit/README.md`, `LLM-Ops-Kit/CHANGELOG.md`
 - **Category:** `runtime`, `tts`, `deployment`, `maintenance`, `documentation`
