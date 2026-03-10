@@ -14,6 +14,7 @@ Operational toolkit for running, deploying, and maintaining a local OpenClaw sta
   - [Why This Repo Exists](#why-this-repo-exists)
   - [Requirements](#requirements)
   - [Recommended Models](#recommended-models)
+    - [Notes:](#notes)
   - [MLX Audio TTS API (Voice Clone)](#mlx-audio-tts-api-voice-clone)
   - [Quick Start](#quick-start)
   - [Runtime Command Surface](#runtime-command-surface)
@@ -48,6 +49,7 @@ This repo is intentionally focused on **operations and reproducibility**, not ra
 - OpenClaw installed and configured on the host
 - `llama.cpp` server binary available at `/usr/local/bin/llama-server` (project: <https://github.com/ggml-org/llama.cpp>)
 - `mlx-audio` installed for local TTS server (`python -m mlx_audio.server`) (project: <https://github.com/Blaizzy/mlx-audio>)
+  - See [Notes:](#notes) on PR for OpenAI API compatability and better voice cloning.
 - Optional but recommended for secret handling: `seckit` (example repo: <https://github.com/unixwzrd/seckit>)
 - Bash scripts use `#!/usr/bin/env bash`
 - Compatibility target: Bash 3.2+ (macOS system bash), Bash 5+ recommended
@@ -65,7 +67,7 @@ These are the profiles currently documented and validated in this toolkit:
 - Optional larger TTS model: `mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit`
   - <https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit>
 
-Notes:
+### Notes:
 
 - `Qwen3TTS` profile defaults point to the 0.6B CustomVoice model for lower memory use.
 - Voice cloning with `CustomVoice` depends on the upstream `mlx-audio` path honoring clone refs when `ref_audio` and `ref_text` are present.
