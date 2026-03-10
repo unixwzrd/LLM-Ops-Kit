@@ -6,7 +6,7 @@
 
 Operational toolkit for running, deploying, and maintaining a local OpenClaw stack across hosts.
 
-![LLM Ops Kit](/docs/images/LLM-Ops-Kit-Banner.png)
+![LLM Ops Kit](docs/images/LLM-OPS-Kit-banner.png)
 
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-informational)](#) [![Shell](https://img.shields.io/badge/Shell-bash-blue)](#) [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
