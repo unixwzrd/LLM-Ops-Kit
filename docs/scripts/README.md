@@ -1,9 +1,13 @@
 # Script Guides
 
 **Created**: 2026-02-26
-**Updated**: 2026-03-03
+**Updated**: 2026-03-09
 
 Mini-manpages for key operator commands.
+
+For the broader operator docs map, start with:
+
+- [`../README.md`](../README.md)
 
 - [`gateway.md`](./gateway.md)
 - [`model-proxy.md`](./model-proxy.md)

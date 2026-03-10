@@ -1,7 +1,7 @@
 # MLX Audio TTS Guide
 
 **Created**: 2026-03-02  
-**Updated**: 2026-03-03
+**Updated**: 2026-03-09
 
 - [MLX Audio TTS Guide](#mlx-audio-tts-guide)
   - [Purpose](#purpose)
@@ -10,6 +10,7 @@
   - [Start the TTS Server](#start-the-tts-server)
   - [API Smoke Test](#api-smoke-test)
   - [Bridge for OpenClaw TTS](#bridge-for-openclaw-tts)
+  - [Bridge Configuration](#bridge-configuration)
   - [Voice Clone Workflow](#voice-clone-workflow)
   - [Best Practices for Clone Samples](#best-practices-for-clone-samples)
   - [Known Packaging Gotchas](#known-packaging-gotchas)
@@ -30,6 +31,12 @@ Upstream links:
 
 - MLX Audio: <https://github.com/Blaizzy/mlx-audio>
 - Qwen3-TTS 0.6B CustomVoice (MLX): <https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit>
+
+Temporary compatibility note:
+
+- Until upstream `mlx-audio` PR `#558` merges, the validated source for this deployment is:
+  - <https://github.com/unixwzrd/mlx-audio>
+  - upstream PR: <https://github.com/Blaizzy/mlx-audio/pull/558>
 
 ## Model Recommendation
 
@@ -88,8 +95,8 @@ Use `tts-bridge` so OpenClaw can keep using OpenAI-style TTS requests while your
 
 Important `CustomVoice` note:
 
-- Current `mlx_audio` `CustomVoice` requests require `voice`, even when `ref_audio` and `ref_text` are present.
-- The bridge keeps clone refs and injects `voice` from the incoming request or `TTS_BRIDGE_VOICE`.
+- The validated clone path for this deployment uses a `CustomVoice` model together with clone refs.
+- `tts-bridge` forwards `model`, `voice`, `ref_audio`, and `ref_text`, while the upstream `mlx-audio` server resolves `ref_text` from a server-side path and routes clone-ref requests through the ICL path.
 - Unsupported response formats such as `opus` and `ogg` are normalized to `wav`.
 
 Operationally, this behaves like `model-proxy`: start/stop/restart/status via a wrapper script with PID and log tracking.
@@ -129,6 +136,43 @@ And set provider in `~/.openclaw/openclaw.json`:
 
 Treat the `11440` value above as an example only. Use whatever local bridge port you configured in `~/.llm-ops/config.env`.
 
+## Bridge Configuration
+
+For normal installed-runtime operation, configure `tts-bridge` in:
+
+- `~/.llm-ops/config.env`
+
+The main bridge settings are:
+
+- `TTS_BRIDGE_HOST`
+- `TTS_BRIDGE_PORT`
+- `TTS_BRIDGE_UPSTREAM_BASE`
+- `TTS_BRIDGE_MODEL`
+- `TTS_BRIDGE_VOICE`
+- `TTS_BRIDGE_REF_AUDIO`
+- `TTS_BRIDGE_REF_TEXT`
+- `TTS_BRIDGE_PYTHON_BIN`
+
+Example:
+
+```bash
+export TTS_BRIDGE_HOST=127.0.0.1
+export TTS_BRIDGE_PORT=11439
+export TTS_BRIDGE_UPSTREAM_BASE=http://10.0.0.67:11439/v1
+export TTS_BRIDGE_MODEL=$HOME/LLM_Repository/TTS/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit
+export TTS_BRIDGE_VOICE=serena
+export TTS_BRIDGE_REF_AUDIO=$HOME/LLM_Repository/TTS/Samples/Mia-Faith-Sample.wav
+export TTS_BRIDGE_REF_TEXT="${TTS_BRIDGE_REF_AUDIO%.wav}.txt"
+```
+
+OpenClaw itself still points at the local bridge through:
+
+- `OPENAI_TTS_BASE_URL` in `~/.openclaw/.env`
+
+For command-level details, see:
+
+- [`docs/scripts/tts-bridge.md`](./scripts/tts-bridge.md)
+
 ## Voice Clone Workflow
 
 Use a `.wav` and a matching transcript `.txt` with the same basename:
@@ -160,7 +204,7 @@ curl -sS http://10.0.0.67:11439/v1/audio/speech \
 
 For this deployment, `ref_audio` and `ref_text` are server-side paths on the MLX host. Do not inline the transcript text into the JSON payload.
 
-Supported speaker names for the current Qwen3TTS CustomVoice setup:
+For the current MLX build, these are the predefined speaker names reported for speaker-mode requests:
 
 - `serena`
 - `vivian`
@@ -203,8 +247,8 @@ If you maintain a local fork/clone of `mlx-audio`, update its `pyproject.toml` s
 If `/v1/audio/speech` returns 500:
 
 - Confirm model path exists and is readable.
-- Confirm the model is a `CustomVoice` model when using `ref_audio`.
-- Confirm transcript file is non-empty and matches the sample.
+- Confirm the model is a `CustomVoice` model when using clone refs in this deployment.
+- Confirm the transcript file exists on the MLX host, is non-empty, and matches the sample.
 - Check server log:
   - `~/.openclaw/logs/tts-server-Qwen3TTS.log`
 

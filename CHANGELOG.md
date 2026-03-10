@@ -1,7 +1,7 @@
 # Agent Ops Changelog
 
 **Created**: 2026-02-20
-**Updated**: 2026-03-08
+**Updated**: 2026-03-09
 
 All notable changes to LLM-Ops-Kit will be documented in this file.
 
@@ -15,13 +15,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **What changed:**
   - Fixed `tts-bridge` compatibility for `mlx_audio` `CustomVoice` models:
     - detect `CustomVoice` from the effective model id
-    - always send `voice` for `CustomVoice`
-    - keep forwarding `ref_audio` and `ref_text`
-    - fail fast in the bridge with a clear compatibility error if no usable `voice` is available
+    - keep forwarding `model`, `voice`, `ref_audio`, and `ref_text`
+    - use server-side clone reference paths in the validated deployment flow
     - keep normalizing unsupported formats such as `opus` and `ogg` to `wav`
   - Expanded bridge observability:
     - `/health` reports effective defaults and compatibility fallbacks
     - `tts-bridge status` now prints runtime mode, runtime root, and retention policy
+  - Validated end-to-end `CustomVoice` cloning against the upstream `mlx-audio` fix that:
+    - resolves `ref_text` from a server-side path
+    - prefers the ICL clone path when clone refs are present
+    - is currently available in `unixwzrd/mlx-audio` until upstream PR `#558` merges
   - Decoupled runtime asset resolution from the source checkout:
     - `LLMOPS_ROOT` now resolves to the actual runtime root, not `scripts/`
     - `Qwen3` and `Qwen3.5` templates now resolve from the runtime root
@@ -41,7 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `CustomVoice` bridge requirements
     - retention settings and maintenance command
 - **Why:**
-  - Stop `tts-bridge` from passing invalid `CustomVoice` requests upstream and crashing `mlx_audio`.
+  - Keep the bridge/OpenClaw TTS path stable while validating the final working `CustomVoice` clone flow against the upstream `mlx-audio` fix.
   - Make the installed runtime self-contained so removing or moving the source checkout does not break normal operations.
   - Prevent silent disk growth from logs and install backups.
 

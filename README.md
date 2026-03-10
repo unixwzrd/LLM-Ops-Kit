@@ -1,12 +1,12 @@
 # LLM-Ops-Kit
 
 **Created**: 2026-02-20
-**Updated**: 2026-03-08
+**Updated**: 2026-03-09
 
 
 Operational toolkit for running, deploying, and maintaining a local OpenClaw stack across hosts.
 
-![OpenClaw Ops Kit](docs/images/OpenClaw-Ops-Kit-Banner.png)
+![LLM Ops Kit](docs/images/LLM-Ops-Kit-Banner.png)
 
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-informational)](#) [![Shell](https://img.shields.io/badge/Shell-bash-blue)](#) [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
@@ -68,7 +68,11 @@ These are the profiles currently documented and validated in this toolkit:
 Notes:
 
 - `Qwen3TTS` profile defaults point to the 0.6B CustomVoice model for lower memory use.
-- `mlx_audio` `CustomVoice` currently requires `voice` even when clone refs are present; `tts-bridge` handles that compatibility requirement.
+- Voice cloning with `CustomVoice` depends on the upstream `mlx-audio` path honoring clone refs when `ref_audio` and `ref_text` are present.
+- In this deployment, `tts-bridge` forwards server-side clone reference paths and keeps the OpenAI-style TTS surface stable for OpenClaw.
+- Until upstream `mlx-audio` PR `#558` merges, the validated source for this deployment is:
+  - <https://github.com/unixwzrd/mlx-audio>
+  - upstream PR: <https://github.com/Blaizzy/mlx-audio/pull/558>
 - For Qwen3.5 LLM profile details and overrides, see `scripts/models/Qwen3.5.sh`.
 - For TTS profile defaults and host/port, see `scripts/models/Qwen3TTS.sh`.
 
@@ -109,9 +113,10 @@ The `10.0.0.67:11439` endpoint above is a direct `mlx_audio.server` example for 
 Bridge compatibility notes:
 
 - `tts-bridge` keeps OpenClaw on an OpenAI-compatible TTS surface while translating MLX-specific defaults.
-- For `CustomVoice` models it must send `voice` plus clone refs.
+- In this deployment, `ref_audio` and `ref_text` are sent as server-side paths on the MLX host.
+- The validated end-to-end clone path depends on the upstream `mlx-audio` fix that resolves `ref_text` server-side and prefers the ICL clone path when clone refs are present.
 - Unsupported request formats such as `opus` and `ogg` are normalized to `wav`.
-- Supported speaker names for the current Qwen3TTS CustomVoice setup are:
+- The current MLX build reports these predefined speaker names for non-clone speaker-mode requests:
   - `serena`, `vivian`, `uncle_fu`, `ryan`, `aiden`, `ono_anna`, `sohee`, `eric`, `dylan`
 
 ## Quick Start

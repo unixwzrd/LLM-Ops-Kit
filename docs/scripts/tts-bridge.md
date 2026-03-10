@@ -1,9 +1,9 @@
 # tts-bridge
 
 **Created**: 2026-03-03
-**Updated**: 2026-03-08
+**Updated**: 2026-03-09
 
-Run a local OpenAI-compatible TTS bridge that forwards to your MLX Audio server and injects a configured voice clone payload (`model`, `voice`, `ref_audio`, `ref_text`). For `CustomVoice` models, the bridge must send `voice` as well as clone refs.
+Run a local OpenAI-compatible TTS bridge that forwards to your MLX Audio server and injects a configured voice clone payload (`model`, `voice`, `ref_audio`, `ref_text`).
 
 ```bash
 ~/bin/tts-bridge [start|stop|restart|status]
@@ -55,7 +55,8 @@ Status output:
 Compatibility notes:
 
 - Unsupported OpenAI-style output formats such as `opus` and `ogg` are normalized to `wav` before forwarding to MLX Audio.
-- `mlx_audio` `CustomVoice` currently requires `voice` even when `ref_audio` and `ref_text` are present. The bridge enforces that requirement early and returns a clear bridge-side error if no usable `voice` is available.
+- In this deployment, the bridge forwards `ref_audio` and `ref_text` as server-side paths on the MLX host.
+- Correct cloning with `CustomVoice` depends on the upstream `mlx-audio` path resolving `ref_text` server-side and preferring the ICL clone path when clone refs are present.
 
 OpenClaw wiring:
 
