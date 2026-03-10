@@ -212,9 +212,7 @@ A future optional path is to add `pyproject.toml` and package wrappers for insta
 ## Documentation Map
 
 - [DEPLOYMENT_SYNC_RUNBOOK](docs/DEPLOYMENT_SYNC_RUNBOOK.md) — sync/deploy/verify workflow
-- [OPERATIONAL_WORKFLOW_PHASE1](docs/OPERATIONAL_WORKFLOW_PHASE1.md) — day-to-day operating workflow
 - [PROXY_TAP_RUNBOOK](docs/PROXY_TAP_RUNBOOK.md) — proxy request/response visibility + jq recipes
-- [CONTEXT_ARCHITECTURE_PLAN](docs/CONTEXT_ARCHITECTURE_PLAN.md) — context routing/system design
 - [CHANGELOG](CHANGELOG.md) — chronological operational changes
 - [QUICKSTART](docs/QUICKSTART.md) — fast path setup and startup
 - [CONFIGURATION](docs/CONFIGURATION.md) — environment overrides, host/path defaults, and optional `seckit` runtime export workflow
@@ -222,6 +220,7 @@ A future optional path is to add `pyproject.toml` and package wrappers for insta
 - [TROUBLESHOOTING](docs/TROUBLESHOOTING.md) — symptom-driven fixes
 - [ARCHITECTURE](docs/ARCHITECTURE.md) — component and runtime flow overview
 - [GLOSSARY](docs/GLOSSARY.md) — core terms used across docs
+- [Documentation Index](docs/README.md) — full operator-facing docs map
 - [SAFE_PUBLISH_CHECKLIST](docs/internal/SAFE_PUBLISH_CHECKLIST.md) — canonical pre-publish safety checks (internal)
 - [Scripts README](docs/scripts/README.md) — per-command script guides
 - [`docs/scripts/tts-bridge.md`](docs/scripts/tts-bridge.md) — bridge behavior, CustomVoice compatibility, and status fields

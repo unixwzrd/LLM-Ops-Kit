@@ -1,7 +1,7 @@
 # Quickstart (10 Minutes)
 
 **Created**: 2026-02-26
-**Updated**: 2026-03-08
+**Updated**: 2026-03-10
 
 - [Quickstart (10 Minutes)](#quickstart-10-minutes)
   - [Requirements](#requirements)
@@ -42,6 +42,12 @@ export TTS_BRIDGE_UPSTREAM_BASE=http://<remote-model-host>:11439/v1
 ~/bin/tts-bridge start
 ```
 
+What `install-runtime` does:
+
+- copies the runtime payload into `~/.llm-ops/current`
+- writes runtime state to `~/.llm-ops/runtime-state.env`
+- deploys command links into `~/bin`
+
 ## Fully Local Models and Gateway
 
 Use this when the LLM, embeddings, MLX TTS server, and OpenClaw all run on the same host.
@@ -58,6 +64,8 @@ Use this when the LLM, embeddings, MLX TTS server, and OpenClaw all run on the s
 # ~/bin/model-proxy restart --listen-port 11440 --upstream http://127.0.0.1:11434
 # ~/bin/tts-bridge start
 ```
+
+The installed runtime still lives under `~/.llm-ops/current`; `~/bin` only contains links to that installed payload.
 
 ## Remote sync + deploy
 

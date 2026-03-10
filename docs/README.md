@@ -29,12 +29,13 @@ Entry point for the main operator docs in `LLM-Ops-Kit`.
 ## Reference
 
 - [`GLOSSARY.md`](./GLOSSARY.md) — terms used across the repo
-- [`CONTEXT_ARCHITECTURE_PLAN.md`](./CONTEXT_ARCHITECTURE_PLAN.md) — context routing and system design
 
 ## Internal
 
 Internal planning and release notes live under:
 
 - `docs/internal/`
+
+That includes workflow, layout, and context-planning documents that are useful for maintainers but not required for normal runtime operation.
 
 Those files are useful for maintainers but are not required for runtime operation.
