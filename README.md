@@ -47,6 +47,8 @@ This repo is intentionally focused on **operations and reproducibility**, not ra
 ## Requirements
 
 - OpenClaw installed and configured on the host
+- Python 3.9+
+- Python package: `jinja2` for prompt/template rendering and `model-proxy` prompt diagnostics
 - `llama.cpp` server binary available at `/usr/local/bin/llama-server` (project: <https://github.com/ggml-org/llama.cpp>)
 - `mlx-audio` installed for local TTS server (`python -m mlx_audio.server`) (project: <https://github.com/Blaizzy/mlx-audio>)
   - See [Notes:](#notes) on PR for OpenAI API compatability and better voice cloning.
@@ -54,7 +56,15 @@ This repo is intentionally focused on **operations and reproducibility**, not ra
 - Bash scripts use `#!/usr/bin/env bash`
 - Compatibility target: Bash 3.2+ (macOS system bash), Bash 5+ recommended
 - Standard CLI tools: `ssh`, `rsync`, `jq`, `sed`, `awk`, `perl`
-- Python helper scripts use `#!/usr/bin/env python` and require Python 3.9+
+- Python helper scripts use `#!/usr/bin/env python`
+
+Minimal Python bootstrap for the toolkit-side helpers:
+
+```bash
+python3 -m pip install jinja2
+```
+
+If you plan to run local TTS through MLX Audio, also install `mlx-audio` and its documented dependencies on the model host.
 
 ## Recommended Models
 

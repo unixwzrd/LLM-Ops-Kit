@@ -36,6 +36,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Why:**
   - Keep bridge logs focused on real upstream failures instead of secondary disconnect noise from already-closed client connections.
 
+### 2026-03-10 — Install flow and docs cleanup
+
+- **Scope:** `LLM-Ops-Kit/README.md`, `LLM-Ops-Kit/docs/QUICKSTART.md`, `LLM-Ops-Kit/docs/scripts/install-runtime.md`, `LLM-Ops-Kit/docs/internal/`, `LLM-Ops-Kit/scripts/runtime-links.manifest`
+- **Category:** `documentation`, `installation`, `hygiene`
+- **What changed:**
+  - Clarified the first-time install path so public docs now start from:
+    - `git clone`
+    - `cd` into the repo
+    - `./scripts/install-runtime --source "$PWD"`
+  - Corrected the runtime layout description so docs and manifest language match the real installed-runtime behavior under `~/.llm-ops/current` with links in `~/bin`.
+  - Added explicit Python helper dependency guidance for `jinja2`.
+  - Kept `mlx-audio` called out as a separate requirement for the MLX TTS path.
+  - Trimmed public docs by moving planning/layout material under `docs/internal/`.
+- **Why:**
+  - Make the public install story match the way the toolkit is actually deployed and used.
+  - Reduce confusion around runtime layout, Python helper requirements, and what belongs in public docs versus internal operator notes.
+
 ### 2026-03-09 — Installed-runtime default + CustomVoice bridge fix + retention controls
 
 - **Scope:** `LLM-Ops-Kit/scripts`, `LLM-Ops-Kit/docs`, `LLM-Ops-Kit/README.md`, `LLM-Ops-Kit/CHANGELOG.md`

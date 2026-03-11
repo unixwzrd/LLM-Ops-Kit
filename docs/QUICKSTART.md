@@ -13,11 +13,19 @@
 ## Requirements
 
 - OpenClaw installed
+- Python 3.9+ with `jinja2` available for prompt/template helpers
 - `llama-server` at `/usr/local/bin/llama-server`
+- `mlx-audio` installed on the TTS host if you are using the MLX TTS path
 - Bash 4+ available as `/usr/local/bin/bash` on remote hosts
 - `ssh`, `rsync`, `jq`
 
 See `docs/CONFIGURATION.md` for environment overrides before first run.
+
+Minimal Python bootstrap:
+
+```bash
+python3 -m pip install jinja2
+```
 
 ## First-Time Install
 
