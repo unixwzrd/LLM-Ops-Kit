@@ -20,8 +20,8 @@ LISTEN_HOST="${TTS_BRIDGE_HOST:-127.0.0.1}"
 LISTEN_PORT="${TTS_BRIDGE_PORT:-11440}"
 UPSTREAM_BASE="${TTS_BRIDGE_UPSTREAM_BASE:-}"
 MODEL_PATH="${TTS_BRIDGE_MODEL:-$HOME/LLM_Repository/TTS/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit}"
-REF_AUDIO="${TTS_BRIDGE_REF_AUDIO:-$HOME/LLM_Repository/TTS/Samples/Mia-Faith-Prof-Emotive-60s-Sample-Mastered-01.wav}"
-REF_TEXT="${TTS_BRIDGE_REF_TEXT:-$HOME/LLM_Repository/TTS/Samples/Mia-Faith-Prof-Emotive-60s-Sample-Mastered-01.txt}"
+REF_AUDIO="${TTS_BRIDGE_REF_AUDIO:-}"
+REF_TEXT="${TTS_BRIDGE_REF_TEXT:-${REF_AUDIO%.wav}.txt}"
 PY_BIN="${TTS_BRIDGE_PYTHON_BIN:-python}"
 
 pid_name="tts-bridge"
@@ -38,8 +38,8 @@ Env overrides:
   TTS_BRIDGE_MODEL            (default: Qwen3-TTS local path)
   TTS_BRIDGE_VOICE            (ignored by wrapper; bridge code selects/normalizes the effective voice)
   TTS_BRIDGE_PREFER_INCOMING_VOICE (default: 0; set 1 to honor incoming voice)
-  TTS_BRIDGE_REF_AUDIO        (default: Mia-Faith 60s wav)
-  TTS_BRIDGE_REF_TEXT         (default: matching .txt transcript)
+  TTS_BRIDGE_REF_AUDIO        (required; used as the source for transcript derivation)
+  TTS_BRIDGE_REF_TEXT         (optional; default is derived from TTS_BRIDGE_REF_AUDIO)
   TTS_BRIDGE_PYTHON_BIN       (default: python)
 EOF
 }
@@ -143,6 +143,14 @@ start_bridge() {
       "tts-bridge: missing TTS_BRIDGE_UPSTREAM_BASE" \
       TTS_BRIDGE_UPSTREAM_BASE \
       TTS_BRIDGE_PORT
+    return 2
+  fi
+
+  if [[ -z "$REF_AUDIO" ]]; then
+    print_missing_config_hint \
+      "tts-bridge: missing TTS_BRIDGE_REF_AUDIO" \
+      TTS_BRIDGE_REF_AUDIO \
+      TTS_BRIDGE_REF_TEXT
     return 2
   fi
 
