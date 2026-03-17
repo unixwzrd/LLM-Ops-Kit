@@ -22,28 +22,39 @@ load_shell_env() {
   # Do not source interactive shell init files here; they may contain
   # framework hooks (venv managers, prompt tooling) that break non-interactive
   # service wrappers. Load only explicit env files.
-  local files=()
-  if [[ -n "${LLMOPS_ENV_FILE:-}" ]]; then
-    files+=("$LLMOPS_ENV_FILE")
-  fi
-  # Base user env first, then repo defaults, then runtime-local overrides last.
-  # This lets ~/.llm-ops/config.env force service-specific settings without
-  # editing the shared ~/.env file.
-  files+=("$HOME/.env")
-  files+=("$LLMOPS_ROOT/config/hosts.env" "$LLMOPS_ROOT/config/hosts.local.env")
-  files+=("$LLMOPS_HOME/config.env" "$LLMOPS_HOME/hosts.env")
+  local early_files=()
+  local late_files=()
   local f
-  for f in "${files[@]}"; do
+  if [[ -n "${LLMOPS_ENV_FILE:-}" ]]; then
+    early_files+=("$LLMOPS_ENV_FILE")
+  fi
+  # Load toolkit config first so we know whether Secrets-Kit is enabled before
+  # touching placeholder-based ~/.env files.
+  early_files+=("$LLMOPS_ROOT/config/hosts.env" "$LLMOPS_ROOT/config/hosts.local.env")
+  early_files+=("$LLMOPS_HOME/config.env" "$LLMOPS_HOME/hosts.env")
+  for f in "${early_files[@]}"; do
     if [[ -f "$f" ]]; then
       # shellcheck disable=SC1090
       . "$f"
     fi
   done
   maybe_load_seckit_env
+  late_files+=("$HOME/.env")
+  for f in "${late_files[@]}"; do
+    if [[ -f "$f" ]]; then
+      # The user env may now contain self-referential placeholders after
+      # migration to Secrets-Kit. Source it with nounset disabled so existing
+      # exported values from seckit win without tripping set -u.
+      set +u
+      # shellcheck disable=SC1090
+      . "$f"
+      set -u
+    fi
+  done
 }
 
 maybe_load_seckit_env() {
-  local enabled bin service account export_cmd
+  local enabled bin service account export_cmd had_xtrace=0
   enabled="${LLMOPS_USE_SECKIT:-0}"
   [[ "$enabled" == "1" ]] || return 0
 
@@ -62,7 +73,16 @@ maybe_load_seckit_env() {
     return 0
   fi
   [[ -n "$export_cmd" ]] || return 0
+  case "$-" in
+    *x*)
+      had_xtrace=1
+      set +x
+      ;;
+  esac
   eval "$export_cmd"
+  if [[ "$had_xtrace" == "1" ]]; then
+    set -x
+  fi
 }
 
 runtime_mode() {

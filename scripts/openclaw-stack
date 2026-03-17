@@ -18,19 +18,19 @@ start_target() {
   case "$1" in
     gateway) "$SCRIPT_DIR/gateway" start ;;
     llm) "$SCRIPT_DIR/Qwen3" start ;;
-    embedding) "$SCRIPT_DIR/BGEen" start ;;
+    embedding) "$SCRIPT_DIR/BGEm3" start ;;
     tts) "$SCRIPT_DIR/Qwen3TTS" start ;;
     model-proxy) "$SCRIPT_DIR/model-proxy" start ;;
     models)
       "$SCRIPT_DIR/Qwen3" start & p1=$!
-      "$SCRIPT_DIR/BGEen" start & p2=$!
+      "$SCRIPT_DIR/BGEm3" start & p2=$!
       wait "$p1" "$p2"
       ;;
     all)
       "$SCRIPT_DIR/gateway" start
       "$SCRIPT_DIR/model-proxy" start
       "$SCRIPT_DIR/Qwen3" start & p1=$!
-      "$SCRIPT_DIR/BGEen" start & p2=$!
+      "$SCRIPT_DIR/BGEm3" start & p2=$!
       wait "$p1" "$p2"
       ;;
     *) echo "Unknown start target: $1" >&2; exit 2 ;;
@@ -41,17 +41,17 @@ stop_target() {
   case "$1" in
     gateway) "$SCRIPT_DIR/gateway" stop || true ;;
     llm) "$SCRIPT_DIR/Qwen3" stop || true ;;
-    embedding) "$SCRIPT_DIR/BGEen" stop || true ;;
+    embedding) "$SCRIPT_DIR/BGEm3" stop || true ;;
     tts) "$SCRIPT_DIR/Qwen3TTS" stop || true ;;
     model-proxy) "$SCRIPT_DIR/model-proxy" stop || true ;;
     models)
-      "$SCRIPT_DIR/BGEen" stop || true
+      "$SCRIPT_DIR/BGEm3" stop || true
       "$SCRIPT_DIR/Qwen3" stop || true
       ;;
     all)
       "$SCRIPT_DIR/model-proxy" stop || true
       "$SCRIPT_DIR/Qwen3TTS" stop || true
-      "$SCRIPT_DIR/BGEen" stop || true
+      "$SCRIPT_DIR/BGEm3" stop || true
       "$SCRIPT_DIR/Qwen3" stop || true
       "$SCRIPT_DIR/gateway" stop || true
       ;;
@@ -61,7 +61,7 @@ stop_target() {
 
 status_all() {
   ensure_runtime_dirs
-  for name in gateway llama-Qwen3VL llama-bge-small-en tts-Qwen3TTS model-proxy; do
+  for name in gateway llama-Qwen3VL llama-bge-m3 tts-Qwen3TTS model-proxy; do
     if pid="$(read_pid "$name" 2>/dev/null)"; then
       if is_pid_running "$pid"; then
         echo "$name: running pid=$pid"

@@ -16,7 +16,7 @@ For the broader operator docs map, start with:
 - [`runtime-maintenance.md`](./runtime-maintenance.md)
 - [`Qwen3.md`](./Qwen3.md)
 - [`Qwen3.5.md`](./Qwen3.5.md)
-- [`BGEen.md`](./BGEen.md)
+- [`BGEm3.md`](./BGEm3.md)
 - [`openclaw-stack.md`](./openclaw-stack.md)
 - [`sync-ops-scripts.md`](./sync-ops-scripts.md)
 - [`setup-ssh-deploy-key.md`](./setup-ssh-deploy-key.md)

@@ -35,7 +35,7 @@ Operational toolkit for running, deploying, and maintaining a local OpenClaw sta
 `LLM-Ops-Kit` is the operator layer around a local OpenClaw install:
 
 - Unified startup/shutdown/status scripts for gateway, model-proxy, TTS, LLM, and embeddings
-- Model profile management (`Qwen3`, `Qwen3.5`, `BGEen`) via one launcher architecture
+- Model profile management (`Qwen3`, `Qwen3.5`, `BGEm3`) via one launcher architecture
 - Deployment helpers for cross-host sync and runtime link management
 - Installed-runtime defaults under `~/.llm-ops/current`, with repo mode kept for explicit developer workflows
 - Built-in runtime maintenance for log rotation and install-backup retention
@@ -76,6 +76,8 @@ These are the profiles currently documented and validated in this toolkit:
   - <https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit>
 - Optional larger TTS model: `mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit`
   - <https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit>
+- Embeddings: `bge-m3-Q8_0-GGUF/bge-m3-q8_0.gguf`
+  - served by the `BGEm3` profile on port `11435`
 
 ### Notes:
 
@@ -151,7 +153,7 @@ cd ~/projects/LLM-Ops-Kit
 # 5) Start services
 ~/bin/gateway start
 ~/bin/Qwen3 start
-~/bin/BGEen start
+~/bin/BGEm3 start
 ~/bin/model-proxy start
 ```
 
@@ -161,13 +163,14 @@ Installed runtime is the default operating mode. After install, normal operation
 
 ```bash
 ~/bin/gateway [start|stop|restart|status]
+~/bin/gateway logs
 ~/bin/model-proxy [start|stop|restart|status]
 ~/bin/tts [start|stop|restart|status]
 ~/bin/tts-bridge [start|stop|restart|status]
 ~/bin/Qwen3TTS [start|stop|restart|status|settings|verify|test]
 ~/bin/Qwen3 [start|stop|restart|status|settings|verify|test]
 ~/bin/Qwen3.5 [start|stop|restart|status|settings|verify|test]
-~/bin/BGEen [start|stop|restart|status|settings|verify|test]
+~/bin/BGEm3 [start|stop|restart|status|settings|verify|test]
 ~/bin/modelctl list
 ~/bin/modelctl status
 ~/bin/modelctl <ModelProfile> [start|stop|restart|status|settings|verify|test]
@@ -183,6 +186,7 @@ Operational notes:
 - `modelctl settings` now prints `RUNTIME_MODE` and `RUNTIME_ROOT`.
 - `gateway`, `model-proxy`, and `tts-bridge` status now print retention settings.
 - Runtime logs rotate in place and install backups under `~/.llm-ops/backups` are pruned by policy.
+- In the current direct-run gateway mode, use `~/bin/gateway logs` instead of relying on `openclaw logs --follow`.
 
 ## Link Management (Single Source of Truth)
 
@@ -208,7 +212,7 @@ Current profiles:
 
 - `Qwen3` (LLM)
 - `Qwen3.5` (LLM)
-- `BGEen` (embeddings)
+- `BGEm3` (embeddings)
 - `Qwen3TTS` (TTS via MLX Audio server)
 
 The launcher resolves profile defaults and prints active runtime settings with:
@@ -216,7 +220,7 @@ The launcher resolves profile defaults and prints active runtime settings with:
 ```bash
 ~/bin/Qwen3 settings
 ~/bin/Qwen3.5 settings
-~/bin/BGEen settings
+~/bin/BGEm3 settings
 ```
 
 ## Packaging Status

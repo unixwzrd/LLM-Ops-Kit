@@ -82,7 +82,6 @@ fi
 if [[ -f "$INSTALL_DIR/scripts/lib/common.sh" ]]; then
   # shellcheck disable=SC1090
   . "$INSTALL_DIR/scripts/lib/common.sh"
-  load_shell_env
   prune_runtime_backups
 fi
 

@@ -1,7 +1,7 @@
 # Configuration Guide
 
 **Created**: 2026-02-28  
-**Updated**: 2026-03-08
+**Updated**: 2026-03-13
 
 - [Configuration Guide](#configuration-guide)
   - [What This Doc Is For](#what-this-doc-is-for)
@@ -177,6 +177,13 @@ Notes:
 - Keep tokens and API secrets in `seckit`.
 - When enabled, the shared runtime loader imports `seckit` exports before `gateway`, `model-proxy`, `tts-bridge`, and related wrappers start.
 - If `seckit` is missing or export fails, wrappers log a warning and continue without imported secrets.
+- Do not run wrapper startup under `bash -x` / `set -x` when `LLMOPS_USE_SECKIT=1`; shell tracing can expose exported secrets.
+
+Current runtime note:
+
+- `Secrets-Kit` integration is intentionally disabled for live OpenClaw startup on the primary operator machine while the gateway path is being stabilized.
+- The current operational setting is `LLMOPS_USE_SECKIT=0`.
+- `seckit` remains installed for manual use, migration, export, and future re-integration.
 
 ## Bootstrapping
 
@@ -200,3 +207,17 @@ LLMOPS_LOG_ROTATE_KEEP=5
 LLMOPS_BACKUP_KEEP=5
 EOF
 ```
+
+## Direct-Run Gateway Notes
+
+The current known-good startup path on the primary operator machine is the direct-run `gateway` wrapper:
+
+- `gateway start` launches `openclaw gateway run --port ...` under `nohup`
+- wrapper logs go to `~/.llm-ops/logs/gateway.log` and `~/.llm-ops/logs/gateway.err.log`
+- OpenClaw app logs go to `/tmp/openclaw/openclaw-YYYY-MM-DD.log`
+- `gateway logs` tails all three of those files together
+
+At the moment, the standard OpenClaw service path is considered deferred work:
+
+- `openclaw gateway start` expects an installed LaunchAgent on macOS
+- `openclaw logs --follow`, `openclaw gateway probe`, and `openclaw gateway health` may still fail against a live direct-run gateway because the CLI RPC attach path is not stable yet in this environment

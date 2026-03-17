@@ -12,11 +12,14 @@ SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
 . "$SCRIPT_DIR/lib/common.sh"
 
 ensure_runtime_dirs
+OPENCLAW_HOME="${OPENCLAW_HOME:-$HOME/.openclaw}"
+OPENCLAW_LOG_DIR="${OPENCLAW_LOG_DIR:-$OPENCLAW_HOME/logs}"
 
 echo "OpenClaw Runtime Report"
 echo "timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo "run_dir: $LLMOPS_RUN_DIR"
 echo "log_dir: $LLMOPS_LOG_DIR"
+echo "openclaw_log_dir: $OPENCLAW_LOG_DIR"
 echo
 
 "$SCRIPT_DIR/openclaw-stack" status
@@ -24,9 +27,9 @@ echo
 
 echo "Recent logs:"
 for log in \
-  "$LLMOPS_LOG_DIR/gateway.log" \
+  "$OPENCLAW_LOG_DIR/gateway.log" \
   "$LLMOPS_LOG_DIR/llama-server-Qwen3VL.log" \
-  "$LLMOPS_LOG_DIR/llama-server-bge-small-en.log" \
+  "$LLMOPS_LOG_DIR/llama-server-bge-m3.log" \
   "$LLMOPS_LOG_DIR/model-proxy-tap.log"; do
   if [[ -f "$log" ]]; then
     echo "--- $log"

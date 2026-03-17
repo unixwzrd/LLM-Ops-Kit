@@ -15,7 +15,7 @@
 - Model proxy wrapper (`model-proxy`) + tap (`model-proxy-tap`)
 - TTS service (`tts` via `mlx_audio.server`)
 - LLM service (`Qwen3` / `Qwen3.5` via `llama-server`)
-- Embedding service (`BGEen` via `llama-server --embedding`)
+- Embedding service (`BGEm3` via `llama-server --embedding`)
 - Operator scripts (`LLM-Ops-Kit/scripts`)
 
 ## Flow

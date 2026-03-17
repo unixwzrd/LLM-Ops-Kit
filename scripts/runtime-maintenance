@@ -27,8 +27,6 @@ EOF
 
 known_logs() {
   printf '%s\n' \
-    "$LLMOPS_LOG_DIR/gateway.log" \
-    "$LLMOPS_LOG_DIR/gateway.err.log" \
     "$LLMOPS_LOG_DIR/model-proxy-tap.log" \
     "$LLMOPS_LOG_DIR/model-proxy-tap.err.log" \
     "$LLMOPS_LOG_DIR/tts-bridge.log"

@@ -1,7 +1,7 @@
 # Quickstart (10 Minutes)
 
 **Created**: 2026-02-26
-**Updated**: 2026-03-10
+**Updated**: 2026-03-13
 
 - [Quickstart (10 Minutes)](#quickstart-10-minutes)
   - [Requirements](#requirements)
@@ -80,6 +80,21 @@ EOF
 
 When enabled, wrappers such as `gateway`, `model-proxy`, and `tts-bridge` will import secret values from `seckit` automatically during startup.
 
+Important:
+
+- Do not start wrappers with `bash -x` or `set -x` when `LLMOPS_USE_SECKIT=1`.
+- Shell tracing can expose exported secret values in terminal output or logs.
+
+Current stabilization mode on the primary operator machine:
+
+- `gateway` runs in direct-run mode through the wrapper, not through `openclaw gateway start`
+- runtime `seckit` loading is currently disabled for startup (`LLMOPS_USE_SECKIT=0`)
+- live logs are:
+  - wrapper stdio: `~/.llm-ops/logs/gateway.log` and `~/.llm-ops/logs/gateway.err.log`
+  - OpenClaw app log: `/tmp/openclaw/openclaw-YYYY-MM-DD.log`
+- `openclaw logs --follow`, `openclaw gateway probe`, and `openclaw gateway health` may still fail even when the gateway itself is up in this mode
+- use `~/bin/gateway logs` for a reliable local follow view during this phase
+
 ## Fully Local Models and Gateway
 
 Use this when the LLM, embeddings, MLX TTS server, and OpenClaw all run on the same host.
@@ -90,7 +105,7 @@ Use this when the LLM, embeddings, MLX TTS server, and OpenClaw all run on the s
 ```bash
 cd ~/projects/LLM-Ops-Kit
 ~/bin/Qwen3.5 start
-~/bin/BGEen start
+~/bin/BGEm3 start
 # Optional:
 # ~/bin/Qwen3TTS start
 # ~/bin/model-proxy restart --listen-port 11440 --upstream http://127.0.0.1:11434
@@ -110,8 +125,10 @@ cd ~/projects/LLM-Ops-Kit
 
 ```bash
 ~/bin/openclaw-stack status
+~/bin/gateway status
+~/bin/gateway logs
 ~/bin/Qwen3 settings
-~/bin/BGEen settings
+~/bin/BGEm3 settings
 ~/bin/model-proxy status
 ~/bin/tts-bridge status
 ```

@@ -79,7 +79,7 @@ Checks:
 
 ```bash
 ~/bin/Qwen3 status
-~/bin/BGEen status
+~/bin/BGEm3 status
 ~/bin/openclaw-stack status
 ```
 
@@ -87,7 +87,7 @@ Then restart target cleanly:
 
 ```bash
 ~/bin/Qwen3 restart
-~/bin/BGEen restart
+~/bin/BGEm3 restart
 ```
 
 ## Embedding indexing context-size errors
@@ -98,7 +98,7 @@ Symptoms:
 
 Actions:
 
-- Verify embedding profile settings with `~/bin/BGEen settings`.
+- Verify embedding profile settings with `~/bin/BGEm3 settings`.
 - Confirm running model actually supports the configured `CTX_SIZE`.
 - Check OpenClaw memory chunking values in `.openclaw/openclaw.json`.
 

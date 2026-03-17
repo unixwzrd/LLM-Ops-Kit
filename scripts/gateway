@@ -13,6 +13,34 @@ SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
 
 action="${1:-status}"
 
+openclaw_app_log_path() {
+  local latest
+  latest="$(ls -1t /tmp/openclaw/openclaw-*.log 2>/dev/null | head -n 1 || true)"
+  if [[ -n "$latest" ]]; then
+    printf '%s\n' "$latest"
+  else
+    printf '/tmp/openclaw/openclaw-%s.log\n' "$(date +%F)"
+  fi
+}
+
+follow_gateway_logs() {
+  local app_log
+  app_log="$(openclaw_app_log_path)"
+  ensure_runtime_dirs
+  mkdir -p /tmp/openclaw
+  prepare_log_file "$LLMOPS_LOG_DIR/gateway.log"
+  prepare_log_file "$LLMOPS_LOG_DIR/gateway.err.log"
+  touch "$app_log"
+  echo "gateway: following logs"
+  echo "  wrapper_log=$LLMOPS_LOG_DIR/gateway.log"
+  echo "  wrapper_err=$LLMOPS_LOG_DIR/gateway.err.log"
+  echo "  app_log=$app_log"
+  tail -n 50 -F \
+    "$LLMOPS_LOG_DIR/gateway.log" \
+    "$LLMOPS_LOG_DIR/gateway.err.log" \
+    "$app_log"
+}
+
 start_gateway() {
   load_shell_env
   ensure_runtime_dirs
@@ -28,7 +56,7 @@ start_gateway() {
     return 0
   fi
 
-  nohup /usr/local/bin/openclaw gateway --port "$PORT" > "$LOG_OUT" 2> "$LOG_ERR" &
+  nohup /usr/local/bin/openclaw gateway run --port "$PORT" > "$LOG_OUT" 2> "$LOG_ERR" &
   pid="$!"
   write_pid gateway "$pid"
 
@@ -44,11 +72,15 @@ start_gateway() {
   if command -v curl >/dev/null 2>&1; then
     if ! curl -fsS "http://127.0.0.1:${PORT}/health" >/dev/null 2>&1; then
       echo "gateway: started pid=$pid port=$PORT (health endpoint not ready yet)"
+      echo "gateway: wrapper logs -> $LOG_OUT / $LOG_ERR"
+      echo "gateway: app log -> $(openclaw_app_log_path)"
       return 0
     fi
   fi
 
   echo "gateway: started pid=$pid port=$PORT"
+  echo "gateway: wrapper logs -> $LOG_OUT / $LOG_ERR"
+  echo "gateway: app log -> $(openclaw_app_log_path)"
 }
 
 stop_gateway() {
@@ -62,17 +94,22 @@ status_gateway() {
     if is_pid_running "$pid"; then
       echo "gateway: running pid=$pid"
       echo "  port=$port"
+      echo "  mode=direct-run wrapper"
       echo "  log=$LLMOPS_LOG_DIR/gateway.log"
       echo "  err_log=$LLMOPS_LOG_DIR/gateway.err.log"
+      echo "  app_log=$(openclaw_app_log_path)"
       echo "  runtime_mode=$(runtime_mode)"
       echo "  runtime_root=$(runtime_asset_root)"
       echo "  retention=$(retention_summary_line)"
+      echo "  note=openclaw logs --follow may fail in this mode; use wrapper/app logs directly"
       return 0
     fi
     echo "gateway: stale pid=$pid"
     echo "  port=$port"
+    echo "  mode=direct-run wrapper"
     echo "  log=$LLMOPS_LOG_DIR/gateway.log"
     echo "  err_log=$LLMOPS_LOG_DIR/gateway.err.log"
+    echo "  app_log=$(openclaw_app_log_path)"
     echo "  runtime_mode=$(runtime_mode)"
     echo "  runtime_root=$(runtime_asset_root)"
     echo "  retention=$(retention_summary_line)"
@@ -80,8 +117,10 @@ status_gateway() {
   fi
   echo "gateway: stopped"
   echo "  port=$port"
+  echo "  mode=direct-run wrapper"
   echo "  log=$LLMOPS_LOG_DIR/gateway.log"
   echo "  err_log=$LLMOPS_LOG_DIR/gateway.err.log"
+  echo "  app_log=$(openclaw_app_log_path)"
   echo "  runtime_mode=$(runtime_mode)"
   echo "  runtime_root=$(runtime_asset_root)"
   echo "  retention=$(retention_summary_line)"
@@ -93,5 +132,6 @@ case "$action" in
   stop) stop_gateway ;;
   restart) stop_gateway || true; start_gateway ;;
   status) status_gateway ;;
-  *) echo "Usage: gateway [start|stop|restart|status]" >&2; exit 2 ;;
+  logs) follow_gateway_logs ;;
+  *) echo "Usage: gateway [start|stop|restart|status|logs]" >&2; exit 2 ;;
 esac

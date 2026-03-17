@@ -23,4 +23,4 @@ Control grouped service lifecycle (gateway/model-proxy/models).
 
 ## Notes
 
-`models` target controls `Qwen3` + `BGEen` in parallel.
+`models` target controls `Qwen3` + `BGEm3` in parallel.

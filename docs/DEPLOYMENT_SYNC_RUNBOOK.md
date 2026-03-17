@@ -89,7 +89,7 @@ All commands are extensionless and action-driven.
 ~/bin/tts-bridge [start|stop|restart|status]
 ~/bin/Qwen3 [start|stop|restart|status]
 ~/bin/Qwen3.5 [start|stop|restart|status]
-~/bin/BGEen [start|stop|restart|status]
+~/bin/BGEm3 [start|stop|restart|status]
 ~/bin/openclaw-stack [start|stop|restart|status] [all|gateway|llm|embedding|model-proxy|models]
 ~/bin/openclaw-report
 ```
@@ -101,7 +101,7 @@ Typical bring-up order:
 ~/bin/Qwen3 start
 ~/bin/model-proxy start
 # Start embedding only if needed
-~/bin/BGEen start
+~/bin/BGEm3 start
 ```
 
 ## 6) Key Notes
@@ -154,7 +154,7 @@ New shell likely missing loaded key. Re-run `ssh-agent` + `ssh-add` with TTL.
 If OpenClaw injects a warning like `Post-Compaction Audit`, extract the missing required startup-file patterns from logs:
 
 ```bash
-# Gateway log (canonical)
+# Gateway wrapper stdio log (canonical)
 rg -n "Post-Compaction Audit|required startup files were not read|  - " ~/.openclaw/logs/gateway.log
 
 # Rendered proxy prompt/response stream (optional)

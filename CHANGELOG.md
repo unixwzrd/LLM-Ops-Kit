@@ -1,12 +1,50 @@
 # Agent Ops Changelog
 
 **Created**: 2026-02-20
-**Updated**: 2026-03-09
+**Updated**: 2026-03-16
 
 All notable changes to LLM-Ops-Kit will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+### 2026-03-16 — BGEm3 embedding profile rollout
+
+- **Scope:** `LLM-Ops-Kit/scripts`, `LLM-Ops-Kit/docs`, `LLM-Ops-Kit/README.md`
+- **Category:** `runtime`, `embedding`, `documentation`
+- **What changed:**
+  - Added a first-class `BGEm3` launcher and model profile for `bge-m3-Q8_0-GGUF/bge-m3-q8_0.gguf`.
+  - Switched `openclaw-stack` embedding operations to `BGEm3`.
+  - Updated runtime-facing status/report names from `bge-small-en` to `bge-m3`.
+  - Added `BGEm3` to runtime link management so installs deploy the new launcher into `~/bin`.
+  - Updated operator docs to prefer `BGEm3` as the embedding command surface.
+- **Why:**
+  - Keep the runtime naming aligned with the actual embedding model and avoid future installs drifting back to the old `bge-small-en` profile.
+
+### 2026-03-13 — Direct-run gateway stabilization and runtime rollback clarity
+
+- **Scope:** `LLM-Ops-Kit/scripts/gateway`, `LLM-Ops-Kit/scripts/install-runtime.sh`, `LLM-Ops-Kit/scripts/lib/common.sh`, `LLM-Ops-Kit/docs/QUICKSTART.md`, `LLM-Ops-Kit/docs/CONFIGURATION.md`, `LLM-Ops-Kit/docs/internal/TODO.md`
+- **Category:** `runtime`, `gateway`, `secrets`, `documentation`
+- **What changed:**
+  - Kept `gateway` on the direct-run wrapper path using `openclaw gateway run --port ...` under `nohup` instead of the standard service-only `openclaw gateway start` flow.
+  - Updated `gateway status` to report:
+    - direct-run wrapper mode
+    - wrapper log paths under `~/.llm-ops/logs`
+    - current OpenClaw app log path under `/tmp/openclaw/openclaw-YYYY-MM-DD.log`
+    - a note that `openclaw logs --follow` may still fail in this mode
+  - Added `gateway logs` to tail:
+    - `~/.llm-ops/logs/gateway.log`
+    - `~/.llm-ops/logs/gateway.err.log`
+    - `/tmp/openclaw/openclaw-YYYY-MM-DD.log`
+    as the reliable local follow path during this stabilization phase.
+  - Removed install-time `seckit` loading from `install-runtime`, keeping installs independent from runtime secret injection.
+  - Kept the `common.sh` env ordering and xtrace fixes that allow placeholder-style env files and safer `seckit` export handling.
+  - Documented the current stabilization baseline:
+    - runtime `Secrets-Kit` disabled (`LLMOPS_USE_SECKIT=0`)
+    - direct-run gateway as the current source of truth
+    - standard service/LaunchAgent path and CLI RPC follow/probe behavior deferred for a later return pass
+- **Why:**
+  - Preserve a working OpenClaw runtime on the primary operator machine while isolating the LaunchAgent/service path and CLI RPC issues as separate follow-up work.
 
 ### 2026-03-10 — Optional Secrets Kit runtime loading
 
@@ -186,7 +224,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `scripts/generate-manifest`
     - `scripts/deploy-runtime-links.sh`
     - `scripts/verify-runtime-links.sh`
-    - runtime dry checks: `Qwen3/Qwen3.5/BGEen settings`, `proxy status`, `gateway status`
+    - runtime dry checks: `Qwen3/Qwen3.5/BGEm3 settings`, `proxy status`, `gateway status`
 - **Why:**
   - Finalize publish-readiness with no new feature risk and no private/internal leakage in public content.
 
@@ -338,7 +376,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Scope:** `LLM-Ops-Kit`
 - **Category:** `documentation`, `operations`
 - **What changed:**
-  - Normalized operator docs to the extensionless command surface in `~/bin` (`gateway`, `proxy`, `Qwen3`, `BGEen`, `openclaw-stack`).
+  - Normalized operator docs to the extensionless command surface in `~/bin` (`gateway`, `proxy`, `Qwen3`, `BGEm3`, `openclaw-stack`).
   - Updated `docs/OPERATIONAL_WORKFLOW_PHASE1.md` examples to use runtime commands instead of direct script paths.
   - Updated `docs/IMPLEMENTATION_CHECKLIST.md` quick commands and snapshots to match current operator workflow.
   - Corrected `docs/SCRIPT_LAYOUT.md` to the flattened `scripts/` layout (removed stale `scripts/openclaw` reference).

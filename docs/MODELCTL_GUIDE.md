@@ -16,7 +16,7 @@
 
 ## Purpose
 
-`modelctl` is the canonical launcher used by runtime commands like `Qwen3`, `Qwen3.5`, and `BGEen`.
+`modelctl` is the canonical launcher used by runtime commands like `Qwen3`, `Qwen3.5`, and `BGEm3`.
 Any launcher name is supported as long as `scripts/models/<Launcher>.sh` exists.
 
 ## Commands

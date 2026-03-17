@@ -22,8 +22,6 @@ Actions:
 
 Known log targets:
 
-- `~/.llm-ops/logs/gateway.log`
-- `~/.llm-ops/logs/gateway.err.log`
 - `~/.llm-ops/logs/model-proxy-tap.log`
 - `~/.llm-ops/logs/model-proxy-tap.err.log`
 - `~/.llm-ops/logs/tts-bridge.log`
@@ -49,6 +47,6 @@ Examples:
 
 Notes:
 
-- This command manages toolkit-owned files under `~/.llm-ops`. It does not rotate OpenClaw-owned logs under `~/.openclaw`.
+- This command manages toolkit-owned files under `~/.llm-ops`. It does not rotate OpenClaw-owned logs under `~/.openclaw`, including gateway stdout/stderr capture.
 - Active log file paths remain stable. Rotation renames the previous file and recreates the active path in place.
 - Install backups are pruned from `~/.llm-ops/backups`.
