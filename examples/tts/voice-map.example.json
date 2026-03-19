@@ -1,0 +1,15 @@
+{
+  "defaults": {
+    "sample_dir": ".",
+    "speaker": "serena",
+    "sample": "Mia-Faith-Prof-Emotive-20s-Sample-Mastered-01.wav"
+  },
+  "Faith": {
+    "speaker": "serena",
+    "sample": "Mia-Faith-Prof-Emotive-20s-Sample-Mastered-01.wav"
+  },
+  "Serifina": {
+    "speaker": "serena",
+    "sample": "Mia-Serifina-Sensual-Emotive-20s-Sample-Mastered-02.wav"
+  }
+}

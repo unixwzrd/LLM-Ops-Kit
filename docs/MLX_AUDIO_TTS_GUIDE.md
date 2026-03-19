@@ -1,7 +1,7 @@
 # MLX Audio TTS Guide
 
 **Created**: 2026-03-02  
-**Updated**: 2026-03-09
+**Updated**: 2026-03-18
 
 - [MLX Audio TTS Guide](#mlx-audio-tts-guide)
   - [Purpose](#purpose)
@@ -11,6 +11,7 @@
   - [API Smoke Test](#api-smoke-test)
   - [Bridge for OpenClaw TTS](#bridge-for-openclaw-tts)
   - [Bridge Configuration](#bridge-configuration)
+  - [Bridge Dictionaries](#bridge-dictionaries)
   - [Voice Clone Workflow](#voice-clone-workflow)
   - [Best Practices for Clone Samples](#best-practices-for-clone-samples)
   - [Known Packaging Gotchas](#known-packaging-gotchas)
@@ -148,6 +149,10 @@ The main bridge settings are:
 - `TTS_BRIDGE_PORT`
 - `TTS_BRIDGE_UPSTREAM_BASE`
 - `TTS_BRIDGE_MODEL`
+- `TTS_BRIDGE_CONFIG_DIR`
+- `TTS_BRIDGE_PRONOUNCE_CONFIG`
+- `TTS_BRIDGE_VOICE_MAP_CONFIG`
+- `TTS_BRIDGE_SAMPLES_DIR`
 - `TTS_BRIDGE_VOICE`
 - `TTS_BRIDGE_REF_AUDIO`
 - `TTS_BRIDGE_REF_TEXT`
@@ -157,13 +162,27 @@ Example:
 
 ```bash
 export TTS_BRIDGE_HOST=127.0.0.1
-export TTS_BRIDGE_PORT=11439
+export TTS_BRIDGE_PORT=11440
 export TTS_BRIDGE_UPSTREAM_BASE=http://10.0.0.67:11439/v1
 export TTS_BRIDGE_MODEL=$HOME/LLM_Repository/TTS/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit
-export TTS_BRIDGE_VOICE=serena
+export TTS_BRIDGE_CONFIG_DIR=$HOME/.llm-ops
+export TTS_BRIDGE_SAMPLES_DIR=$HOME/LLM_Repository/TTS/Samples
+export TTS_BRIDGE_VOICE=Faith
 export TTS_BRIDGE_REF_AUDIO=$HOME/LLM_Repository/TTS/Samples/Mia-Faith-Sample.wav
-export TTS_BRIDGE_REF_TEXT="${TTS_BRIDGE_REF_AUDIO%.wav}.txt"
+export TTS_BRIDGE_REF_TEXT="${TTS_BRIDGE_REF_AUDIO%.*}.txt"
 ```
+
+Path precedence for bridge config:
+
+1. CLI flag
+2. matching environment variable
+3. file derived from `TTS_BRIDGE_CONFIG_DIR`
+4. built-in default
+
+Default file names:
+
+- `~/.llm-ops/pronounce.json`
+- `~/.llm-ops/voice-map.json`
 
 OpenClaw itself still points at the local bridge through:
 
@@ -172,6 +191,115 @@ OpenClaw itself still points at the local bridge through:
 For command-level details, see:
 
 - [`docs/scripts/tts-bridge.md`](./scripts/tts-bridge.md)
+
+## Bridge Dictionaries
+
+The bridge supports two optional JSON dictionaries loaded once at startup.
+
+`pronounce.json`:
+
+- rewrites incoming TTS text before it reaches MLX Audio
+- supports symbol substitutions and later word or phrase substitutions
+- uses longest-match-first scanning
+- applies to every request
+
+Example:
+
+```json
+{
+  "/": " slash ",
+  "*": " star ",
+  "[": " open bracket ",
+  "]": " close bracket ",
+  "{": " open brace ",
+  "}": " close brace "
+}
+```
+
+`voice-map.json`:
+
+- maps a friendly incoming voice name to a real speaker plus clone sample
+- supports a top-level `defaults` block for shared `sample_dir`, fallback `speaker`, and fallback `sample`
+- derives the transcript path from the sample basename unless `ref_text` is explicitly set in the alias
+- is case-insensitive on lookup
+- is only used when the request does not already supply explicit `ref_audio` and `ref_text`
+- if nothing supplies a speaker, the bridge leaves `voice` unset rather than silently choosing one in code
+
+Example:
+
+```json
+{
+  "defaults": {
+    "sample_dir": ".",
+    "speaker": "serena",
+    "sample": "Mia-Faith-Prof-Emotive-20s-Sample-Mastered-01.wav"
+  },
+  "Faith": {
+    "speaker": "serena",
+    "sample": "Mia-Faith-Prof-Emotive-20s-Sample-Mastered-01.wav"
+  },
+  "Serifina": {
+    "speaker": "serena",
+    "sample": "Mia-Serifina-Sensual-Emotive-20s-Sample-Mastered-02.wav"
+  }
+}
+```
+
+Repo examples:
+
+- [`examples/tts/pronounce.example.json`](../examples/tts/pronounce.example.json)
+- [`examples/tts/voice-map.example.json`](../examples/tts/voice-map.example.json)
+
+Fail-fast behavior:
+
+- missing config files are allowed and load as empty maps
+- malformed JSON fails startup
+- malformed alias entries fail startup
+- invalid sample directory fails startup
+- alias-resolved missing sample or transcript fails the request with an explicit error
+
+The bridge `/health` endpoint reports the resolved config directory, config file paths, whether the files exist, entry counts, and the resolved samples directory.
+
+Bootstrap the config files:
+
+```bash
+mkdir -p ~/.llm-ops
+cp /path/to/LLM-Ops-Kit/examples/tts/pronounce.example.json ~/.llm-ops/pronounce.json
+cp /path/to/LLM-Ops-Kit/examples/tts/voice-map.example.json ~/.llm-ops/voice-map.json
+```
+
+Start the bridge:
+
+```bash
+~/bin/tts-bridge start
+~/bin/tts-bridge status
+```
+
+Bridge health check:
+
+```bash
+curl -sS http://127.0.0.1:11440/health | jq
+```
+
+Bridge speech smoke test:
+
+```bash
+curl -sS http://127.0.0.1:11440/v1/audio/speech \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "input": "Read /tmp/test[1].wav and say Faith/Serifina clearly.",
+    "voice": "Faith",
+    "response_format": "wav"
+  }' \
+  --output /tmp/tts-bridge-faith.wav
+```
+
+If that passes, confirm:
+
+- `~/bin/tts-bridge status` reports bridge health as `ok`
+- `/health` shows the resolved config and sample paths you expect
+- the output file `/tmp/tts-bridge-faith.wav` exists
+- the bridge stderr log shows input preprocessing and alias resolution activity
 
 ## Voice Clone Workflow
 

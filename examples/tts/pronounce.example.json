@@ -1,0 +1,14 @@
+{
+  "/": " slash ",
+  "*": " star ",
+  "[": " open bracket ",
+  "]": " close bracket ",
+  "{": " open brace ",
+  "}": " close brace ",
+  "(": " open paren ",
+  ")": " close paren ",
+  "\"": "",
+  "'": "",
+  ";": "",
+  ":": ""
+}

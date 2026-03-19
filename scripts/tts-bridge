@@ -20,8 +20,15 @@ LISTEN_HOST="${TTS_BRIDGE_HOST:-127.0.0.1}"
 LISTEN_PORT="${TTS_BRIDGE_PORT:-11440}"
 UPSTREAM_BASE="${TTS_BRIDGE_UPSTREAM_BASE:-}"
 MODEL_PATH="${TTS_BRIDGE_MODEL:-$HOME/LLM_Repository/TTS/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit}"
+CONFIG_DIR="${TTS_BRIDGE_CONFIG_DIR:-$HOME/.llm-ops}"
+PRONOUNCE_CONFIG="${TTS_BRIDGE_PRONOUNCE_CONFIG:-}"
+VOICE_MAP_CONFIG="${TTS_BRIDGE_VOICE_MAP_CONFIG:-}"
+SAMPLES_DIR="${TTS_BRIDGE_SAMPLES_DIR:-$HOME/LLM_Repository/TTS/Samples}"
 REF_AUDIO="${TTS_BRIDGE_REF_AUDIO:-}"
-REF_TEXT="${TTS_BRIDGE_REF_TEXT:-${REF_AUDIO%.wav}.txt}"
+REF_TEXT="${TTS_BRIDGE_REF_TEXT:-}"
+if [[ -z "$REF_TEXT" && -n "$REF_AUDIO" ]]; then
+  REF_TEXT="${REF_AUDIO%.*}.txt"
+fi
 PY_BIN="${TTS_BRIDGE_PYTHON_BIN:-python}"
 
 pid_name="tts-bridge"
@@ -38,8 +45,12 @@ Env overrides:
   TTS_BRIDGE_MODEL            (default: Qwen3-TTS local path)
   TTS_BRIDGE_VOICE            (ignored by wrapper; bridge code selects/normalizes the effective voice)
   TTS_BRIDGE_PREFER_INCOMING_VOICE (default: 0; set 1 to honor incoming voice)
-  TTS_BRIDGE_REF_AUDIO        (required; used as the source for transcript derivation)
-  TTS_BRIDGE_REF_TEXT         (optional; default is derived from TTS_BRIDGE_REF_AUDIO)
+  TTS_BRIDGE_CONFIG_DIR       (default: ~/.llm-ops)
+  TTS_BRIDGE_PRONOUNCE_CONFIG (optional; defaults to <config-dir>/pronounce.json)
+  TTS_BRIDGE_VOICE_MAP_CONFIG (optional; defaults to <config-dir>/voice-map.json)
+  TTS_BRIDGE_SAMPLES_DIR      (default: ~/LLM_Repository/TTS/Samples)
+  TTS_BRIDGE_REF_AUDIO        (optional bridge-level fallback)
+  TTS_BRIDGE_REF_TEXT         (optional bridge-level fallback; derived from REF_AUDIO if set)
   TTS_BRIDGE_PYTHON_BIN       (default: python)
 EOF
 }
@@ -116,6 +127,10 @@ status_bridge() {
   echo "  upstream_models_endpoint=$upstream_url"
   echo "  model=$MODEL_PATH"
   echo "  voice=<bridge-selected>"
+  echo "  config_dir=$CONFIG_DIR"
+  echo "  pronounce_config=${PRONOUNCE_CONFIG:-<config-dir>/pronounce.json}"
+  echo "  voice_map_config=${VOICE_MAP_CONFIG:-<config-dir>/voice-map.json}"
+  echo "  samples_dir=$SAMPLES_DIR"
   echo "  ref_audio=$REF_AUDIO"
   echo "  ref_text=$REF_TEXT"
   echo "  log=$log_file"
@@ -146,14 +161,6 @@ start_bridge() {
     return 2
   fi
 
-  if [[ -z "$REF_AUDIO" ]]; then
-    print_missing_config_hint \
-      "tts-bridge: missing TTS_BRIDGE_REF_AUDIO" \
-      TTS_BRIDGE_REF_AUDIO \
-      TTS_BRIDGE_REF_TEXT
-    return 2
-  fi
-
   if status_bridge >/dev/null 2>&1; then
     echo "$pid_name: already running"
     return 0
@@ -164,21 +171,37 @@ start_bridge() {
   if [[ ! -e "$MODEL_PATH" ]]; then
     echo "tts-bridge: warning: model path not found locally (will still forward): $MODEL_PATH" >&2
   fi
-  if [[ ! -f "$REF_AUDIO" ]]; then
+  if [[ -n "$REF_AUDIO" && ! -f "$REF_AUDIO" ]]; then
     echo "tts-bridge: warning: ref audio not found locally (will still forward): $REF_AUDIO" >&2
   fi
-  if [[ ! -f "$REF_TEXT" ]]; then
+  if [[ -n "$REF_TEXT" && ! -f "$REF_TEXT" ]]; then
     echo "tts-bridge: warning: ref text not found locally (will still forward): $REF_TEXT" >&2
   fi
 
-  nohup "$PY_BIN" "$SCRIPT_DIR/tts_bridge_server.py" \
-    --listen-host "$LISTEN_HOST" \
-    --listen-port "$LISTEN_PORT" \
-    --upstream-base "$UPSTREAM_BASE" \
-    --model "$MODEL_PATH" \
-    --ref-audio "$REF_AUDIO" \
-    --ref-text "$REF_TEXT" \
-    "$@" \
+  local -a cmd
+  cmd=(
+    "$PY_BIN" "$SCRIPT_DIR/tts_bridge_server.py"
+    --listen-host "$LISTEN_HOST"
+    --listen-port "$LISTEN_PORT"
+    --upstream-base "$UPSTREAM_BASE"
+    --model "$MODEL_PATH"
+    --config-dir "$CONFIG_DIR"
+    --samples-dir "$SAMPLES_DIR"
+    --ref-audio "$REF_AUDIO"
+    --ref-text "$REF_TEXT"
+  )
+
+  if [[ -n "$PRONOUNCE_CONFIG" ]]; then
+    cmd+=(--pronounce-config "$PRONOUNCE_CONFIG")
+  fi
+  if [[ -n "$VOICE_MAP_CONFIG" ]]; then
+    cmd+=(--voice-map-config "$VOICE_MAP_CONFIG")
+  fi
+  if [[ $# -gt 0 ]]; then
+    cmd+=("$@")
+  fi
+
+  nohup "${cmd[@]}" \
     > "$log_file" 2>&1 &
 
   write_pid "$pid_name" "$!"
