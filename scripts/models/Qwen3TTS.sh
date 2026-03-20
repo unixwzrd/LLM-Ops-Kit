@@ -7,7 +7,7 @@ MODEL_TYPE="${MODEL_TYPE:-tts}"
 MODEL_PROFILE="${MODEL_PROFILE:-Qwen3TTS}"
 
 # Canonical model location (used by clients for /v1/audio/speech "model" value)
-MODEL="${MODEL:-$HOME/LLM_Repository/TTS/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit}"
+MODEL="${MODEL:-$HOME/LLM_Repository/TTS/Qwen3-TTS-12Hz-0.6B-Base-8bit}"
 
 # Runtime/network
 HOST="${HOST:-0.0.0.0}"
