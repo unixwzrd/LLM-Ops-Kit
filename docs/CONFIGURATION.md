@@ -74,6 +74,8 @@ Note:
 - `MODEL_PROXY_LISTEN_HOST`: default bind host for proxy wrappers.
 - `MODEL_PROXY_LISTEN_PORT`: default bind port for proxy wrappers.
 - `MODEL_PROXY_TAP_BIN`: optional explicit path to `model-proxy-tap`.
+- `MODEL_PROXY_LOG_ROTATE_SECONDS`: time-based rotation period for proxy-owned logs. Default `86400`.
+- `MODEL_PROXY_LOG_ROTATE_KEEP`: number of rotated proxy logs to keep. Default `5`.
 - `OPENAI_TTS_BASE_URL`: OpenClaw OpenAI-TTS provider base URL (for example `http://127.0.0.1:11440/v1`).
 - `TTS_BRIDGE_HOST`: bind host for `tts-bridge`.
 - `TTS_BRIDGE_PORT`: bind port for `tts-bridge`.

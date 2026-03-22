@@ -28,6 +28,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin, urlparse
 from urllib.request import ProxyHandler, Request, build_opener
 
+from log_rotation import RotatingLogWriter
+
 try:
     import jinja2
 except Exception:  # pragma: no cover - optional dependency at runtime
@@ -208,6 +210,9 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
     raw_request_log_path: Path | None = None
     rendered_prompt_log_path: Path | None = None
     raw_response_log_path: Path | None = None
+    log_rotate_seconds: int = 86400
+    log_rotate_keep: int = 5
+    _log_writers: dict[str, RotatingLogWriter] = {}
     upstream_opener = build_opener(ProxyHandler({}))
 
     protocol_version = "HTTP/1.1"
@@ -223,12 +228,8 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
         return self.rfile.read(length)
 
     def _write_log(self, record: dict[str, Any]) -> None:
-        self.log_path.parent.mkdir(parents=True, exist_ok=True)
-        with self.log_path.open("a", encoding="utf-8", buffering=1) as f:
-            f.write(json.dumps(record, ensure_ascii=False) + "\n")
-            f.flush()
-            if self.log_fsync:
-                os.fsync(f.fileno())
+        writer = self._writer_for(self.log_path)
+        writer.write(json.dumps(record, ensure_ascii=False) + "\n")
 
     def _write_framed_log(
         self,
@@ -241,19 +242,31 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
     ) -> None:
         if path is None:
             return
-        path.parent.mkdir(parents=True, exist_ok=True)
         text = body or ""
         end_ts = ts_end or ts_start
-        with path.open("a", encoding="utf-8", buffering=1) as f:
-            f.write(f"{ts_start}\t{request_id}\t{label}\n")
-            f.write(f"=== {label} START {ts_start} ===\n")
-            f.write(text)
-            if not text.endswith("\n"):
-                f.write("\n")
-            f.write(f"=== {label} END {end_ts} ===\n\n")
-            f.flush()
-            if self.log_fsync:
-                os.fsync(f.fileno())
+        payload = [
+            f"{ts_start}\t{request_id}\t{label}\n",
+            f"=== {label} START {ts_start} ===\n",
+            text,
+        ]
+        if not text.endswith("\n"):
+            payload.append("\n")
+        payload.append(f"=== {label} END {end_ts} ===\n\n")
+        self._writer_for(path).write("".join(payload))
+
+    @classmethod
+    def _writer_for(cls, path: Path) -> RotatingLogWriter:
+        key = str(path)
+        writer = cls._log_writers.get(key)
+        if writer is None:
+            writer = RotatingLogWriter(
+                path,
+                rotate_seconds=cls.log_rotate_seconds,
+                keep=cls.log_rotate_keep,
+                fsync=cls.log_fsync,
+            )
+            cls._log_writers[key] = writer
+        return writer
 
     def _proxy(self) -> None:
         started = time.time()
@@ -573,6 +586,18 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--raw-request-log", help="Optional plain-text framed log path for raw request_text per request_start")
     p.add_argument("--rendered-prompt-log", default=f"{default_log_dir}/model-proxy.rendered.log", help="Optional plain-text framed log path for rendered_prompt per request_start")
     p.add_argument("--raw-response-log", help="Optional plain-text framed log path for response body per request_end")
+    p.add_argument(
+        "--log-rotate-seconds",
+        type=int,
+        default=int(os.environ.get("MODEL_PROXY_LOG_ROTATE_SECONDS", "86400")),
+        help="Rotate active proxy logs after this many seconds; 0 disables time-based rotation",
+    )
+    p.add_argument(
+        "--log-rotate-keep",
+        type=int,
+        default=int(os.environ.get("MODEL_PROXY_LOG_ROTATE_KEEP", "5")),
+        help="Number of rotated .N.log files to keep per active proxy log",
+    )
     p.set_defaults(log_fsync=True)
     p.add_argument("--log-fsync", dest="log_fsync", action="store_true", help="Force fsync after each log line write (default: on)")
     p.add_argument("--no-log-fsync", dest="log_fsync", action="store_false", help="Disable fsync after each log line write")
@@ -606,6 +631,9 @@ def main() -> int:
     ProxyTapHandler.timeout_sec = float(args.timeout)
     ProxyTapHandler.latest_image_only = bool(args.latest_image_only)
     ProxyTapHandler.log_fsync = bool(args.log_fsync)
+    ProxyTapHandler.log_rotate_seconds = max(0, int(args.log_rotate_seconds))
+    ProxyTapHandler.log_rotate_keep = max(0, int(args.log_rotate_keep))
+    ProxyTapHandler._log_writers = {}
     ProxyTapHandler.stream_chunk_size = int(args.stream_chunk_size)
     ProxyTapHandler.chat_template_path = args.chat_template
     ProxyTapHandler.chat_template_max_chars = int(args.chat_template_max_chars)
@@ -652,7 +680,7 @@ def main() -> int:
     server = ThreadingHTTPServer((args.listen_host, listen_port), ProxyTapHandler)
     print(
         f"model-proxy-tap listening on http://{args.listen_host}:{listen_port} "
-        f"-> {upstream_base} (threading, log: {ProxyTapHandler.log_path}, raw_log={ProxyTapHandler.raw_request_log_path}, rendered_log={ProxyTapHandler.rendered_prompt_log_path}, raw_response_log={ProxyTapHandler.raw_response_log_path}, latest_image_only={ProxyTapHandler.latest_image_only}, log_fsync={ProxyTapHandler.log_fsync}, stream_chunk_size={ProxyTapHandler.stream_chunk_size}, max_log_bytes={ProxyTapHandler.max_log_bytes}, chat_template={ProxyTapHandler.chat_template_path})",
+        f"-> {upstream_base} (threading, log: {ProxyTapHandler.log_path}, raw_log={ProxyTapHandler.raw_request_log_path}, rendered_log={ProxyTapHandler.rendered_prompt_log_path}, raw_response_log={ProxyTapHandler.raw_response_log_path}, latest_image_only={ProxyTapHandler.latest_image_only}, log_fsync={ProxyTapHandler.log_fsync}, log_rotate_seconds={ProxyTapHandler.log_rotate_seconds}, log_rotate_keep={ProxyTapHandler.log_rotate_keep}, stream_chunk_size={ProxyTapHandler.stream_chunk_size}, max_log_bytes={ProxyTapHandler.max_log_bytes}, chat_template={ProxyTapHandler.chat_template_path})",
         flush=True,
     )
 

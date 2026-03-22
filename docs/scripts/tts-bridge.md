@@ -47,6 +47,9 @@ Environment overrides:
 - `TTS_BRIDGE_PRONOUNCE_CONFIG`
 - `TTS_BRIDGE_VOICE_MAP_CONFIG`
 - `TTS_BRIDGE_SAMPLES_DIR`
+- `TTS_BRIDGE_LOG_PATH`
+- `TTS_BRIDGE_LOG_ROTATE_SECONDS`
+- `TTS_BRIDGE_LOG_ROTATE_KEEP`
 - `TTS_BRIDGE_VOICE`
   - Required fallback for `CustomVoice` bridge setups unless the caller always supplies `voice`.
   - The bridge forwards clone refs and keeps `voice` for `CustomVoice` requests.
@@ -64,6 +67,7 @@ Status output:
 - Reports wrapper PID state plus the live listener PID on the configured port.
 - Reports effective `listen` and `upstream` values.
 - Reports resolved config paths for pronunciation, voice map, and sample directory.
+- Reports active log path plus time-rotation settings.
 - Reports runtime mode, runtime root, and retention policy.
 - Probes bridge health via `/health`.
 - Probes upstream health via `/v1/models`.
@@ -115,6 +119,13 @@ Fail-fast behavior:
 - malformed alias entries cause startup failure
 - invalid samples directory causes startup failure
 - alias-resolved missing files cause request failure with the exact missing path
+
+Log rotation behavior:
+
+- the active bridge log path stays stable at `tts-bridge.log`
+- older files rotate to `.0.log`, `.1.log`, and so on
+- `TTS_BRIDGE_LOG_ROTATE_SECONDS` defaults to `86400` seconds
+- `TTS_BRIDGE_LOG_ROTATE_KEEP` defaults to `5`
 
 Example `pronounce.json`:
 

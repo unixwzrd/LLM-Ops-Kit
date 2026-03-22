@@ -30,6 +30,7 @@ Manage OpenAI proxy tap lifecycle for request/response visibility.
 ~/bin/model-proxy restart --upstream http://<upstream-host>:<upstream-port> --chat-template ~/projects/LLM-Ops-Kit/scripts/templates/Qwen3.5-chatml-tools.jinja
 ~/bin/model-proxy restart --upstream http://<upstream-host>:<upstream-port> --raw-log ~/.llm-ops/logs/model-proxy.raw.log
 ~/bin/model-proxy restart --upstream http://<upstream-host>:<upstream-port> --raw-request-log ~/.llm-ops/logs/model-proxy.requests.log --raw-response-log ~/.llm-ops/logs/model-proxy.responses.log
+~/bin/model-proxy restart --upstream http://<upstream-host>:<upstream-port> --log-rotate-seconds 86400 --log-rotate-keep 7
 ```
 
 ## Notes
@@ -41,5 +42,10 @@ Manage OpenAI proxy tap lifecycle for request/response visibility.
 - Default bind host is `127.0.0.1` unless `--listen-host` is passed.
 - `stop --force` uses SIGKILL for the pid-file process.
 - Default framed raw logging is combined into `~/.llm-ops/logs/model-proxy.raw.log` unless explicitly split.
+- Proxy-owned logs rotate in place by time using numbered suffixes:
+  - active file stays at the configured path
+  - previous files become `.0.log`, `.1.log`, and so on
+- `--log-rotate-seconds` defaults to `86400` seconds (24 hours).
+- `--log-rotate-keep` defaults to `5`.
 - Remote-model topology can reuse the same port number locally because the upstream host is different.
 - Fully local topology must use a different local listen port than the underlying local model server.

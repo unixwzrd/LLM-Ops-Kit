@@ -16,6 +16,8 @@ from pathlib import Path
 from typing import Any
 from urllib import error, request
 
+from log_rotation import RotatingLogWriter
+
 UNSUPPORTED_FORMAT_FALLBACKS = {
     "opus": "wav",
     "ogg": "wav",
@@ -25,6 +27,7 @@ DEFAULT_CONFIG_DIR = "~/.llm-ops"
 DEFAULT_PRONOUNCE_CONFIG = "pronounce.json"
 DEFAULT_VOICE_MAP_CONFIG = "voice-map.json"
 DEFAULT_SAMPLES_DIR = "~/LLM_Repository/TTS/Samples"
+DEFAULT_LOG_PATH = "~/.llm-ops/logs/tts-bridge.log"
 
 
 class BridgeConfigError(RuntimeError):
@@ -39,6 +42,9 @@ class BridgeRequestError(RuntimeError):
         self.status = status
         self.domain = domain
         self.message = message
+
+
+LOGGER: RotatingLogWriter | None = None
 
 
 def _env(name: str, default: str = "") -> str:
@@ -87,7 +93,12 @@ def _normalize_custom_voice(voice: str) -> str:
 
 
 def _log(message: str) -> None:
-    print(f"tts-bridge: {message}", file=sys.stderr, flush=True)
+    global LOGGER
+    line = f"tts-bridge: {message}\n"
+    if LOGGER is not None:
+        LOGGER.write(line)
+        return
+    print(line, file=sys.stderr, end="", flush=True)
 
 
 def _expand_path(raw: str) -> Path:
@@ -290,6 +301,9 @@ def _build_health_payload(cfg: dict[str, Any]) -> dict[str, Any]:
         },
         "config": {
             "config_dir": cfg["config_dir"],
+            "log_path": cfg.get("log_path", str(_expand_path(DEFAULT_LOG_PATH))),
+            "log_rotate_seconds": cfg.get("log_rotate_seconds", 86400),
+            "log_rotate_keep": cfg.get("log_rotate_keep", 5),
             "pronounce_config": cfg["pronounce_config"],
             "pronounce_config_exists": cfg["pronounce_config_exists"],
             "pronounce_entry_count": len(cfg["pronounce_map"]),
@@ -327,6 +341,14 @@ def build_bridge_config(args: argparse.Namespace) -> dict[str, Any]:
     pronounce_map = _load_pronounce_map(pronounce_config)
     voice_map_defaults, voice_map = _normalize_voice_map(voice_map_config)
 
+    log_path = getattr(args, "log_path", _env("TTS_BRIDGE_LOG_PATH", DEFAULT_LOG_PATH))
+    log_rotate_seconds = int(
+        getattr(args, "log_rotate_seconds", int(_env("TTS_BRIDGE_LOG_ROTATE_SECONDS", "86400")))
+    )
+    log_rotate_keep = int(
+        getattr(args, "log_rotate_keep", int(_env("TTS_BRIDGE_LOG_ROTATE_KEEP", "5")))
+    )
+
     cfg = {
         "listen_host": args.listen_host,
         "listen_port": args.listen_port,
@@ -338,6 +360,9 @@ def build_bridge_config(args: argparse.Namespace) -> dict[str, Any]:
         "ref_text": args.ref_text,
         "response_format": args.response_format,
         "timeout_seconds": args.timeout_seconds,
+        "log_path": str(_expand_path(str(log_path))),
+        "log_rotate_seconds": log_rotate_seconds,
+        "log_rotate_keep": log_rotate_keep,
         "config_dir": str(config_dir),
         "pronounce_config": str(pronounce_config),
         "pronounce_config_exists": pronounce_config.exists(),
@@ -614,9 +639,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
             self._json(502, {"error": f"upstream_request: {exc}"})
 
     def log_message(self, fmt: str, *args: Any) -> None:
-        sys.stderr.write(
-            "%s - - [%s] %s\n" % (self.client_address[0], self.log_date_time_string(), fmt % args)
-        )
+        _log("%s - - [%s] %s" % (self.client_address[0], self.log_date_time_string(), fmt % args))
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -639,6 +662,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument(
         "--timeout-seconds", type=int, default=int(_env("TTS_BRIDGE_TIMEOUT_SECONDS", "120"))
     )
+    p.add_argument("--log-path", default=_env("TTS_BRIDGE_LOG_PATH", DEFAULT_LOG_PATH))
+    p.add_argument(
+        "--log-rotate-seconds",
+        type=int,
+        default=int(_env("TTS_BRIDGE_LOG_ROTATE_SECONDS", "86400")),
+    )
+    p.add_argument(
+        "--log-rotate-keep",
+        type=int,
+        default=int(_env("TTS_BRIDGE_LOG_ROTATE_KEEP", "5")),
+    )
     p.add_argument("--config-dir", default=None)
     p.add_argument("--pronounce-config", default=None)
     p.add_argument("--voice-map-config", default=None)
@@ -648,6 +682,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    global LOGGER
+    LOGGER = RotatingLogWriter(
+        Path(os.path.expanduser(args.log_path)),
+        rotate_seconds=max(0, int(args.log_rotate_seconds)),
+        keep=max(0, int(args.log_rotate_keep)),
+        fsync=True,
+    )
     try:
         config = build_bridge_config(args)
     except BridgeConfigError as exc:

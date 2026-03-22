@@ -18,6 +18,8 @@ DEFAULT_UPSTREAM_HOST="${LLMOPS_UPSTREAM_HOST:-}"
 DEFAULT_UPSTREAM_PORT="${LLMOPS_UPSTREAM_PORT:-}"
 DEFAULT_LISTEN_PORT="${MODEL_PROXY_LISTEN_PORT:-$DEFAULT_UPSTREAM_PORT}"
 PROXY_TAP_BIN="${MODEL_PROXY_TAP_BIN:-$LLMOPS_ROOT/bin/model-proxy-tap}"
+MODEL_PROXY_LOG_ROTATE_SECONDS="${MODEL_PROXY_LOG_ROTATE_SECONDS:-86400}"
+MODEL_PROXY_LOG_ROTATE_KEEP="${MODEL_PROXY_LOG_ROTATE_KEEP:-5}"
 
 # Accept GNU-style action aliases (e.g. `model-proxy --status`).
 case "$action" in
@@ -42,6 +44,8 @@ Default env-backed values:
   LLMOPS_UPSTREAM_HOST=<required from ~/.llm-ops/config.env or explicit env>
   LLMOPS_UPSTREAM_PORT=<required from ~/.llm-ops/config.env or explicit env>
   MODEL_PROXY_LISTEN_PORT=<optional; defaults to upstream port>
+  MODEL_PROXY_LOG_ROTATE_SECONDS=<optional; defaults to 86400>
+  MODEL_PROXY_LOG_ROTATE_KEEP=<optional; defaults to 5>
 
 Examples:
   model-proxy restart --upstream http://<configured-upstream-host>:<configured-upstream-port>
@@ -355,6 +359,8 @@ status_proxy() {
   echo "  listener_pid=${listener_pid:-<none>}"
   echo "  upstream=${upstream:-<unset>}"
   echo "  log=$log"
+  echo "  log_rotate_seconds=${MODEL_PROXY_LOG_ROTATE_SECONDS}"
+  echo "  log_rotate_keep=${MODEL_PROXY_LOG_ROTATE_KEEP}"
   echo "  chat_template=${tmpl:-<none/default>}"
   echo "  raw_request_log=$raw_req"
   echo "  rendered_prompt_log=$rendered"

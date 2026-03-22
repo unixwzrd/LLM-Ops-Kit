@@ -301,6 +301,13 @@ If that passes, confirm:
 - the output file `/tmp/tts-bridge-faith.wav` exists
 - the bridge stderr log shows input preprocessing and alias resolution activity
 
+Bridge log rotation:
+
+- the active bridge log stays at `~/.llm-ops/logs/tts-bridge.log`
+- older bridge logs rotate to `.0.log`, `.1.log`, and so on
+- `TTS_BRIDGE_LOG_ROTATE_SECONDS` defaults to `86400`
+- `TTS_BRIDGE_LOG_ROTATE_KEEP` defaults to `5`
+
 ## Voice Clone Workflow
 
 Use a `.wav` and a matching transcript `.txt` with the same basename:
