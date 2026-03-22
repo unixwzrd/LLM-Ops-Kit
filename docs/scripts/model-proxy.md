@@ -47,5 +47,9 @@ Manage OpenAI proxy tap lifecycle for request/response visibility.
   - previous files become `.0.log`, `.1.log`, and so on
 - `--log-rotate-seconds` defaults to `86400` seconds (24 hours).
 - `--log-rotate-keep` defaults to `5`.
+- `request_end` NDJSON records now include a compact `response_stats` block when upstream returns structured usage/timing data.
+  - `usage`: `prompt_tokens`, `completion_tokens`, `total_tokens`, `cached_prompt_tokens`
+  - `timings`: `prompt_n`, `predicted_n`, `cache_n`, `prompt_ms`, `predicted_ms`, `prompt_per_second`, `predicted_per_second`
+  - `finish_reasons`: list of finish reasons from `choices[*].finish_reason`
 - Remote-model topology can reuse the same port number locally because the upstream host is different.
 - Fully local topology must use a different local listen port than the underlying local model server.

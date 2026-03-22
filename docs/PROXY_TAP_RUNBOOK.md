@@ -13,6 +13,7 @@
   - [Direct Logs (No jq)](#direct-logs-no-jq)
   - [jq Parse Pattern (Important)](#jq-parse-pattern-important)
   - [Live Traffic View](#live-traffic-view)
+  - [Token And Timing Stats View](#token-and-timing-stats-view)
   - [Role / Tool Summary View](#role--tool-summary-view)
   - [Rendered Prompt (Human Readable)](#rendered-prompt-human-readable)
   - [Rendered Prompt (Only Body)](#rendered-prompt-only-body)
@@ -125,6 +126,37 @@ Sample output:
 ```text
 2026-02-23T23:57:36.210342+00:00	request_start	-	-
 2026-02-23T23:57:37.910112+00:00	request_end	200	1699
+```
+
+## Token And Timing Stats View
+
+`request_end` records include `response_stats` when the upstream response exposes structured usage and timing fields, for example from llama.cpp OpenAI-compatible responses.
+
+```bash
+tail -F ~/.llm-ops/logs/model-proxy.ndjson | jq --unbuffered -r '
+  (fromjson? // .)
+  | select(.event=="request_end" and .path=="/v1/chat/completions")
+  | .response_stats as $s
+  | [
+      .ts,
+      (.response_status|tostring),
+      ("prompt=" + (($s.usage.prompt_tokens // "-")|tostring)),
+      ("completion=" + (($s.usage.completion_tokens // "-")|tostring)),
+      ("total=" + (($s.usage.total_tokens // "-")|tostring)),
+      ("cached=" + (($s.usage.cached_prompt_tokens // "-")|tostring)),
+      ("prompt_ms=" + (($s.timings.prompt_ms // "-")|tostring)),
+      ("predicted_ms=" + (($s.timings.predicted_ms // "-")|tostring)),
+      ("prompt_tps=" + (($s.timings.prompt_per_second // "-")|tostring)),
+      ("predicted_tps=" + (($s.timings.predicted_per_second // "-")|tostring)),
+      ("finish=" + ((($s.finish_reasons // []) | join(",")) // ""))
+    ]
+  | @tsv'
+```
+
+Sample output:
+
+```text
+2026-03-22T04:10:07.000000+00:00	200	prompt=15	completion=7	total=22	cached=0	prompt_ms=153.79	predicted_ms=159.97	prompt_tps=97.53	predicted_tps=43.75	finish=stop
 ```
 
 ## Role / Tool Summary View

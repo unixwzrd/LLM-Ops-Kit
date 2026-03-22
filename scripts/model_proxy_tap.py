@@ -195,6 +195,59 @@ def summarize_request(payload: Any) -> dict[str, Any] | None:
     }
 
 
+def extract_response_stats(payload: Any) -> dict[str, Any] | None:
+    if not isinstance(payload, dict):
+        return None
+
+    stats: dict[str, Any] = {}
+    usage = payload.get("usage")
+    if isinstance(usage, dict):
+        usage_summary: dict[str, Any] = {}
+        for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
+            value = usage.get(key)
+            if isinstance(value, int):
+                usage_summary[key] = value
+        prompt_details = usage.get("prompt_tokens_details")
+        if isinstance(prompt_details, dict):
+            cached_tokens = prompt_details.get("cached_tokens")
+            if isinstance(cached_tokens, int):
+                usage_summary["cached_prompt_tokens"] = cached_tokens
+        if usage_summary:
+            stats["usage"] = usage_summary
+
+    timings = payload.get("timings")
+    if isinstance(timings, dict):
+        timings_summary: dict[str, Any] = {}
+        for key in (
+            "prompt_n",
+            "predicted_n",
+            "cache_n",
+            "prompt_ms",
+            "predicted_ms",
+            "prompt_per_second",
+            "predicted_per_second",
+        ):
+            value = timings.get(key)
+            if isinstance(value, (int, float)):
+                timings_summary[key] = value
+        if timings_summary:
+            stats["timings"] = timings_summary
+
+    choices = payload.get("choices")
+    if isinstance(choices, list):
+        finish_reasons: list[str] = []
+        for choice in choices:
+            if not isinstance(choice, dict):
+                continue
+            finish_reason = choice.get("finish_reason")
+            if isinstance(finish_reason, str) and finish_reason:
+                finish_reasons.append(finish_reason)
+        if finish_reasons:
+            stats["finish_reasons"] = finish_reasons
+
+    return stats or None
+
+
 class ProxyTapHandler(BaseHTTPRequestHandler):
     upstream_base: str = ""
     log_path: Path
@@ -489,9 +542,11 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
 
         resp_body = bytes(resp_capture)
         resp_text, resp_json = decode_body(resp_body)
+        response_stats = extract_response_stats(resp_json)
         if resp_truncated and resp_text is not None:
             resp_text = resp_text + "\n<truncated>"
             resp_json = None
+            response_stats = None
 
         response_end_ts = utc_now()
         self._write_framed_log(
@@ -518,6 +573,7 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
                 "request_rewrite": request_rewrite,
                 "response_status": status,
                 "response_headers": redact_headers(resp_headers),
+                "response_stats": response_stats,
                 "response_text": resp_text,
                 "response_json": resp_json,
                 "error": error_text,

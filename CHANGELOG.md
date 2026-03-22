@@ -1,12 +1,91 @@
 # Agent Ops Changelog
 
 **Created**: 2026-02-20
-**Updated**: 2026-03-16
+**Updated**: 2026-03-22
 
 All notable changes to LLM-Ops-Kit will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+### 2026-03-22 — Proxy log rotation, response stats, and wrapper hardening
+
+- **Scope:** `LLM-Ops-Kit/scripts`, `LLM-Ops-Kit/docs`
+- **Category:** `runtime`, `proxy`, `observability`, `tts`, `documentation`
+- **What changed:**
+  - Added shared time-based log rotation for toolkit-owned Python log writers:
+    - new `scripts/log_rotation.py`
+    - numbered rollover scheme `active.log` -> `active.log.0.log` -> `active.log.1.log`
+    - default rotation period `86400` seconds
+    - configurable keep count for rotated files
+  - Added log rotation controls to `model-proxy`:
+    - `--log-rotate-seconds`
+    - `--log-rotate-keep`
+    - `MODEL_PROXY_LOG_ROTATE_SECONDS`
+    - `MODEL_PROXY_LOG_ROTATE_KEEP`
+  - Added log rotation controls to `tts-bridge`:
+    - `--log-path`
+    - `--log-rotate-seconds`
+    - `--log-rotate-keep`
+    - `TTS_BRIDGE_LOG_PATH`
+    - `TTS_BRIDGE_LOG_ROTATE_SECONDS`
+    - `TTS_BRIDGE_LOG_ROTATE_KEEP`
+  - Extended `model-proxy` request-end logging with compact llama.cpp/OpenAI-compatible response stats:
+    - prompt, completion, total, and cached token counts
+    - prompt and generation timing fields
+    - finish reasons
+  - Hardened the `model-proxy` wrapper startup path:
+    - removed the incidental `rg` dependency used for `--upstream` detection
+    - load runtime env before validating upstream settings
+    - support `MODEL_PROXY_CHAT_TEMPLATE` as a config/env default
+  - Added focused tests for:
+    - rotating log writer behavior
+    - proxy response-stats extraction
+  - Updated operator docs and runbooks with:
+    - rotation settings
+    - live `jq` examples for token and timing stats
+- **Why:**
+  - Keep proxy and bridge logs bounded during long-running sessions, improve live observability for llama.cpp performance and token usage, and remove brittle wrapper startup behavior that depended on shell environment quirks.
+
+### 2026-03-20 — Qwen3TTS base-model default path correction
+
+- **Scope:** `LLM-Ops-Kit/scripts/models/Qwen3TTS.sh`
+- **Category:** `tts`, `runtime`
+- **What changed:**
+  - Changed the default canonical `Qwen3TTS` model path from the `CustomVoice` build to the `Base` build:
+    - `Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit` -> `Qwen3-TTS-12Hz-0.6B-Base-8bit`
+- **Why:**
+  - Keep the launcher default aligned with the base speech model, while voice-clone behavior is handled by the bridge and explicit reference inputs instead of assuming a clone-tuned model path.
+
+### 2026-03-19 — Config-driven TTS pronunciation and voice mapping
+
+- **Scope:** `LLM-Ops-Kit/scripts/tts_bridge_server.py`, `LLM-Ops-Kit/scripts/tts-bridge`, `LLM-Ops-Kit/docs`, `LLM-Ops-Kit/examples/tts`
+- **Category:** `tts`, `runtime`, `configuration`, `documentation`
+- **What changed:**
+  - Added config-driven pronunciation substitution to `tts-bridge`:
+    - `pronounce.json` support under `~/.llm-ops`
+    - longest-match replacement for symbol and text fragments before requests are forwarded upstream
+  - Added config-driven voice alias mapping:
+    - `voice-map.json` support under `~/.llm-ops`
+    - friendly voice names can resolve to clone sample audio and matching transcript files
+    - explicit incoming `ref_audio` and `ref_text` continue to override alias-derived values
+  - Added bridge config path controls:
+    - `--config-dir`
+    - `--pronounce-config`
+    - `--voice-map-config`
+    - `--samples-dir`
+    - matching environment variables for each
+  - Hardened bridge validation and diagnostics:
+    - invalid JSON fails loudly at startup
+    - malformed alias entries fail loudly
+    - missing alias-resolved sample or transcript files fail clearly at request time
+    - `/health` now reports resolved config paths and entry counts
+  - Added example configs:
+    - `examples/tts/pronounce.example.json`
+    - `examples/tts/voice-map.example.json`
+  - Added focused bridge tests covering config resolution, substitution behavior, alias resolution, and failure paths.
+- **Why:**
+  - Make clone-voice selection and pronunciation cleanup operator-configurable without editing code, and give the bridge clearer failure modes when local TTS inputs are incomplete or invalid.
 
 ### 2026-03-16 — BGEm3 embedding profile rollout
 

@@ -20,6 +20,7 @@ DEFAULT_LISTEN_PORT="${MODEL_PROXY_LISTEN_PORT:-$DEFAULT_UPSTREAM_PORT}"
 PROXY_TAP_BIN="${MODEL_PROXY_TAP_BIN:-$LLMOPS_ROOT/bin/model-proxy-tap}"
 MODEL_PROXY_LOG_ROTATE_SECONDS="${MODEL_PROXY_LOG_ROTATE_SECONDS:-86400}"
 MODEL_PROXY_LOG_ROTATE_KEEP="${MODEL_PROXY_LOG_ROTATE_KEEP:-5}"
+MODEL_PROXY_CHAT_TEMPLATE="${MODEL_PROXY_CHAT_TEMPLATE:-}"
 
 # Accept GNU-style action aliases (e.g. `model-proxy --status`).
 case "$action" in
@@ -46,6 +47,7 @@ Default env-backed values:
   MODEL_PROXY_LISTEN_PORT=<optional; defaults to upstream port>
   MODEL_PROXY_LOG_ROTATE_SECONDS=<optional; defaults to 86400>
   MODEL_PROXY_LOG_ROTATE_KEEP=<optional; defaults to 5>
+  MODEL_PROXY_CHAT_TEMPLATE=<optional default chat template path>
 
 Examples:
   model-proxy restart --upstream http://<configured-upstream-host>:<configured-upstream-port>
@@ -59,6 +61,19 @@ if [[ "$action" == "-h" || "$action" == "--help" ]]; then
 fi
 
 extra_args=("$@")
+
+has_upstream_arg() {
+  local i arg
+  for ((i = 0; i < ${#extra_args[@]}; i++)); do
+    arg="${extra_args[$i]}"
+    case "$arg" in
+      --upstream|--upstream=*)
+        return 0
+        ;;
+    esac
+  done
+  return 1
+}
 
 arg_value() {
   # Usage: arg_value --name [--alt-name]
@@ -215,6 +230,9 @@ start_proxy() {
   ensure_runtime_dirs
   prune_runtime_artifacts
 
+  local configured_upstream_host="${LLMOPS_UPSTREAM_HOST:-}"
+  local configured_upstream_port="${LLMOPS_UPSTREAM_PORT:-}"
+
   if pid="$(read_pid model-proxy 2>/dev/null)" && is_pid_running "$pid"; then
     echo "model-proxy: already running pid=$pid"
     return 0
@@ -225,13 +243,21 @@ start_proxy() {
   prepare_log_file "$LOG_OUT"
   prepare_log_file "$LOG_ERR"
 
-  if ! printf '%s\n' "${extra_args[@]}" | rg -q -- '^--upstream($|=)' && [[ -z "$DEFAULT_UPSTREAM_HOST" || -z "$DEFAULT_UPSTREAM_PORT" ]]; then
+  if ! has_upstream_arg && [[ -z "$configured_upstream_host" || -z "$configured_upstream_port" ]]; then
     print_missing_config_hint \
       "model-proxy: missing upstream configuration" \
       LLMOPS_UPSTREAM_HOST \
       LLMOPS_UPSTREAM_PORT \
       MODEL_PROXY_LISTEN_PORT
     return 2
+  fi
+
+  if ! has_upstream_arg && [[ -n "$configured_upstream_host" && -n "$configured_upstream_port" ]]; then
+    extra_args=(--upstream "http://${configured_upstream_host}:${configured_upstream_port}" "${extra_args[@]}")
+  fi
+
+  if [[ -n "$MODEL_PROXY_CHAT_TEMPLATE" ]] && ! arg_value --chat-template >/dev/null 2>&1; then
+    extra_args=(--chat-template "$MODEL_PROXY_CHAT_TEMPLATE" "${extra_args[@]}")
   fi
 
   nohup "$PROXY_TAP_BIN" "${extra_args[@]}" > "$LOG_OUT" 2> "$LOG_ERR" &
@@ -257,6 +283,7 @@ start_proxy() {
   log="$(arg_value --log 2>/dev/null || true)"
   log="${log:-$LLMOPS_LOG_DIR/model-proxy.ndjson}"
   tmpl="$(arg_value --chat-template 2>/dev/null || true)"
+  tmpl="${tmpl:-$MODEL_PROXY_CHAT_TEMPLATE}"
   raw_req="$(arg_value --raw-request-log 2>/dev/null || true)"
   raw_req="${raw_req:-$LLMOPS_LOG_DIR/model-proxy.raw.log}"
   rendered="$(arg_value --rendered-prompt-log 2>/dev/null || true)"
