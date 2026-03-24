@@ -53,16 +53,20 @@ Scripts use this precedence:
 1. CLI flags (when supported)
 2. Exported environment variables
 3. `~/.llm-ops/config.env` user config
-4. Repo defaults (`scripts/config/hosts.env`)
-5. Script defaults
+4. `~/.llm-ops/config/<ModelProfile>.env` per-model overrides for model launchers
+5. Repo defaults (`scripts/config/hosts.env`)
+6. Script defaults
 
 Note:
 - Toolkit scripts do not rely on `~/.openclaw/.env` by default.
 - Keep toolkit configuration in `~/.llm-ops/config.env`.
+- For model-specific overrides, prefer `~/.llm-ops/config/<ModelProfile>.env`.
+- If a per-model override file is missing, `modelctl` auto-seeds it from the shipped model profile the first time that launcher is used and prints a notice.
 
 ## Core Environment Variables
 
 - `~/.llm-ops/config.env`: user-owned toolkit config file for host/IP/path overrides.
+- `~/.llm-ops/config/<ModelProfile>.env`: optional model-specific override file loaded by `modelctl` after the global config and before the shipped model profile.
 - `LLMOPS_HOME`: toolkit state root (default `~/.llm-ops`).
 - `LLMOPS_RUN_DIR`: runtime pid/state dir (default `$LLMOPS_HOME/run`).
 - `LLMOPS_LOG_DIR`: toolkit log dir (default `$LLMOPS_HOME/logs`).
@@ -76,6 +80,9 @@ Note:
 - `MODEL_PROXY_TAP_BIN`: optional explicit path to `model-proxy-tap`.
 - `MODEL_PROXY_LOG_ROTATE_SECONDS`: time-based rotation period for proxy-owned logs. Default `86400`.
 - `MODEL_PROXY_LOG_ROTATE_KEEP`: number of rotated proxy logs to keep. Default `5`.
+- `USE_CUSTOM_TEMPLATE`: set to `1` to enable a llama.cpp custom chat template for LLM profiles.
+- `CHAT_TEMPLATE`: explicit llama.cpp chat template override path when `USE_CUSTOM_TEMPLATE=1`.
+- `TEMP`, `TOP_P`, `TOP_K`, `MIN_P`, `PRESENCE_PENALTY`, `REPEAT_PENALTY`: explicit sampling overrides for local LLM model profiles.
 - `OPENAI_TTS_BASE_URL`: OpenClaw OpenAI-TTS provider base URL (for example `http://127.0.0.1:11440/v1`).
 - `TTS_BRIDGE_HOST`: bind host for `tts-bridge`.
 - `TTS_BRIDGE_PORT`: bind port for `tts-bridge`.
@@ -207,6 +214,24 @@ LLMOPS_LOG_DIR=$HOME/.llm-ops/logs
 LLMOPS_LOG_ROTATE_BYTES=10485760
 LLMOPS_LOG_ROTATE_KEEP=5
 LLMOPS_BACKUP_KEEP=5
+USE_CUSTOM_TEMPLATE=1
+CHAT_TEMPLATE=$HOME/.llm-ops/current/scripts/templates/Qwen3.5-chatml-tools.jinja
+EOF
+```
+
+Example per-model override:
+
+```bash
+mkdir -p ~/.llm-ops/config
+cat > ~/.llm-ops/config/Qwen3.5.env <<'EOF'
+USE_CUSTOM_TEMPLATE=1
+CHAT_TEMPLATE=$HOME/.llm-ops/current/scripts/templates/Qwen3.5-chatml-no-tools.jinja
+TEMP=0.9
+TOP_P=0.95
+TOP_K=20
+MIN_P=0.0
+PRESENCE_PENALTY=1.5
+REPEAT_PENALTY=1.0
 EOF
 ```
 

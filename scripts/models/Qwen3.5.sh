@@ -16,8 +16,7 @@ THREADS="${THREADS:-$(default_threads)}"
 THREADS_BATCH="${THREADS_BATCH:-$THREADS}"
 
 # llama.cpp sizing (Qwen3.5-tuned defaults)
-#CTX_SIZE="${CTX_SIZE:-49152}"
-CTX_SIZE="${CTX_SIZE:-65536}"
+CTX_SIZE="${CTX_SIZE:-32768}"
 GPU_LAYERS="${GPU_LAYERS:-99}"
 BATCH_SIZE="${BATCH_SIZE:-1024}"
 UBATCH_SIZE="${UBATCH_SIZE:-512}"
@@ -26,32 +25,19 @@ UBATCH_SIZE="${UBATCH_SIZE:-512}"
 USE_MLOCK="${USE_MLOCK:-1}"
 USE_NO_MMAP="${USE_NO_MMAP:-1}"
 DIRECT_IO="${DIRECT_IO:-1}"
+
 USE_NO_WEBUI="${USE_NO_WEBUI:-1}"
 
 # Prompt/template settings
+#VERBOSE_PROMPT="${VERBOSE_PROMPT:-1}"
 VERBOSE_PROMPT="${VERBOSE_PROMPT:-0}"
-USE_CUSTOM_TEMPLATE="${USE_CUSTOM_TEMPLATE:-1}"
-if [[ -z "${CHAT_TEMPLATE:-}" ]]; then
-  CHAT_TEMPLATE="${LLMOPS_ROOT}/scripts/templates/Qwen3.5-chatml-tools.jinja"
-fi
+USE_CUSTOM_TEMPLATE="${USE_CUSTOM_TEMPLATE:-0}"
+CHAT_TEMPLATE="${CHAT_TEMPLATE:-}"
 
-# Sampling presets (overridable by env)
-QWEN35_PRESET="${QWEN35_PRESET:-thinking-general}"
-case "$QWEN35_PRESET" in
-  thinking-coding)
-    TEMP="${TEMP:-0.6}"
-    TOP_P="${TOP_P:-0.95}"
-    TOP_K="${TOP_K:-20}"
-    MIN_P="${MIN_P:-0.0}"
-    PRESENCE_PENALTY="${PRESENCE_PENALTY:-0.0}"
-    REPEAT_PENALTY="${REPEAT_PENALTY:-1.0}"
-    ;;
-  thinking-general|*)
-    TEMP="${TEMP:-0.9}"
-    TOP_P="${TOP_P:-0.95}"
-    TOP_K="${TOP_K:-20}"
-    MIN_P="${MIN_P:-0.0}"
-    PRESENCE_PENALTY="${PRESENCE_PENALTY:-1.5}"
-    REPEAT_PENALTY="${REPEAT_PENALTY:-1.0}"
-    ;;
-esac
+# Sampling defaults (external env or ~/.llm-ops/config.env can override directly)
+TEMP="${TEMP:-0.9}"
+TOP_P="${TOP_P:-0.95}"
+TOP_K="${TOP_K:-20}"
+MIN_P="${MIN_P:-0.0}"
+PRESENCE_PENALTY="${PRESENCE_PENALTY:-1.5}"
+REPEAT_PENALTY="${REPEAT_PENALTY:-1.0}"

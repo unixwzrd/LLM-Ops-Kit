@@ -70,19 +70,28 @@ resolve_args() {
 load_model_defaults() {
   local m="$1"
   local model_file="$SCRIPT_DIR/models/${m}.sh"
+  local model_override_file="$LLMOPS_CONFIG_DIR/${m}.env"
   [[ -f "$model_file" ]] || { echo "Model defaults not found: $model_file" >&2; exit 2; }
 
   # Precedence (highest -> lowest):
   # 1) external environment
-  # 2) model profile
-  # 3) model-kind defaults
-  # 4) global llama.cpp defaults
+  # 2) ~/.llm-ops/config.env (via load_shell_env)
+  # 3) ~/.llm-ops/config/<Model>.env
+  # 4) model profile
+  # 5) model-kind defaults
+  # 6) global llama.cpp defaults
 
-  # 2) model profile
+  # 3) user-owned per-model override
+  if [[ -f "$model_override_file" ]]; then
+    # shellcheck disable=SC1090
+    . "$model_override_file"
+  fi
+
+  # 4) model profile
   # shellcheck disable=SC1091
   . "$model_file"
 
-  # 3) model-type defaults
+  # 5) model-type defaults
   case "${MODEL_TYPE:-}" in
     llm)
       # shellcheck disable=SC1091
@@ -222,6 +231,24 @@ list_profiles() {
     | sort
 }
 
+ensure_model_override_template() {
+  local m="$1"
+  local model_file="$SCRIPT_DIR/models/${m}.sh"
+  local model_override_file="$LLMOPS_CONFIG_DIR/${m}.env"
+
+  [[ -f "$model_file" ]] || return 0
+  [[ -f "$model_override_file" ]] && return 0
+
+  mkdir -p "$LLMOPS_CONFIG_DIR"
+  cp "$model_file" "$model_override_file"
+
+  {
+    echo "modelctl: no per-model override file found for '$m'"
+    echo "modelctl: copied template config to $model_override_file"
+    echo "modelctl: edit that file for user-owned overrides; shipped defaults remain in $model_file"
+  } >&2
+}
+
 if [[ "$model_name" == "__all__" ]]; then
   case "$action" in
     list)
@@ -251,6 +278,7 @@ if [[ "$model_name" == "__all__" ]]; then
   esac
 fi
 
+ensure_model_override_template "$model_name"
 load_model_defaults "$model_name"
 
 if [[ "$MODEL_TYPE" == "llm" || "$MODEL_TYPE" == "embedding" ]]; then

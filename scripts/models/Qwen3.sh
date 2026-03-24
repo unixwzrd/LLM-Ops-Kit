@@ -28,29 +28,14 @@ DIRECT_IO="${DIRECT_IO:-0}"
 USE_NO_WEBUI="${USE_NO_WEBUI:-1}"
 
 # Prompt/template settings
-USE_CUSTOM_TEMPLATE="${USE_CUSTOM_TEMPLATE:-1}"
-if [[ -z "${CHAT_TEMPLATE:-}" ]]; then
-  CHAT_TEMPLATE="${LLMOPS_ROOT}/scripts/templates/Qwen3-VL-chatml-tools.jinja"
-fi
+USE_CUSTOM_TEMPLATE="${USE_CUSTOM_TEMPLATE:-0}"
+CHAT_TEMPLATE="${CHAT_TEMPLATE:-}"
 VERBOSE_PROMPT="${VERBOSE_PROMPT:-0}"
 
-# Sampling presets (overridable by env)
-QWEN3_PRESET="${QWEN3_PRESET:-thinking-general}"
-case "$QWEN3_PRESET" in
-  thinking-coding)
-    TEMP="${TEMP:-0.6}"
-    TOP_P="${TOP_P:-0.95}"
-    TOP_K="${TOP_K:-20}"
-    MIN_P="${MIN_P:-0.0}"
-    PRESENCE_PENALTY="${PRESENCE_PENALTY:-0.0}"
-    REPEAT_PENALTY="${REPEAT_PENALTY:-1.0}"
-    ;;
-  thinking-general|*)
-    TEMP="${TEMP:-1.0}"
-    TOP_P="${TOP_P:-0.95}"
-    TOP_K="${TOP_K:-20}"
-    MIN_P="${MIN_P:-0.0}"
-    PRESENCE_PENALTY="${PRESENCE_PENALTY:-1.5}"
-    REPEAT_PENALTY="${REPEAT_PENALTY:-1.0}"
-    ;;
-esac
+# Sampling defaults (external env or ~/.llm-ops/config.env can override directly)
+TEMP="${TEMP:-1.0}"
+TOP_P="${TOP_P:-0.95}"
+TOP_K="${TOP_K:-20}"
+MIN_P="${MIN_P:-0.0}"
+PRESENCE_PENALTY="${PRESENCE_PENALTY:-1.5}"
+REPEAT_PENALTY="${REPEAT_PENALTY:-1.0}"

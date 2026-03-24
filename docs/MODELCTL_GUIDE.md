@@ -38,11 +38,17 @@ Any launcher name is supported as long as `scripts/models/<Launcher>.sh` exists.
 `modelctl` loads settings in this order:
 
 1. External environment variables (already exported)
-2. Model profile defaults (`scripts/models/<Profile>.sh`)
-3. Model-type defaults (`scripts/defaults/llm-defaults.sh`, `scripts/defaults/embedding-defaults.sh`, or `scripts/defaults/tts-defaults.sh`)
-4. Global llama defaults (`scripts/defaults/llama-defaults.sh`) for llama-based model types only
+2. `~/.llm-ops/config.env`
+3. `~/.llm-ops/config/<Profile>.env`
+4. Model profile defaults (`scripts/models/<Profile>.sh`)
+5. Model-type defaults (`scripts/defaults/llm-defaults.sh`, `scripts/defaults/embedding-defaults.sh`, or `scripts/defaults/tts-defaults.sh`)
+6. Global llama defaults (`scripts/defaults/llama-defaults.sh`) for llama-based model types only
 
 This works because defaults use `VAR="${VAR:-...}"` and do not overwrite values already set.
+
+Per-model override files use the same shell layout as the shipped model profile files, so you can copy a profile into `~/.llm-ops/config/<Profile>.env` and adjust only the values you want to change.
+
+If `~/.llm-ops/config/<Profile>.env` does not exist when you run a model-specific launcher, `modelctl` now auto-copies the shipped profile there and prints a notice. That gives the user a local file to edit without touching the repo copy.
 
 ## How model type is selected
 
@@ -72,7 +78,7 @@ If these are set, `modelctl` passes them to llama-server:
 - `PRESENCE_PENALTY`
 - `REPEAT_PENALTY`
 
-Model profiles can implement preset selectors (for example `QWEN35_PRESET`) that set these values.
+Set these values directly in `~/.llm-ops/config.env`, `~/.llm-ops/config/<Profile>.env`, or your exported environment.
 
 ## Validation rules
 
