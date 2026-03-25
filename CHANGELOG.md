@@ -8,7 +8,7 @@ All notable changes to LLM-Ops-Kit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-### 2026-03-25 — Release v0.5.5 TTS bridge status cleanup and upstream-authoritative reporting
+### 2026-03-25 — Release v0.6.5 TTS bridge status cleanup and upstream-authoritative reporting
 
 - **Scope:** `LLM-Ops-Kit/scripts/tts-bridge`, `LLM-Ops-Kit/scripts/tts_bridge_server.py`, `LLM-Ops-Kit/docs/scripts/tts-bridge.md`
 - **Category:** `tts`, `runtime`, `observability`, `documentation`
