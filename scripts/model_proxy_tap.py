@@ -298,7 +298,6 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
         text = body or ""
         end_ts = ts_end or ts_start
         payload = [
-            f"{ts_start}\t{request_id}\t{label}\n",
             f"=== {label} START {ts_start} ===\n",
             text,
         ]

@@ -1,43 +1,11 @@
 {%- set image_count = namespace(value=0) %}
 {%- set video_count = namespace(value=0) %}
-{%- set TOOL_CONTENT_MAX = 12000 %}
-{%- set TOOL_HISTORY_LIMIT = 1 %}
-
-{%- macro strip_think_blocks(text) %}
-    {%- if text is string and '<think>' in text and '</think>' in text %}
-        {{- text.split('</think>')[-1].lstrip('\n') }}
-    {%- else %}
-        {{- text }}
-    {%- endif %}
-{%- endmacro %}
-
-{%- macro clean_user_text(text) %}
-    {%- if text is string and 'Conversation info (untrusted metadata):' in text %}
-        {%- set parts = text.split('\n\n') %}
-        {%- if parts|length >= 2 %}
-            {{- parts[-1] }}
-        {%- else %}
-            {{- text }}
-        {%- endif %}
-    {%- else %}
-        {{- text }}
-    {%- endif %}
-{%- endmacro %}
-
-{%- macro render_content(content, do_vision_count, is_system_content=false, role='') %}
+{%- macro render_content(content, do_vision_count, is_system_content=false) %}
     {%- if content is string %}
-        {%- if role == 'user' %}
-            {{- clean_user_text(content) }}
-        {%- elif role == 'assistant' %}
-            {{- strip_think_blocks(content) }}
-        {%- else %}
-            {{- content }}
-        {%- endif %}
+        {{- content }}
     {%- elif content is iterable and content is not mapping %}
         {%- for item in content %}
-            {%- if item is mapping and (item.type is defined) and (item.type == 'thinking' or item.type == 'reasoning' or item.type == 'reasoning_content') %}
-            {%- elif item is mapping and item.thinking is defined %}
-            {%- elif 'image' in item or 'image_url' in item or item.type == 'image' %}
+            {%- if 'image' in item or 'image_url' in item or item.type == 'image' %}
                 {%- if is_system_content %}
                     {{- raise_exception('System message cannot contain images.') }}
                 {%- endif %}
@@ -60,21 +28,7 @@
                 {%- endif %}
                 {{- '<|vision_start|><|video_pad|><|vision_end|>' }}
             {%- elif 'text' in item %}
-                {%- if role == 'user' %}
-                    {{- clean_user_text(item.text) }}
-                {%- elif role == 'assistant' %}
-                    {{- strip_think_blocks(item.text) }}
-                {%- else %}
-                    {{- item.text }}
-                {%- endif %}
-            {%- elif item.text is defined %}
-                {%- if role == 'user' %}
-                    {{- clean_user_text(item.text) }}
-                {%- elif role == 'assistant' %}
-                    {{- strip_think_blocks(item.text) }}
-                {%- else %}
-                    {{- item.text }}
-                {%- endif %}
+                {{- item.text }}
             {%- else %}
                 {{- raise_exception('Unexpected item type in content.') }}
             {%- endif %}
@@ -85,11 +39,9 @@
         {{- raise_exception('Unexpected content type.') }}
     {%- endif %}
 {%- endmacro %}
-
 {%- if not messages %}
     {{- raise_exception('No messages provided.') }}
 {%- endif %}
-
 {%- if tools and tools is iterable and tools is not mapping %}
     {{- '<|im_start|>system\n' }}
     {{- "# Tools\n\nYou have access to the following functions:\n\n<tools>" }}
@@ -98,26 +50,27 @@
         {{- tool | tojson }}
     {%- endfor %}
     {{- "\n</tools>" }}
-    {{- '\n\nIf you choose to call a function ONLY reply in the following format with NO suffix:\n\n<tool_call>\n<function=example_function_name>\n<parameter=example_parameter_1>\nvalue_1\n</parameter>\n<parameter=example_parameter_2>\nThis is the value for the second parameter\nthat can span\nmultiple lines\n</parameter>\n</function>\n</tool_call>\n\n<IMPORTANT>\nReminder:\n- Function calls MUST follow the specified format: an inner <function=...></function> block must be nested within <tool_call></tool_call> XML tags\n- Emit EXACTLY ONE <tool_call> block per assistant turn\n- Call EXACTLY ONE function per <tool_call> block\n- Do not batch multiple searches or multiple function calls into one response\n- After emitting a tool call, stop and wait for the tool result before deciding on another call\n- Do not include any prose, explanation, markdown, or additional text after a <tool_call> block\n- Required parameters MUST be specified\n- You may provide optional reasoning for your function call in natural language BEFORE the function call, but NOT after\n- If there is no function call available, answer the question like normal with your current knowledge and do not tell the user about function calls\n</IMPORTANT>' }}
-    {%- if messages[0].role == 'system' or messages[0].role == 'developer' %}
-        {%- set content = render_content(messages[0].content, false, true, messages[0].role)|trim %}
+    {{- '\n\nIf you choose to call a function ONLY reply in the following format with NO suffix:\n\n<tool_call>\n<function=example_function_name>\n<parameter=example_parameter_1>\nvalue_1\n</parameter>\n<parameter=example_parameter_2>\nThis is the value
+for the second parameter\nthat can span\nmultiple lines\n</parameter>\n</function>\n</tool_call>\n\n<IMPORTANT>\nReminder:\n- Function calls MUST follow the specified format: an inner <function=...></function> block must be nested within <tool_call></tool_call> XML tags\n- Required parameters MUST be specified\n- You may provide optional reasoning for your function call in natural language BEFORE the function call, but NOT after\n- If there is no function call available, answer the question like normal
+with your current knowledge and do not tell the user about function calls\n</IMPORTANT>' }}
+    {%- if messages[0].role == 'system' %}
+        {%- set content = render_content(messages[0].content, false, true)|trim %}
         {%- if content %}
             {{- '\n\n' + content }}
         {%- endif %}
     {%- endif %}
     {{- '<|im_end|>\n' }}
 {%- else %}
-    {%- if messages[0].role == 'system' or messages[0].role == 'developer' %}
-        {%- set content = render_content(messages[0].content, false, true, messages[0].role)|trim %}
+    {%- if messages[0].role == 'system' %}
+        {%- set content = render_content(messages[0].content, false, true)|trim %}
         {{- '<|im_start|>system\n' + content + '<|im_end|>\n' }}
     {%- endif %}
 {%- endif %}
-
 {%- set ns = namespace(multi_step_tool=true, last_query_index=messages|length - 1) %}
 {%- for message in messages[::-1] %}
     {%- set index = (messages|length - 1) - loop.index0 %}
     {%- if ns.multi_step_tool and message.role == "user" %}
-        {%- set content = render_content(message.content, false, false, 'user')|trim %}
+        {%- set content = render_content(message.content, false)|trim %}
         {%- if not(content.startswith('<tool_response>') and content.endswith('</tool_response>')) %}
             {%- set ns.multi_step_tool = false %}
             {%- set ns.last_query_index = index %}
@@ -127,23 +80,11 @@
 {%- if ns.multi_step_tool %}
     {{- raise_exception('No user query found in messages.') }}
 {%- endif %}
-
-{%- set ns_tools = namespace(total=0) %}
-{%- for mm in messages %}
-    {%- if mm.role == "tool" %}
-        {%- set _tool_text = render_content(mm.content, false, false, 'tool')|trim %}
-        {%- if not ('[[audio_as_voice]]' in _tool_text or 'MEDIA:/tmp/openclaw/tts-' in _tool_text) %}
-            {%- set ns_tools.total = ns_tools.total + 1 %}
-        {%- endif %}
-    {%- endif %}
-{%- endfor %}
-{%- set ns_seen_tools = namespace(count=0) %}
-
 {%- for message in messages %}
-    {%- set content = render_content(message.content, true, false, message.role)|trim %}
-    {%- if message.role == "system" or message.role == "developer" %}
-        {%- if loop.previtem and loop.previtem.role != "system" and loop.previtem.role != "developer" %}
-            {{- raise_exception('System/developer messages must be at the beginning.') }}
+    {%- set content = render_content(message.content, true)|trim %}
+    {%- if message.role == "system" %}
+        {%- if not loop.first %}
+            {{- raise_exception('System message must be at the beginning.') }}
         {%- endif %}
     {%- elif message.role == "user" %}
         {{- '<|im_start|>' + message.role + '\n' + content + '<|im_end|>' + '\n' }}
@@ -178,42 +119,44 @@
                     {{- '\n<tool_call>\n<function=' + tool_call.name + '>\n' }}
                 {%- endif %}
                 {%- if tool_call.arguments is defined %}
-                    {%- for args_name, args_value in tool_call.arguments|items %}
-                        {{- '<parameter=' + args_name + '>\n' }}
-                        {%- set args_value = args_value | tojson | safe if args_value is mapping or (args_value is sequence and args_value is not string) else args_value | string %}
-                        {{- args_value }}
-                        {{- '\n</parameter>\n' }}
-                    {%- endfor %}
+                    {%- if tool_call.arguments is mapping %}
+                        {%- if 'query' in tool_call.arguments and tool_call.arguments['query'] is not none %}
+                            {{- '<parameter=query>\n' }}
+                            {%- set args_value = tool_call.arguments['query'] %}
+                            {%- set args_value = args_value | tojson | safe if args_value is mapping or (args_value is sequence and args_value is not string) else args_value | string %}
+                            {{- args_value }}
+                            {{- '\n</parameter>\n' }}
+                        {%- endif %}
+                        {%- for args_name, args_value in tool_call.arguments|items if args_name != 'query' and args_value is not none %}
+                            {{- '<parameter=' + args_name + '>\n' }}
+                            {%- set args_value = args_value | tojson | safe if args_value is mapping or (args_value is sequence and args_value is not string) else args_value | string %}
+                            {{- args_value }}
+                            {{- '\n</parameter>\n' }}
+                        {%- endfor %}
+                    {%- elif tool_call.arguments is string %}
+                        {{- tool_call.arguments }}
+                    {%- endif %}
                 {%- endif %}
                 {{- '</function>\n</tool_call>' }}
             {%- endfor %}
         {%- endif %}
         {{- '<|im_end|>\n' }}
     {%- elif message.role == "tool" %}
-        {%- if not ('[[audio_as_voice]]' in content or 'MEDIA:/tmp/openclaw/tts-' in content) %}
-            {%- set ns_seen_tools.count = ns_seen_tools.count + 1 %}
-            {%- if ns_seen_tools.count > (ns_tools.total - TOOL_HISTORY_LIMIT) %}
-                {%- if loop.previtem and loop.previtem.role != "tool" %}
-                    {{- '<|im_start|>user' }}
-                {%- endif %}
-                {{- '\n<tool_response>\n' }}
-                {{- content[:TOOL_CONTENT_MAX] }}
-                {%- if content|length > TOOL_CONTENT_MAX %}
-                    {{- '\n[tool content truncated for context safety]' }}
-                {%- endif %}
-                {{- '\n</tool_response>' }}
-                {%- if not loop.last and loop.nextitem.role != "tool" %}
-                    {{- '<|im_end|>\n' }}
-                {%- elif loop.last %}
-                    {{- '<|im_end|>\n' }}
-                {%- endif %}
-            {%- endif %}
+        {%- if loop.previtem and loop.previtem.role != "tool" %}
+            {{- '<|im_start|>user' }}
+        {%- endif %}
+        {{- '\n<tool_response>\n' }}
+        {{- content }}
+        {{- '\n</tool_response>' }}
+        {%- if not loop.last and loop.nextitem.role != "tool" %}
+            {{- '<|im_end|>\n' }}
+        {%- elif loop.last %}
+            {{- '<|im_end|>\n' }}
         {%- endif %}
     {%- else %}
         {{- raise_exception('Unexpected message role.') }}
     {%- endif %}
 {%- endfor %}
-
 {%- if add_generation_prompt %}
     {{- '<|im_start|>assistant\n' }}
     {%- if enable_thinking is defined and enable_thinking is false %}
