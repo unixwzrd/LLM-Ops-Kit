@@ -1,7 +1,7 @@
 # tts-bridge
 
 **Created**: 2026-03-03
-**Updated**: 2026-03-18
+**Updated**: 2026-03-25
 
 Run a local OpenAI-compatible TTS bridge that forwards to your MLX Audio server and injects a configured voice clone payload (`model`, `voice`, `ref_audio`, `ref_text`).
 
@@ -66,6 +66,8 @@ Status output:
 
 - Reports wrapper PID state plus the live listener PID on the configured port.
 - Reports effective `listen` and `upstream` values.
+- Prefers upstream `/v1/models` reporting for the active model shown in `status`.
+- Reads bridge runtime details from the live `/health` payload instead of reprinting local wrapper defaults.
 - Reports resolved config paths for pronunciation, voice map, and sample directory.
 - Reports active log path plus time-rotation settings.
 - Reports runtime mode, runtime root, and retention policy.
@@ -113,12 +115,18 @@ Allowed empty defaults:
 - missing `voice-map.json` loads as an empty map
 - unknown voice aliases are ignored
 
-Fail-fast behavior:
+Startup and failure behavior:
 
 - malformed JSON causes startup failure with the exact file path and parse error
 - malformed alias entries cause startup failure
-- invalid samples directory causes startup failure
+- missing local samples directory is logged as a warning and startup continues
 - alias-resolved missing files cause request failure with the exact missing path
+
+Startup logging:
+
+- startup logs no longer dump a JSON config blob
+- use `~/bin/tts-bridge status` as the canonical human-readable runtime summary
+- routine `/health` probes are not written into the bridge log
 
 Log rotation behavior:
 

@@ -335,8 +335,6 @@ def build_bridge_config(args: argparse.Namespace) -> dict[str, Any]:
         DEFAULT_VOICE_MAP_CONFIG,
     )
     samples_dir = _resolve_path(args.samples_dir, "TTS_BRIDGE_SAMPLES_DIR", DEFAULT_SAMPLES_DIR)
-    if not samples_dir.exists() or not samples_dir.is_dir():
-        raise BridgeConfigError(f"samples dir is not a directory: {samples_dir}")
 
     pronounce_map = _load_pronounce_map(pronounce_config)
     voice_map_defaults, voice_map = _normalize_voice_map(voice_map_config)
@@ -375,21 +373,13 @@ def build_bridge_config(args: argparse.Namespace) -> dict[str, Any]:
         "voice_map": voice_map,
     }
 
-    _log(
-        "startup config loaded: "
-        + json.dumps(
-            {
-                "config_dir": cfg["config_dir"],
-                "pronounce_config": cfg["pronounce_config"],
-                "pronounce_entries": len(pronounce_map),
-                "voice_map_config": cfg["voice_map_config"],
-                "voice_map_entries": len(voice_map),
-                "voice_map_defaults": voice_map_defaults,
-                "samples_dir": cfg["samples_dir"],
-            },
-            ensure_ascii=False,
+    if not samples_dir.exists() or not samples_dir.is_dir():
+        _log(
+            "startup warning: samples dir not found locally (will still allow upstream/server-side paths): "
+            + str(samples_dir)
         )
-    )
+
+    _log("startup config loaded; use /health or `tts-bridge status` for runtime details")
     return cfg
 
 
@@ -639,6 +629,8 @@ class BridgeHandler(BaseHTTPRequestHandler):
             self._json(502, {"error": f"upstream_request: {exc}"})
 
     def log_message(self, fmt: str, *args: Any) -> None:
+        if self.path in ("/health", "/v1/health"):
+            return
         _log("%s - - [%s] %s" % (self.client_address[0], self.log_date_time_string(), fmt % args))
 
 

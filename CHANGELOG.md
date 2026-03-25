@@ -1,12 +1,36 @@
 # Agent Ops Changelog
 
 **Created**: 2026-02-20
-**Updated**: 2026-03-22
+**Updated**: 2026-03-25
 
 All notable changes to LLM-Ops-Kit will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+### 2026-03-25 — Release v0.5.5 TTS bridge status cleanup and upstream-authoritative reporting
+
+- **Scope:** `LLM-Ops-Kit/scripts/tts-bridge`, `LLM-Ops-Kit/scripts/tts_bridge_server.py`, `LLM-Ops-Kit/docs/scripts/tts-bridge.md`
+- **Category:** `tts`, `runtime`, `observability`, `documentation`
+- **What changed:**
+  - Updated `tts-bridge status` to prefer upstream `/v1/models` reporting for the active model instead of blindly echoing the wrapper's local default model path.
+  - Removed the misleading `bridge_fallback_model` status line.
+  - Updated `tts-bridge status` to read bridge runtime details from the live `/health` payload for:
+    - `voice`
+    - `config_dir`
+    - `pronounce_config`
+    - `voice_map_config`
+    - `samples_dir`
+    - `ref_audio`
+    - `ref_text`
+  - Simplified bridge startup logging:
+    - removed JSON blob startup dumps
+    - replaced them with a single note pointing operators to `/health` / `tts-bridge status`
+  - Suppressed routine `/health` access-log noise from the bridge so `tts-bridge status` no longer pollutes bridge logs with self-probe entries.
+  - Relaxed bridge startup so a missing local `samples_dir` is logged as a warning instead of hard-failing startup, which keeps server-side sample-path deployments working.
+  - Detached stdin for the `nohup` launch path in `tts-bridge` to suppress `nohup: ignoring input` noise on normal starts.
+- **Why:**
+  - Make the bridge report what is actually running upstream, reduce confusing and duplicated status/startup output, and keep bridge logs readable during normal operator workflows.
 
 ### 2026-03-22 — Proxy log rotation, response stats, and wrapper hardening
 

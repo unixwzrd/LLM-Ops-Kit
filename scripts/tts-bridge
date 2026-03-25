@@ -79,6 +79,36 @@ http_probe() {
   rm -f "$detail_file" "$body" >/dev/null 2>&1 || true
 }
 
+bridge_health_json() {
+  local url="$1"
+  local body_file detail_file
+  body_file="/tmp/tts_bridge_health_body_$$.json"
+  detail_file="/tmp/tts_bridge_health_detail_$$.txt"
+  if curl -sS --max-time 3 "$url" -o "$body_file" 2>"$detail_file"; then
+    cat "$body_file"
+  fi
+  rm -f "$body_file" "$detail_file" >/dev/null 2>&1 || true
+}
+
+upstream_model_id() {
+  local url="$1"
+  local body_file detail_file
+  body_file="/tmp/tts_bridge_models_body_$$.json"
+  detail_file="/tmp/tts_bridge_models_detail_$$.txt"
+  if curl -sS --max-time 3 "$url" -o "$body_file" 2>"$detail_file"; then
+    if command -v jq >/dev/null 2>&1; then
+      jq -r '
+        if (.data | type) == "array" and (.data | length) > 0 then
+          .data[0].id // ""
+        else
+          ""
+        end
+      ' "$body_file" 2>/dev/null || true
+    fi
+  fi
+  rm -f "$body_file" "$detail_file" >/dev/null 2>&1 || true
+}
+
 upstream_models_url() {
   if [[ "$UPSTREAM_BASE" == */v1 ]]; then
     printf '%s/models\n' "$UPSTREAM_BASE"
@@ -98,7 +128,9 @@ bridge_health_url() {
 
 status_bridge() {
   local pid="" bridge_url upstream_url bridge_probe upstream_probe bridge_state="down" upstream_state="down"
-  local bridge_detail="" upstream_detail="" port_pid=""
+  local bridge_detail="" upstream_detail="" port_pid="" reported_model="" bridge_payload=""
+  local health_config_dir="" health_pronounce_config="" health_voice_map_config="" health_samples_dir=""
+  local health_ref_audio="" health_ref_text="" health_voice=""
   bridge_url="$(bridge_health_url)"
   upstream_url="$(upstream_models_url)"
 
@@ -122,22 +154,41 @@ status_bridge() {
   bridge_probe="$(http_probe "$bridge_url")"
   bridge_state="${bridge_probe%%|*}"
   bridge_detail="${bridge_probe#*|}"
+  if [[ "$bridge_state" == "ok" ]]; then
+    bridge_payload="$(bridge_health_json "$bridge_url" || true)"
+    if [[ -n "$bridge_payload" ]] && command -v jq >/dev/null 2>&1; then
+      health_config_dir="$(printf '%s' "$bridge_payload" | jq -r '.config.config_dir // ""' 2>/dev/null || true)"
+      health_pronounce_config="$(printf '%s' "$bridge_payload" | jq -r '.config.pronounce_config // ""' 2>/dev/null || true)"
+      health_voice_map_config="$(printf '%s' "$bridge_payload" | jq -r '.config.voice_map_config // ""' 2>/dev/null || true)"
+      health_samples_dir="$(printf '%s' "$bridge_payload" | jq -r '.config.samples_dir // ""' 2>/dev/null || true)"
+      health_ref_audio="$(printf '%s' "$bridge_payload" | jq -r '.defaults.ref_audio // ""' 2>/dev/null || true)"
+      health_ref_text="$(printf '%s' "$bridge_payload" | jq -r '.defaults.ref_text // ""' 2>/dev/null || true)"
+      health_voice="$(printf '%s' "$bridge_payload" | jq -r '.defaults.voice // ""' 2>/dev/null || true)"
+    fi
+  fi
 
   upstream_probe="$(http_probe "$upstream_url")"
   upstream_state="${upstream_probe%%|*}"
   upstream_detail="${upstream_probe#*|}"
+  if [[ "$upstream_state" == "ok" ]]; then
+    reported_model="$(upstream_model_id "$upstream_url" || true)"
+  fi
 
   echo "  listen=$bridge_url"
   echo "  upstream=$UPSTREAM_BASE"
   echo "  upstream_models_endpoint=$upstream_url"
-  echo "  model=$MODEL_PATH"
-  echo "  voice=<bridge-selected>"
-  echo "  config_dir=$CONFIG_DIR"
-  echo "  pronounce_config=${PRONOUNCE_CONFIG:-<config-dir>/pronounce.json}"
-  echo "  voice_map_config=${VOICE_MAP_CONFIG:-<config-dir>/voice-map.json}"
-  echo "  samples_dir=$SAMPLES_DIR"
-  echo "  ref_audio=$REF_AUDIO"
-  echo "  ref_text=$REF_TEXT"
+  if [[ -n "$reported_model" ]]; then
+    echo "  model=$reported_model"
+  else
+    echo "  model=<upstream-unreported>"
+  fi
+  echo "  voice=${health_voice:-<bridge-selected>}"
+  echo "  config_dir=${health_config_dir:-$CONFIG_DIR}"
+  echo "  pronounce_config=${health_pronounce_config:-${PRONOUNCE_CONFIG:-<config-dir>/pronounce.json}}"
+  echo "  voice_map_config=${health_voice_map_config:-${VOICE_MAP_CONFIG:-<config-dir>/voice-map.json}}"
+  echo "  samples_dir=${health_samples_dir:-$SAMPLES_DIR}"
+  echo "  ref_audio=${health_ref_audio:-$REF_AUDIO}"
+  echo "  ref_text=${health_ref_text:-$REF_TEXT}"
   echo "  log=$log_file"
   echo "  log_rotate_seconds=$LOG_ROTATE_SECONDS"
   echo "  log_rotate_keep=$LOG_ROTATE_KEEP"
@@ -212,6 +263,7 @@ start_bridge() {
   fi
 
   nohup "${cmd[@]}" \
+    < /dev/null \
     > "$log_file" 2>&1 &
 
   write_pid "$pid_name" "$!"
