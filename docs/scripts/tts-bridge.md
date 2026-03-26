@@ -29,8 +29,8 @@ Port note:
 
 Default voice clone sample:
 
-- `TTS_BRIDGE_REF_AUDIO=$HOME/LLM_Repository/TTS/Samples/Mia-Faith-Prof-Emotive-60s-Sample-Mastered-01.wav`
-- `TTS_BRIDGE_REF_TEXT=$HOME/LLM_Repository/TTS/Samples/Mia-Faith-Prof-Emotive-60s-Sample-Mastered-01.txt`
+- `TTS_BRIDGE_REF_AUDIO=$HOME/LLM_Repository/TTS/Samples/speaker-reference-a.wav`
+- `TTS_BRIDGE_REF_TEXT=$HOME/LLM_Repository/TTS/Samples/speaker-reference-a.txt`
 
 Default bridge config files:
 
@@ -161,15 +161,15 @@ Example `voice-map.json`:
   "defaults": {
     "sample_dir": ".",
     "speaker": "serena",
-    "sample": "Mia-Faith-Prof-Emotive-20s-Sample-Mastered-01.wav"
+    "sample": "speaker-reference-b.wav"
   },
-  "Faith": {
-    "speaker": "serena",
-    "sample": "Mia-Faith-Prof-Emotive-20s-Sample-Mastered-01.wav"
+  "Sol": {
+    "speaker": "Chelsie",
+    "sample": "speaker-reference-a.wav"
   },
-  "Serifina": {
+  "Guide": {
     "speaker": "serena",
-    "sample": "Mia-Serifina-Sensual-Emotive-20s-Sample-Mastered-02.wav"
+    "sample": "speaker-reference-b.wav"
   }
 }
 ```
@@ -192,11 +192,11 @@ Smoke test with a symbol-heavy payload:
 curl -sS http://127.0.0.1:11440/v1/audio/speech \
   -H 'Content-Type: application/json' \
   -d '{
-    "input": "Read /tmp/test[1].wav and say Faith/Serifina clearly.",
-    "voice": "Faith",
+    "input": "Read /tmp/test[1].wav and say Guide clearly.",
+    "voice": "Guide",
     "response_format": "wav"
   }' \
-  --output /tmp/tts-bridge-faith.wav
+  --output /tmp/tts-bridge-guide.wav
 ```
 
 Health check:
@@ -207,7 +207,7 @@ curl -sS http://127.0.0.1:11440/health | jq
 
 What to expect from the smoke test:
 
-- the bridge should resolve `voice: "Faith"` through `voice-map.json`
+- the bridge should resolve `voice: "Guide"` through `voice-map.json`
 - `/health` should report the resolved config file paths and entry counts
 - the bridge log should show that input preprocessing was applied
 - the upstream payload should receive `slash`, `open bracket`, and other replacements from `pronounce.json`

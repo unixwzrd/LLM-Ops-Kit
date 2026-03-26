@@ -2,14 +2,14 @@
   "defaults": {
     "sample_dir": ".",
     "speaker": "serena",
-    "sample": "Mia-Faith-Prof-Emotive-20s-Sample-Mastered-01.wav"
+    "sample": "speaker-reference-a.wav"
   },
-  "Faith": {
-    "speaker": "serena",
-    "sample": "Mia-Faith-Prof-Emotive-20s-Sample-Mastered-01.wav"
+  "Sol": {
+    "speaker": "Chelsie",
+    "sample": "speaker-reference-a.wav"
   },
-  "Serifina": {
+  "Guide": {
     "speaker": "serena",
-    "sample": "Mia-Serifina-Sensual-Emotive-20s-Sample-Mastered-02.wav"
+    "sample": "speaker-reference-b.wav"
   }
 }

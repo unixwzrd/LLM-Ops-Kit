@@ -99,17 +99,17 @@ These are the profiles currently documented and validated in this toolkit:
 Quick direct MLX Audio clone request:
 
 ```bash
-AUDIO="$HOME/LLM_Repository/TTS/Samples/Mia-Faith-Sample.wav"
+AUDIO="$HOME/LLM_Repository/TTS/Samples/speaker-reference-a.wav"
 TEXT="${AUDIO%.wav}.txt"
 MODEL="$HOME/LLM_Repository/TTS/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit"
 VOICE="serena"
-OUT="/tmp/mia-clone.wav"
+OUT="/tmp/tts-clone.wav"
 
-curl -sS http://10.0.0.67:11439/v1/audio/speech \
+curl -sS http://127.0.0.1:11439/v1/audio/speech \
   -H 'Content-Type: application/json' \
   -d "$(jq -n \
     --arg model "$MODEL" \
-    --arg input "Hey Mike, this is a quick clone check." \
+    --arg input "Hello, this is a quick clone check." \
     --arg voice "$VOICE" \
     --arg ref_audio "$AUDIO" \
     --arg ref_text "$TEXT" \
@@ -122,7 +122,7 @@ Full setup + troubleshooting guide:
 
 - [MLX_AUDIO_TTS_GUIDE](docs/MLX_AUDIO_TTS_GUIDE.md)
 
-The `10.0.0.67:11439` endpoint above is a direct `mlx_audio.server` example for a remote model host, not the `tts-bridge` listener. If you are testing the OpenClaw bridge path, use the local bridge port configured in `~/.llm-ops/config.env`.
+The `127.0.0.1:11439` endpoint above is a direct `mlx_audio.server` example for a model host running on the same machine. If your MLX TTS server runs on a different host, replace `127.0.0.1` with that remote host. If you are testing the OpenClaw bridge path, use the local bridge listener URL from `~/.llm-ops/config.env` instead.
 
 Bridge compatibility notes:
 

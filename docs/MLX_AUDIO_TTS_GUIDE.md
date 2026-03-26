@@ -1,7 +1,7 @@
 # MLX Audio TTS Guide
 
 **Created**: 2026-03-02  
-**Updated**: 2026-03-18
+**Updated**: 2026-03-26
 
 - [MLX Audio TTS Guide](#mlx-audio-tts-guide)
   - [Purpose](#purpose)
@@ -90,6 +90,8 @@ curl -sS http://127.0.0.1:11439/v1/audio/speech \
   --output /tmp/tts-smoke.wav
 ```
 
+If the MLX TTS server runs on a different machine, replace `127.0.0.1` with your remote model host. The URL above is the direct upstream TTS server, not the local `tts-bridge`.
+
 ## Bridge for OpenClaw TTS
 
 Use `tts-bridge` so OpenClaw can keep using OpenAI-style TTS requests while your local bridge injects MLX-specific fields (`model`, `voice`, `ref_audio`, `ref_text`).
@@ -163,12 +165,12 @@ Example:
 ```bash
 export TTS_BRIDGE_HOST=127.0.0.1
 export TTS_BRIDGE_PORT=11440
-export TTS_BRIDGE_UPSTREAM_BASE=http://10.0.0.67:11439/v1
+export TTS_BRIDGE_UPSTREAM_BASE=http://<remote-mlx-host>:11439/v1
 export TTS_BRIDGE_MODEL=$HOME/LLM_Repository/TTS/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit
 export TTS_BRIDGE_CONFIG_DIR=$HOME/.llm-ops
 export TTS_BRIDGE_SAMPLES_DIR=$HOME/LLM_Repository/TTS/Samples
-export TTS_BRIDGE_VOICE=Faith
-export TTS_BRIDGE_REF_AUDIO=$HOME/LLM_Repository/TTS/Samples/Mia-Faith-Sample.wav
+export TTS_BRIDGE_VOICE=Guide
+export TTS_BRIDGE_REF_AUDIO=$HOME/LLM_Repository/TTS/Samples/speaker-reference-a.wav
 export TTS_BRIDGE_REF_TEXT="${TTS_BRIDGE_REF_AUDIO%.*}.txt"
 ```
 
@@ -232,15 +234,15 @@ Example:
   "defaults": {
     "sample_dir": ".",
     "speaker": "serena",
-    "sample": "Mia-Faith-Prof-Emotive-20s-Sample-Mastered-01.wav"
+    "sample": "speaker-reference-a.wav"
   },
-  "Faith": {
+  "Sol": {
     "speaker": "serena",
-    "sample": "Mia-Faith-Prof-Emotive-20s-Sample-Mastered-01.wav"
+    "sample": "speaker-reference-b.wav"
   },
-  "Serifina": {
-    "speaker": "serena",
-    "sample": "Mia-Serifina-Sensual-Emotive-20s-Sample-Mastered-02.wav"
+  "Guide": {
+    "speaker": "Chelsie",
+    "sample": "speaker-reference-a.wav"
   }
 }
 ```
@@ -255,7 +257,7 @@ Fail-fast behavior:
 - missing config files are allowed and load as empty maps
 - malformed JSON fails startup
 - malformed alias entries fail startup
-- invalid sample directory fails startup
+- missing local sample directory is logged as a warning and startup continues
 - alias-resolved missing sample or transcript fails the request with an explicit error
 
 The bridge `/health` endpoint reports the resolved config directory, config file paths, whether the files exist, entry counts, and the resolved samples directory.
@@ -287,18 +289,18 @@ Bridge speech smoke test:
 curl -sS http://127.0.0.1:11440/v1/audio/speech \
   -H 'Content-Type: application/json' \
   -d '{
-    "input": "Read /tmp/test[1].wav and say Faith/Serifina clearly.",
-    "voice": "Faith",
+    "input": "Read /tmp/test[1].wav and say Guide clearly.",
+    "voice": "Guide",
     "response_format": "wav"
   }' \
-  --output /tmp/tts-bridge-faith.wav
+  --output /tmp/tts-bridge-guide.wav
 ```
 
 If that passes, confirm:
 
 - `~/bin/tts-bridge status` reports bridge health as `ok`
 - `/health` shows the resolved config and sample paths you expect
-- the output file `/tmp/tts-bridge-faith.wav` exists
+- the output file `/tmp/tts-bridge-guide.wav` exists
 - the bridge stderr log shows input preprocessing and alias resolution activity
 
 Bridge log rotation:
@@ -312,23 +314,23 @@ Bridge log rotation:
 
 Use a `.wav` and a matching transcript `.txt` with the same basename:
 
-- `Mia-Faith-Sample.wav`
-- `Mia-Faith-Sample.txt`
+- `speaker-reference-a.wav`
+- `speaker-reference-a.txt`
 
 Example request:
 
 ```bash
-AUDIO="$HOME/LLM_Repository/TTS/Samples/Mia-Faith-Sample.wav"
+AUDIO="$HOME/LLM_Repository/TTS/Samples/speaker-reference-a.wav"
 TEXT="${AUDIO%.wav}.txt"
 MODEL="$HOME/LLM_Repository/TTS/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit"
 VOICE="serena"
 OUT="/tmp/test-tts-clone.wav"
 
-curl -sS http://10.0.0.67:11439/v1/audio/speech \
+curl -sS http://<remote-mlx-host>:11439/v1/audio/speech \
   -H 'Content-Type: application/json' \
   -d "$(jq -n \
     --arg model "$MODEL" \
-    --arg input "Hey Mike, this is a quick clone check." \
+    --arg input "Hello, this is a quick clone check." \
     --arg voice "$VOICE" \
     --arg ref_audio "$AUDIO" \
     --arg ref_text "$TEXT" \
