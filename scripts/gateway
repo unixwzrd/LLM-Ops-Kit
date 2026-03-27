@@ -12,6 +12,7 @@ SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
 . "$SCRIPT_DIR/lib/common.sh"
 
 action="${1:-status}"
+requested_target="${2:-${LLMOPS_GATEWAY_BACKEND:-openclaw}}"
 
 openclaw_app_log_path() {
   local latest
@@ -23,115 +24,335 @@ openclaw_app_log_path() {
   fi
 }
 
-follow_gateway_logs() {
-  local app_log
-  app_log="$(openclaw_app_log_path)"
-  ensure_runtime_dirs
-  mkdir -p /tmp/openclaw
-  prepare_log_file "$LLMOPS_LOG_DIR/gateway.log"
-  prepare_log_file "$LLMOPS_LOG_DIR/gateway.err.log"
-  touch "$app_log"
-  echo "gateway: following logs"
-  echo "  wrapper_log=$LLMOPS_LOG_DIR/gateway.log"
-  echo "  wrapper_err=$LLMOPS_LOG_DIR/gateway.err.log"
-  echo "  app_log=$app_log"
-  tail -n 50 -F \
-    "$LLMOPS_LOG_DIR/gateway.log" \
-    "$LLMOPS_LOG_DIR/gateway.err.log" \
-    "$app_log"
+hermes_home() {
+  printf '%s\n' "${HERMES_HOME:-$HOME/.hermes}"
 }
 
-start_gateway() {
-  load_shell_env
-  ensure_runtime_dirs
-  PORT="${LLMOPS_GATEWAY_PORT:-18789}"
-  LOG_OUT="$LLMOPS_LOG_DIR/gateway.log"
-  LOG_ERR="$LLMOPS_LOG_DIR/gateway.err.log"
-  prune_runtime_artifacts
-  prepare_log_file "$LOG_OUT"
-  prepare_log_file "$LOG_ERR"
-
-  if pid="$(read_pid gateway 2>/dev/null)" && is_pid_running "$pid"; then
-    echo "gateway: already running pid=$pid"
-    return 0
-  fi
-
-  nohup /usr/local/bin/openclaw gateway run --port "$PORT" > "$LOG_OUT" 2> "$LOG_ERR" &
-  pid="$!"
-  write_pid gateway "$pid"
-
-  # Verify the process survived startup so we do not report false success.
-  sleep 1
-  if ! is_pid_running "$pid"; then
-    rm -f "$(pid_file_for gateway)"
-    echo "gateway: failed to start (process exited)" >&2
-    echo "gateway: inspect $LOG_OUT and $LOG_ERR" >&2
-    return 1
-  fi
-
-  if command -v curl >/dev/null 2>&1; then
-    if ! curl -fsS "http://127.0.0.1:${PORT}/health" >/dev/null 2>&1; then
-      echo "gateway: started pid=$pid port=$PORT (health endpoint not ready yet)"
-      echo "gateway: wrapper logs -> $LOG_OUT / $LOG_ERR"
-      echo "gateway: app log -> $(openclaw_app_log_path)"
-      return 0
-    fi
-  fi
-
-  echo "gateway: started pid=$pid port=$PORT"
-  echo "gateway: wrapper logs -> $LOG_OUT / $LOG_ERR"
-  echo "gateway: app log -> $(openclaw_app_log_path)"
+hermes_gateway_native_log_path() {
+  printf '%s/logs/gateway.log\n' "$(hermes_home)"
 }
 
-stop_gateway() {
-  stop_by_name gateway
+hermes_gateway_native_error_log_path() {
+  printf '%s/logs/gateway.error.log\n' "$(hermes_home)"
 }
 
-status_gateway() {
-  local port
-  port="${LLMOPS_GATEWAY_PORT:-18789}"
-  if pid="$(read_pid gateway 2>/dev/null)"; then
-    if is_pid_running "$pid"; then
-      echo "gateway: running pid=$pid"
-      echo "  port=$port"
-      echo "  mode=direct-run wrapper"
-      echo "  log=$LLMOPS_LOG_DIR/gateway.log"
-      echo "  err_log=$LLMOPS_LOG_DIR/gateway.err.log"
-      echo "  app_log=$(openclaw_app_log_path)"
-      echo "  runtime_mode=$(runtime_mode)"
-      echo "  runtime_root=$(runtime_asset_root)"
-      echo "  retention=$(retention_summary_line)"
-      echo "  note=openclaw logs --follow may fail in this mode; use wrapper/app logs directly"
-      return 0
-    fi
-    echo "gateway: stale pid=$pid"
-    echo "  port=$port"
-    echo "  mode=direct-run wrapper"
-    echo "  log=$LLMOPS_LOG_DIR/gateway.log"
-    echo "  err_log=$LLMOPS_LOG_DIR/gateway.err.log"
-    echo "  app_log=$(openclaw_app_log_path)"
-    echo "  runtime_mode=$(runtime_mode)"
-    echo "  runtime_root=$(runtime_asset_root)"
-    echo "  retention=$(retention_summary_line)"
-    return 1
-  fi
-  echo "gateway: stopped"
-  echo "  port=$port"
+hermes_gateway_state_path() {
+  printf '%s/gateway_state.json\n' "$(hermes_home)"
+}
+
+normalize_target() {
+  local target="$1"
+  case "$target" in
+    ""|default)
+      printf '%s\n' "${LLMOPS_GATEWAY_BACKEND:-openclaw}"
+      ;;
+    openclaw|hermes|all)
+      printf '%s\n' "$target"
+      ;;
+    *)
+      echo "gateway: unsupported target '$target' (expected openclaw, hermes, or all)" >&2
+      return 2
+      ;;
+  esac
+}
+
+backend_list_for_target() {
+  local target="$1"
+  case "$target" in
+    all)
+      printf 'openclaw\nhermes\n'
+      ;;
+    openclaw|hermes)
+      printf '%s\n' "$target"
+      ;;
+    *)
+      return 2
+      ;;
+  esac
+}
+
+gateway_pid_name() {
+  local backend="$1"
+  printf 'gateway-%s\n' "$backend"
+}
+
+gateway_log_path() {
+  local backend="$1"
+  printf '%s/gateway-%s.log\n' "$LLMOPS_LOG_DIR" "$backend"
+}
+
+gateway_err_log_path() {
+  local backend="$1"
+  printf '%s/gateway-%s.err.log\n' "$LLMOPS_LOG_DIR" "$backend"
+}
+
+gateway_status_suffix() {
+  local backend="$1"
+  echo "  backend=$backend"
   echo "  mode=direct-run wrapper"
-  echo "  log=$LLMOPS_LOG_DIR/gateway.log"
-  echo "  err_log=$LLMOPS_LOG_DIR/gateway.err.log"
-  echo "  app_log=$(openclaw_app_log_path)"
+  echo "  log=$(gateway_log_path "$backend")"
+  echo "  err_log=$(gateway_err_log_path "$backend")"
   echo "  runtime_mode=$(runtime_mode)"
   echo "  runtime_root=$(runtime_asset_root)"
   echo "  retention=$(retention_summary_line)"
+}
+
+print_hermes_runtime_state() {
+  local state_file="$1"
+  [[ -f "$state_file" ]] || return 0
+  if ! command -v jq >/dev/null 2>&1; then
+    return 0
+  fi
+  jq -r '(
+    [
+      (.gateway_state // empty | "gateway_state=\(.)"),
+      (.updated_at // empty | "updated_at=\(.)"),
+      (.exit_reason // empty | "exit_reason=\(.)")
+    ]
+    + (
+      (.platforms // {})
+      | to_entries
+      | map(
+          "platform_" + .key + "=" + (.value.state // "unknown") +
+          (if .value.error_code then " (" + .value.error_code + ")" else "" end)
+        )
+    )
+  )[]' "$state_file"
+}
+
+start_gateway_backend() {
+  local backend="$1"
+  local pid port hermes_cmd openclaw_cmd pid_name
+  port="${LLMOPS_GATEWAY_PORT:-18789}"
+  pid_name="$(gateway_pid_name "$backend")"
+
+  prepare_log_file "$(gateway_log_path "$backend")"
+  prepare_log_file "$(gateway_err_log_path "$backend")"
+
+  if pid="$(read_pid "$pid_name" 2>/dev/null)" && is_pid_running "$pid"; then
+    echo "gateway[$backend]: already running pid=$pid"
+    return 0
+  fi
+
+  case "$backend" in
+    openclaw)
+      openclaw_cmd="${OPENCLAW_GATEWAY_CMD:-/usr/local/bin/openclaw}"
+      if ! command -v "$openclaw_cmd" >/dev/null 2>&1; then
+        echo "gateway[$backend]: command not found: $openclaw_cmd" >&2
+        return 1
+      fi
+      nohup "$openclaw_cmd" gateway run --port "$port" > "$(gateway_log_path "$backend")" 2> "$(gateway_err_log_path "$backend")" < /dev/null &
+      ;;
+    hermes)
+      hermes_cmd="${HERMES_GATEWAY_CMD:-hermes}"
+      if ! command -v "$hermes_cmd" >/dev/null 2>&1; then
+        echo "gateway[$backend]: command not found: $hermes_cmd" >&2
+        return 1
+      fi
+      nohup "$hermes_cmd" gateway run > "$(gateway_log_path "$backend")" 2> "$(gateway_err_log_path "$backend")" < /dev/null &
+      ;;
+  esac
+
+  pid="$!"
+  write_pid "$pid_name" "$pid"
+  start_log_marktime "$pid_name" "$pid_name" "$(gateway_log_path "$backend")"
+
+  sleep 1
+  if ! is_pid_running "$pid"; then
+    stop_log_marktime "$pid_name"
+    rm -f "$(pid_file_for "$pid_name")"
+    echo "gateway[$backend]: failed to start (process exited)" >&2
+    echo "gateway[$backend]: inspect $(gateway_log_path "$backend") and $(gateway_err_log_path "$backend")" >&2
+    return 1
+  fi
+
+  echo "gateway[$backend]: started pid=$pid"
+  echo "  log=$(gateway_log_path "$backend")"
+  echo "  err_log=$(gateway_err_log_path "$backend")"
+  case "$backend" in
+    openclaw)
+      echo "  port=$port"
+      echo "  app_log=$(openclaw_app_log_path)"
+      ;;
+    hermes)
+      echo "  hermes_home=$(hermes_home)"
+      echo "  native_log=$(hermes_gateway_native_log_path)"
+      echo "  native_state=$(hermes_gateway_state_path)"
+      ;;
+  esac
+}
+
+stop_gateway_backend() {
+  local backend="$1"
+  local pid_name
+  pid_name="$(gateway_pid_name "$backend")"
+  stop_log_marktime "$pid_name"
+  stop_by_name "$pid_name"
+}
+
+status_gateway_backend() {
+  local backend="$1"
+  local pid_name pid port state_file rc=1
+  pid_name="$(gateway_pid_name "$backend")"
+  port="${LLMOPS_GATEWAY_PORT:-18789}"
+  state_file="$(hermes_gateway_state_path)"
+
+  if pid="$(read_pid "$pid_name" 2>/dev/null)"; then
+    if is_pid_running "$pid"; then
+      echo "gateway[$backend]: running pid=$pid"
+      gateway_status_suffix "$backend"
+      case "$backend" in
+        openclaw)
+          echo "  port=$port"
+          echo "  app_log=$(openclaw_app_log_path)"
+          echo "  note=openclaw logs --follow may fail in this mode; use wrapper/app logs directly"
+          ;;
+        hermes)
+          echo "  hermes_home=$(hermes_home)"
+          echo "  native_log=$(hermes_gateway_native_log_path)"
+          echo "  native_err_log=$(hermes_gateway_native_error_log_path)"
+          echo "  native_state=$state_file"
+          while IFS= read -r line; do
+            [[ -n "$line" ]] && echo "  $line"
+          done < <(print_hermes_runtime_state "$state_file")
+          echo "  note=Hermes config is owned by ~/.hermes/config.yaml, ~/.hermes/.env, and legacy ~/.hermes/gateway.json"
+          ;;
+      esac
+      return 0
+    fi
+    echo "gateway[$backend]: stale pid=$pid"
+  else
+    echo "gateway[$backend]: stopped"
+  fi
+
+  gateway_status_suffix "$backend"
+  case "$backend" in
+    openclaw)
+      echo "  port=$port"
+      echo "  app_log=$(openclaw_app_log_path)"
+      ;;
+    hermes)
+      echo "  hermes_home=$(hermes_home)"
+      echo "  native_log=$(hermes_gateway_native_log_path)"
+      echo "  native_err_log=$(hermes_gateway_native_error_log_path)"
+      echo "  native_state=$state_file"
+      while IFS= read -r line; do
+        [[ -n "$line" ]] && echo "  $line"
+      done < <(print_hermes_runtime_state "$state_file")
+      ;;
+  esac
   return 1
 }
 
+follow_gateway_logs_backend() {
+  local backend="$1"
+  case "$backend" in
+    openclaw)
+      mkdir -p /tmp/openclaw
+      touch "$(openclaw_app_log_path)"
+      printf '%s\n' \
+        "$(gateway_log_path "$backend")" \
+        "$(gateway_err_log_path "$backend")" \
+        "$(openclaw_app_log_path)"
+      ;;
+    hermes)
+      mkdir -p "$(hermes_home)/logs"
+      touch "$(hermes_gateway_native_log_path)" "$(hermes_gateway_native_error_log_path)"
+      printf '%s\n' \
+        "$(gateway_log_path "$backend")" \
+        "$(gateway_err_log_path "$backend")" \
+        "$(hermes_gateway_native_log_path)" \
+        "$(hermes_gateway_native_error_log_path)"
+      ;;
+  esac
+}
+
+start_gateway() {
+  local target="$1"
+  local backend rc=0
+  load_shell_env
+  ensure_runtime_dirs
+  prune_runtime_artifacts
+  while IFS= read -r backend; do
+    [[ -n "$backend" ]] || continue
+    start_gateway_backend "$backend" || rc=$?
+  done < <(backend_list_for_target "$target")
+  return "$rc"
+}
+
+stop_gateway() {
+  local target="$1"
+  local backend rc=0
+  load_shell_env
+  while IFS= read -r backend; do
+    [[ -n "$backend" ]] || continue
+    stop_gateway_backend "$backend" || rc=$?
+  done < <(backend_list_for_target "$target")
+  return "$rc"
+}
+
+status_gateway() {
+  local target="$1"
+  local backend rc=0
+  load_shell_env
+  while IFS= read -r backend; do
+    [[ -n "$backend" ]] || continue
+    status_gateway_backend "$backend" || rc=1
+  done < <(backend_list_for_target "$target")
+  return "$rc"
+}
+
+follow_gateway_logs() {
+  local target="$1"
+  local backend
+  local -a files=()
+  load_shell_env
+  ensure_runtime_dirs
+  while IFS= read -r backend; do
+    [[ -n "$backend" ]] || continue
+    prepare_log_file "$(gateway_log_path "$backend")"
+    prepare_log_file "$(gateway_err_log_path "$backend")"
+    while IFS= read -r path; do
+      [[ -n "$path" ]] && files+=("$path")
+    done < <(follow_gateway_logs_backend "$backend")
+  done < <(backend_list_for_target "$target")
+
+  echo "gateway: following logs for target=$target"
+  for path in "${files[@]}"; do
+    echo "  $path"
+  done
+  tail -n 50 -F "${files[@]}"
+}
+
+setup_gateway() {
+  local target="$1"
+  local hermes_cmd
+  load_shell_env
+  case "$target" in
+    hermes)
+      hermes_cmd="${HERMES_GATEWAY_CMD:-hermes}"
+      exec "$hermes_cmd" gateway setup
+      ;;
+    all)
+      echo "gateway: setup only applies to hermes; running Hermes setup" >&2
+      hermes_cmd="${HERMES_GATEWAY_CMD:-hermes}"
+      exec "$hermes_cmd" gateway setup
+      ;;
+    openclaw)
+      echo "gateway: setup is only supported for the hermes backend" >&2
+      return 2
+      ;;
+  esac
+}
+
+target="$(normalize_target "$requested_target")"
+
 case "$action" in
-  start) start_gateway ;;
-  stop) stop_gateway ;;
-  restart) stop_gateway || true; start_gateway ;;
-  status) status_gateway ;;
-  logs) follow_gateway_logs ;;
-  *) echo "Usage: gateway [start|stop|restart|status|logs]" >&2; exit 2 ;;
+  start) start_gateway "$target" ;;
+  stop) stop_gateway "$target" ;;
+  restart) stop_gateway "$target" || true; start_gateway "$target" ;;
+  status) status_gateway "$target" ;;
+  logs) follow_gateway_logs "$target" ;;
+  setup) setup_gateway "$target" ;;
+  *) echo "Usage: gateway [start|stop|restart|status|logs|setup] [openclaw|hermes|all]" >&2; exit 2 ;;
 esac

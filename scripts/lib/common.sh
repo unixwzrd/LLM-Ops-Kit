@@ -14,6 +14,10 @@ LLMOPS_LOG_ROTATE_MAX_AGE_DAYS="${LLMOPS_LOG_ROTATE_MAX_AGE_DAYS:-14}"
 LLMOPS_BACKUP_KEEP="${LLMOPS_BACKUP_KEEP:-5}"
 LLMOPS_BACKUP_MAX_AGE_DAYS="${LLMOPS_BACKUP_MAX_AGE_DAYS:-30}"
 
+LLMOPS_LOG_MARKTIME_ENABLED="${LLMOPS_LOG_MARKTIME_ENABLED:-1}"
+LLMOPS_LOG_MARKTIME_INTERVAL_SECONDS="${LLMOPS_LOG_MARKTIME_INTERVAL_SECONDS:-300}"
+LLMOPS_LOG_MARKTIME_FORMAT="${LLMOPS_LOG_MARKTIME_FORMAT:-+%Y-%m-%d %H:%M:%S UTC}"
+
 ensure_runtime_dirs() {
   mkdir -p "$LLMOPS_RUN_DIR" "$LLMOPS_LOG_DIR" "$LLMOPS_BACKUP_DIR" "$LLMOPS_CONFIG_DIR"
 }
@@ -303,6 +307,71 @@ write_pid() {
   local pf
   pf="$(pid_file_for "$name")"
   printf '%s\n' "$pid" > "$pf"
+}
+
+
+marktime_pid_name() {
+  local name="$1"
+  printf '%s-marktime\n' "$name"
+}
+
+stop_log_marktime() {
+  local name="$1"
+  local marker_name pf pid
+  marker_name="$(marktime_pid_name "$name")"
+  pf="$(pid_file_for "$marker_name")"
+  [[ -f "$pf" ]] || return 0
+  pid="$(cat "$pf")"
+  if [[ -n "$pid" ]] && is_pid_running "$pid"; then
+    kill "$pid" >/dev/null 2>&1 || true
+    sleep 1
+    if is_pid_running "$pid"; then
+      kill -9 "$pid" >/dev/null 2>&1 || true
+    fi
+  fi
+  rm -f "$pf"
+}
+
+start_log_marktime() {
+  local name="$1"
+  local label="$2"
+  local log_file="$3"
+  local marker_name pf pid interval format
+
+  [[ "${LLMOPS_LOG_MARKTIME_ENABLED:-1}" == "1" ]] || return 0
+  [[ -n "$log_file" ]] || return 0
+
+  interval="${LLMOPS_LOG_MARKTIME_INTERVAL_SECONDS:-300}"
+  [[ "$interval" =~ ^[0-9]+$ ]] || return 0
+  (( interval > 0 )) || return 0
+
+  format="${LLMOPS_LOG_MARKTIME_FORMAT:-+%Y-%m-%d %H:%M:%S UTC}"
+  marker_name="$(marktime_pid_name "$name")"
+  pf="$(pid_file_for "$marker_name")"
+
+  if [[ -f "$pf" ]]; then
+    pid="$(cat "$pf")"
+    if [[ -n "$pid" ]] && is_pid_running "$pid"; then
+      return 0
+    fi
+    rm -f "$pf"
+  fi
+
+  nohup bash -c '
+      label="$1"
+      log_file="$2"
+      format="$3"
+      interval="$4"
+      while :; do
+        printf "\n========== %s - MARKTIME  %s ==========\n" \
+          "$label" \
+          "$(date -u "$format")" >> "$log_file"
+        sleep "$interval" || exit 0
+      done
+    ' _ "$label" "$log_file" "$format" "$interval" \
+    < /dev/null >/dev/null 2>&1 &
+
+  write_pid "$marker_name" "$!"
 }
 
 stop_by_name() {

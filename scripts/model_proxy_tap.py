@@ -14,6 +14,7 @@ Then point OpenClaw llamacpp baseUrl to:
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import os
 import signal
@@ -61,6 +62,213 @@ def redact_headers(headers: dict[str, str]) -> dict[str, str]:
         else:
             redacted[k] = v
     return redacted
+
+
+def load_chat_template_renderer(template_path_str: str | None) -> tuple[str | None, Any, str | None]:
+    if not template_path_str:
+        return None, None, None
+    if jinja2 is None:
+        return template_path_str, None, "jinja2 not available in this Python environment"
+    try:
+        template_path = Path(os.path.expanduser(template_path_str))
+        template_text = template_path.read_text(encoding="utf-8")
+        env = jinja2.Environment(
+            undefined=jinja2.ChainableUndefined,
+            trim_blocks=False,
+            lstrip_blocks=False,
+            autoescape=False,
+        )
+        return str(template_path), env.from_string(template_text), None
+    except Exception as e:
+        return template_path_str, None, f"TemplateLoadError: {e}"
+
+
+def render_prompt_from_payload(
+    payload: Any,
+    chat_template_renderer: Any,
+    chat_template_path: str | None,
+    chat_template_error: str | None,
+    chat_template_max_chars: int,
+) -> tuple[str | None, str | None]:
+    rendered_prompt: str | None = None
+    rendered_prompt_error: str | None = None
+
+    if chat_template_renderer and isinstance(payload, dict):
+        try:
+            normalized_payload = normalize_payload_for_template(payload)
+            context = {
+                "messages": normalized_payload.get("messages", []),
+                "tools": normalized_payload.get("tools", []),
+                "system_prompt": normalized_payload.get("system_prompt"),
+                "add_generation_prompt": normalized_payload.get("add_generation_prompt", True),
+                "bos_token": normalized_payload.get("bos_token", ""),
+                "eos_token": normalized_payload.get("eos_token", ""),
+                "enable_thinking": normalized_payload.get("enable_thinking"),
+                "model": normalized_payload.get("model"),
+            }
+            rendered_prompt = chat_template_renderer.render(**context)
+            if len(rendered_prompt) > chat_template_max_chars:
+                rendered_prompt = rendered_prompt[: chat_template_max_chars] + "\n<truncated>"
+        except Exception as e:
+            rendered_prompt_error = f"TemplateRenderError: {e}"
+    elif chat_template_path and chat_template_error:
+        rendered_prompt_error = chat_template_error
+
+    return rendered_prompt, rendered_prompt_error
+
+
+def _normalize_tool_call_arguments(value: Any) -> Any:
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped and stripped[0] in "[{":
+            try:
+                return json.loads(stripped)
+            except Exception:
+                return value
+    return value
+
+
+def normalize_payload_for_template(payload: dict[str, Any]) -> dict[str, Any]:
+    normalized = copy.deepcopy(payload)
+    messages = normalized.get("messages")
+    if not isinstance(messages, list):
+        return normalized
+
+    for message in messages:
+        if not isinstance(message, dict):
+            continue
+        tool_calls = message.get("tool_calls")
+        if not isinstance(tool_calls, list):
+            continue
+        for tool_call in tool_calls:
+            if not isinstance(tool_call, dict):
+                continue
+            function = tool_call.get("function")
+            if isinstance(function, dict) and "arguments" in function:
+                function["arguments"] = _normalize_tool_call_arguments(function.get("arguments"))
+            elif "arguments" in tool_call:
+                tool_call["arguments"] = _normalize_tool_call_arguments(tool_call.get("arguments"))
+    return normalized
+
+
+def render_input_payloads(args: argparse.Namespace) -> int:
+    default_log_dir = os.path.expanduser("~/.llm-ops/logs")
+    log_path = Path(os.path.expanduser(args.log))
+    rendered_prompt_log_path = (
+        Path(os.path.expanduser(args.rendered_prompt_log)) if args.rendered_prompt_log else None
+    )
+    raw_log_path = Path(os.path.expanduser(args.raw_log)) if args.raw_log else None
+    raw_request_log_path = Path(os.path.expanduser(args.raw_request_log)) if args.raw_request_log else None
+    raw_response_log_path = Path(os.path.expanduser(args.raw_response_log)) if args.raw_response_log else None
+
+    if raw_request_log_path is None and raw_response_log_path is None and raw_log_path is None:
+        raw_request_log_path = Path(f"{default_log_dir}/model-proxy.raw.log")
+    else:
+        if raw_log_path is not None and raw_request_log_path is None:
+            raw_request_log_path = raw_log_path
+
+    chat_template_path, chat_template_renderer, chat_template_error = load_chat_template_renderer(
+        args.chat_template
+    )
+
+    ProxyTapHandler.log_rotate_seconds = max(0, int(args.log_rotate_seconds))
+    ProxyTapHandler.log_rotate_keep = max(0, int(args.log_rotate_keep))
+    ProxyTapHandler.log_fsync = bool(args.log_fsync)
+    ProxyTapHandler._log_writers = {}
+    ProxyTapHandler.log_path = log_path
+    ProxyTapHandler.raw_request_log_path = raw_request_log_path
+    ProxyTapHandler.rendered_prompt_log_path = rendered_prompt_log_path
+    ProxyTapHandler.raw_response_log_path = raw_response_log_path
+    ProxyTapHandler.chat_template_path = chat_template_path
+    ProxyTapHandler.chat_template_renderer = chat_template_renderer
+    ProxyTapHandler.chat_template_error = chat_template_error
+    ProxyTapHandler.chat_template_max_chars = int(args.chat_template_max_chars)
+
+    input_label = args.render_input
+    if input_label == "-":
+        try:
+            import sys
+
+            raw_input_text = sys.stdin.read()
+        except Exception as e:
+            raise SystemExit(f"Failed to read --render-input from stdin: {e}")
+        input_path_str = "<stdin>"
+    else:
+        input_path = Path(os.path.expanduser(input_label))
+        try:
+            raw_input_text = input_path.read_text(encoding="utf-8")
+        except Exception as e:
+            raise SystemExit(f"Failed to read --render-input: {e}")
+        input_path_str = str(input_path)
+
+    try:
+        parsed = json.loads(raw_input_text)
+    except Exception as e:
+        raise SystemExit(f"Failed to parse --render-input JSON: {e}")
+
+    payloads = parsed if isinstance(parsed, list) else [parsed]
+    if not all(isinstance(item, dict) for item in payloads):
+        raise SystemExit("--render-input must contain a JSON object or a list of JSON objects")
+
+    helper = ProxyTapHandler.__new__(ProxyTapHandler)
+
+    for idx, payload in enumerate(payloads, start=1):
+        ts = utc_now()
+        request_id = f"render-{int(time.time() * 1000)}-{idx}"
+        request_text = json.dumps(payload, ensure_ascii=False, indent=2)
+        rendered_prompt, rendered_prompt_error = render_prompt_from_payload(
+            payload,
+            chat_template_renderer=chat_template_renderer,
+            chat_template_path=chat_template_path,
+            chat_template_error=chat_template_error,
+            chat_template_max_chars=int(args.chat_template_max_chars),
+        )
+
+        helper._write_log(
+            {
+                "event": "render_input",
+                "ts": ts,
+                "request_id": request_id,
+                "pid": os.getpid(),
+                "request_summary": summarize_request(payload),
+                "request_text": request_text,
+                "rendered_prompt": rendered_prompt,
+                "rendered_prompt_error": rendered_prompt_error,
+                "render_only": True,
+                "input_path": input_path_str,
+                "input_index": idx,
+            }
+        )
+        helper._write_framed_log(
+            raw_request_log_path,
+            ts,
+            request_id,
+            "RAW_REQUEST",
+            request_text,
+        )
+        if chat_template_path and rendered_prompt is not None:
+            helper._write_framed_log(
+                rendered_prompt_log_path,
+                ts,
+                request_id,
+                "RENDERED_PROMPT",
+                rendered_prompt,
+            )
+        elif chat_template_path and rendered_prompt_error:
+            helper._write_framed_log(
+                rendered_prompt_log_path,
+                ts,
+                request_id,
+                "TEMPLATE_ERROR",
+                rendered_prompt_error,
+            )
+
+        print(
+        f"model-proxy-tap render-only processed {len(payloads)} payload(s) "
+        f"(raw_log={raw_request_log_path}, rendered_log={rendered_prompt_log_path})",
+        flush=True,
+    )
+    return 0
 
 
 def prune_older_image_parts(payload: Any) -> tuple[bool, int, int | None]:
@@ -630,7 +838,13 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="OpenAI-compatible reverse proxy tap")
     p.add_argument("--listen-host", default="127.0.0.1")
     p.add_argument("--listen-port", "--port", dest="listen_port", type=int, help="Listen port (default: upstream port)")
-    p.add_argument("--upstream", required=True, help="Upstream host:port or URL, e.g. <upstream-host>:<upstream-port>")
+    p.add_argument("--upstream", help="Upstream host:port or URL, e.g. <upstream-host>:<upstream-port>")
+    p.add_argument(
+        "-i",
+        "--render-input",
+        dest="render_input",
+        help="Render one JSON payload or a list of payloads from a file without starting the proxy. Use '-' to read from stdin.",
+    )
     p.add_argument("--log", default=f"{default_log_dir}/model-proxy.ndjson", help="NDJSON log file path")
     p.add_argument("--timeout", type=float, default=900.0)
     p.add_argument("--max-log-bytes", type=int, default=0, help="Per-request capture cap in bytes; 0 means unlimited")
@@ -674,6 +888,10 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     default_log_dir = os.path.expanduser("~/.llm-ops/logs")
     args = parse_args()
+    if args.render_input:
+        return render_input_payloads(args)
+    if not args.upstream:
+        raise SystemExit("--upstream is required unless --render-input is used")
     try:
         upstream_base, upstream_port = normalize_upstream(args.upstream)
     except ValueError as e:
@@ -716,21 +934,11 @@ def main() -> int:
     ProxyTapHandler.raw_response_log_path = raw_response_log_path
 
     if args.chat_template:
-        if jinja2 is None:
-            ProxyTapHandler.chat_template_error = "jinja2 not available in this Python environment"
-        else:
-            try:
-                template_path = Path(os.path.expanduser(args.chat_template))
-                template_text = template_path.read_text(encoding="utf-8")
-                env = jinja2.Environment(
-                    undefined=jinja2.ChainableUndefined,
-                    trim_blocks=False,
-                    lstrip_blocks=False,
-                    autoescape=False,
-                )
-                ProxyTapHandler.chat_template_renderer = env.from_string(template_text)
-            except Exception as e:
-                ProxyTapHandler.chat_template_error = f"TemplateLoadError: {e}"
+        (
+            ProxyTapHandler.chat_template_path,
+            ProxyTapHandler.chat_template_renderer,
+            ProxyTapHandler.chat_template_error,
+        ) = load_chat_template_renderer(args.chat_template)
 
     server = ThreadingHTTPServer((args.listen_host, listen_port), ProxyTapHandler)
     print(

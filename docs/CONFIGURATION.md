@@ -1,7 +1,7 @@
 # Configuration Guide
 
 **Created**: 2026-02-28  
-**Updated**: 2026-03-13
+**Updated**: 2026-03-27
 
 - [Configuration Guide](#configuration-guide)
   - [What This Doc Is For](#what-this-doc-is-for)
@@ -62,6 +62,100 @@ Note:
 - Keep toolkit configuration in `~/.llm-ops/config.env`.
 - For model-specific overrides, prefer `~/.llm-ops/config/<ModelProfile>.env`.
 - If a per-model override file is missing, `modelctl` auto-seeds it from the shipped model profile the first time that launcher is used and prints a notice.
+- Legacy per-model override files named `~/.llm-ops/config/<ModelProfile>.sh` are still detected and loaded, but `~/.llm-ops/config/<ModelProfile>.env` is now the preferred convention.
+
+## Service-Specific Config Sources
+
+Not every wrapper uses the same kind of config input. The most useful mental
+model is:
+
+- `modelctl`: global env + per-model override file + shipped model profile
+- `model-proxy`: CLI flags + environment only
+- `gateway`: CLI flags + environment, with backend-specific native config owned by OpenClaw or Hermes
+- `tts-bridge`: CLI flags + environment + bridge JSON config files
+
+### `modelctl`
+
+Effective precedence:
+
+1. CLI action and any runtime flags passed directly to the launcher
+2. exported environment variables
+3. `~/.llm-ops/config.env`
+4. `~/.llm-ops/config/<ModelProfile>.env`
+5. shipped model profile under `scripts/models/<ModelProfile>.sh`
+6. model-type defaults under `scripts/defaults/`
+
+Notes:
+
+- `modelctl` is the wrapper that owns per-model override files.
+- If the current `.env`-style override file is missing, `modelctl` auto-seeds it.
+- Legacy `~/.llm-ops/config/<ModelProfile>.sh` files are still loaded and warned about.
+
+### `model-proxy`
+
+Effective precedence:
+
+1. CLI flags passed to `model-proxy` / `model-proxy-tap`
+2. exported environment variables
+3. `~/.llm-ops/config.env`
+4. built-in wrapper defaults
+
+Notes:
+
+- `model-proxy` does not have its own dedicated config file.
+- It does persist live runtime metadata under `~/.llm-ops/run/model-proxy-live-*`,
+  but those files are for status/reporting, not configuration input.
+- `model-proxy render` is a render-only debugging path that reuses the normal
+  env/CLI config surface and does not require upstream connectivity.
+- The most important config inputs are:
+  - `LLMOPS_UPSTREAM_HOST`
+  - `LLMOPS_UPSTREAM_PORT`
+  - `MODEL_PROXY_LISTEN_HOST`
+  - `MODEL_PROXY_LISTEN_PORT`
+  - `MODEL_PROXY_CHAT_TEMPLATE`
+
+### `gateway`
+
+Effective precedence:
+
+1. CLI action
+2. exported environment variables
+3. `~/.llm-ops/config.env`
+4. built-in wrapper defaults
+5. backend-native config owned by the selected gateway stack
+
+Notes:
+
+- `gateway` itself does not own a dedicated config file.
+- Select the default target with `LLMOPS_GATEWAY_BACKEND`:
+  - `openclaw` (default)
+  - `hermes`
+  - `all`
+- OpenClaw-specific runtime behavior continues to come from the toolkit env layer.
+- Hermes-specific runtime behavior is loaded by Hermes from:
+  - `~/.hermes/config.yaml`
+  - `~/.hermes/.env`
+  - legacy `~/.hermes/gateway.json`
+- `LLMOPS_GATEWAY_PORT` only applies to the OpenClaw backend.
+- `HERMES_GATEWAY_CMD` overrides the command used to launch Hermes when `backend=hermes`.
+
+### `tts-bridge`
+
+Effective precedence:
+
+1. CLI flags
+2. exported environment variables
+3. `~/.llm-ops/config.env`
+4. files derived from `TTS_BRIDGE_CONFIG_DIR`
+5. built-in wrapper defaults
+
+Notes:
+
+- `tts-bridge` does not use a single dedicated shell config file of its own.
+- Its extra structured config comes from JSON files, typically:
+  - `~/.llm-ops/pronounce.json`
+  - `~/.llm-ops/voice-map.json`
+- Environment chooses the paths; the JSON files provide the structured bridge data.
 
 ## Core Environment Variables
 
@@ -77,6 +171,9 @@ Note:
 - `LLMOPS_UPSTREAM_PORT`: default upstream model port for wrappers.
 - `MODEL_PROXY_LISTEN_HOST`: default bind host for proxy wrappers.
 - `MODEL_PROXY_LISTEN_PORT`: default bind port for proxy wrappers.
+- `LLMOPS_GATEWAY_BACKEND`: gateway wrapper backend selector (`openclaw` by default, `hermes` when set explicitly).
+- `LLMOPS_GATEWAY_PORT`: direct-run OpenClaw gateway port used by the toolkit wrapper.
+- `HERMES_GATEWAY_CMD`: command path/name used when the gateway backend is `hermes`.
 - `MODEL_PROXY_TAP_BIN`: optional explicit path to `model-proxy-tap`.
 - `MODEL_PROXY_LOG_ROTATE_SECONDS`: time-based rotation period for proxy-owned logs. Default `86400`.
 - `MODEL_PROXY_LOG_ROTATE_KEEP`: number of rotated proxy logs to keep. Default `5`.
@@ -101,6 +198,22 @@ Note:
 - `LLMOPS_LOG_ROTATE_MAX_AGE_DAYS`: optional max age for rotated logs.
 - `LLMOPS_BACKUP_KEEP`: number of runtime install backups to keep.
 - `LLMOPS_BACKUP_MAX_AGE_DAYS`: optional max age for runtime install backups.
+
+## Log Marktime
+
+Toolkit-managed service logs can emit periodic human-readable timestamp markers
+to make long-running log review easier.
+
+- `LLMOPS_LOG_MARKTIME_ENABLED`: enable periodic log markers (`1` by default).
+- `LLMOPS_LOG_MARKTIME_INTERVAL_SECONDS`: marker interval in seconds (`300` by default).
+- `LLMOPS_LOG_MARKTIME_FORMAT`: `date` format string used for the timestamp body
+  (default: `+%Y-%m-%d %H:%M:%S UTC`).
+
+Current marker shape:
+
+```text
+========== <label> - MARKTIME  YYYY-MM-DD hh:mm:ss UTC ==========
+```
 
 ## Sync Variables
 

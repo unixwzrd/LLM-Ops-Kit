@@ -1,12 +1,57 @@
 # Agent Ops Changelog
 
 **Created**: 2026-02-20
-**Updated**: 2026-03-25
+**Updated**: 2026-03-27
 
 All notable changes to LLM-Ops-Kit will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+### 2026-03-27 — Release v0.7.5 Model-proxy render mode and chat-template replay hardening
+
+- **Scope:** `LLM-Ops-Kit/scripts/model-proxy`, `LLM-Ops-Kit/scripts/model_proxy_tap.py`, `LLM-Ops-Kit/scripts/tests/test_model_proxy_stats.py`, `LLM-Ops-Kit/docs/scripts/model-proxy.md`, `LLM-Ops-Kit/docs/CONFIGURATION.md`
+- **Category:** `proxy`, `prompt-debugging`, `testing`, `documentation`
+- **What changed:**
+  - Added `model-proxy render` as a render-only debugging mode for chat-template investigation.
+  - Added `-i`, `--input`, and `--render-input` support for render-only payload input.
+  - Added stdin support for render-only mode with `-i -`.
+  - Render-only mode now logs raw request text and rendered/template-error output without starting the proxy listener or forwarding upstream.
+  - Hardened chat-template rendering by normalizing assistant tool-call payloads for the renderer:
+    - when `tool_calls[*].function.arguments` arrives as a JSON string on the wire, it is parsed into a mapping for template rendering only
+    - raw request logging remains unchanged
+  - Added regression coverage for stringified assistant tool-call arguments in the render path.
+- **Why:**
+  - Make prompt/template debugging reproducible from captured request payloads, and keep original model templates usable when the OpenAI-style wire payload contains stringified tool-call arguments.
+
+### 2026-03-26 — Release v0.7.0 Log marktime markers, gateway backend selection, and per-model override cleanup
+
+- **Scope:** `LLM-Ops-Kit/scripts/lib/common.sh`, `LLM-Ops-Kit/scripts/modelctl`, `LLM-Ops-Kit/scripts/tts-bridge`, `LLM-Ops-Kit/scripts/gateway`, `LLM-Ops-Kit/scripts/tests`, `LLM-Ops-Kit/.github/workflows/ci.yml`, `LLM-Ops-Kit/docs/CONFIGURATION.md`, `LLM-Ops-Kit/docs/scripts/gateway.md`, `LLM-Ops-Kit/docs/internal/TODO.md`
+- **Category:** `runtime`, `gateway`, `observability`, `configuration`, `testing`, `ci`, `documentation`
+- **What changed:**
+  - Added shared log marktime support for toolkit-managed service logs.
+  - `modelctl` now starts a lightweight marker loop for model server logs and stops it on shutdown/restart.
+  - `tts-bridge` now starts the same marker loop for bridge logs and stops it on shutdown/restart.
+  - Added new runtime knobs:
+    - `LLMOPS_LOG_MARKTIME_ENABLED`
+    - `LLMOPS_LOG_MARKTIME_INTERVAL_SECONDS`
+    - `LLMOPS_LOG_MARKTIME_FORMAT`
+  - Marker lines use a human-readable UTC format such as:
+    - `========== Qwen3.5 - MARKTIME  2026-03-26 20:43:28 UTC ==========`
+  - `modelctl` now recognizes legacy per-model override files named `~/.llm-ops/config/<Model>.sh` and warns that `~/.llm-ops/config/<Model>.env` is the preferred current convention.
+  - `gateway` now supports explicit backend targets via `LLMOPS_GATEWAY_BACKEND` or a command-line target argument, keeping OpenClaw as the default while allowing the same wrapper to launch Hermes with `hermes gateway run`.
+  - `gateway` now isolates OpenClaw and Hermes with separate PID/log namespaces so both wrappers can run side by side and be managed independently or together with `all`.
+  - Added Hermes-aware `gateway status`, `gateway logs`, and `gateway setup` behavior so the toolkit wrapper can be reused while Hermes continues to own its own `~/.hermes` runtime config.
+  - Documented gateway config precedence and clarified that Hermes gateway settings come from Hermes config files rather than the toolkit wrapper.
+  - Added regression coverage for:
+    - shared log marktime helper behavior
+    - per-model override seeding
+    - legacy per-model `.sh` override compatibility
+  - Added a GitHub Actions workflow that runs shell syntax checks, `shellcheck`, and the Python regression suite on pushes and pull requests.
+  - Updated configuration docs to document the marktime settings and the preferred per-model override naming.
+  - Added internal backlog notes for future per-model config drift detection and optional append-missing tooling.
+- **Why:**
+  - Make long-running service logs easier to read and correlate without relying entirely on embedded server timestamps, while keeping per-model override behavior aligned with the current `.env` naming convention.
 
 ### 2026-03-25 — Release v0.6.5 TTS bridge status cleanup and upstream-authoritative reporting
 

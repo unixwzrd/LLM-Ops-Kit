@@ -79,8 +79,18 @@ Config resolution precedence:
 
 1. CLI flag
 2. matching environment variable
-3. file derived from `TTS_BRIDGE_CONFIG_DIR`
-4. built-in default
+3. `~/.llm-ops/config.env`
+4. file derived from `TTS_BRIDGE_CONFIG_DIR`
+5. built-in default
+
+Clarification:
+
+- `tts-bridge` is not driven by one dedicated shell config file.
+- Wrapper-level settings come from CLI flags and environment.
+- Structured bridge data comes from JSON files under `TTS_BRIDGE_CONFIG_DIR`.
+- In practice that means:
+  - shell/env chooses things like host, port, upstream URL, model path, and config-dir
+  - `pronounce.json` and `voice-map.json` provide the bridge-specific structured data
 
 Defaults:
 

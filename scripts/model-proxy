@@ -33,11 +33,12 @@ esac
 
 usage() {
   cat <<USAGE
-Usage: model-proxy [start|stop|restart|status] [options]
+Usage: model-proxy [start|stop|restart|status|render] [options]
 
 Options:
   start/restart: all options are passed through directly to model-proxy-tap.
   stop: use --force for SIGKILL.
+  render: pass -i/--input/--render-input <payload.json> to render prompt(s) without starting the proxy. Use '-' to read stdin.
   -h, --help: show this help.
 
 Default env-backed values:
@@ -406,11 +407,50 @@ status_proxy() {
   return 1
 }
 
+render_proxy() {
+  load_shell_env
+  ensure_runtime_dirs
+
+  local render_input=""
+  render_input="$(arg_value -i --input 2>/dev/null || arg_value --render-input 2>/dev/null || true)"
+  if [[ -z "$render_input" ]]; then
+    echo "model-proxy: render requires -i/--input/--render-input <payload.json>"
+    return 2
+  fi
+
+  local tmpl
+  tmpl="$(arg_value --chat-template 2>/dev/null || true)"
+  tmpl="${tmpl:-$MODEL_PROXY_CHAT_TEMPLATE}"
+  if [[ -n "$tmpl" ]] && ! arg_value --chat-template >/dev/null 2>&1; then
+    extra_args=(--chat-template "$tmpl" "${extra_args[@]}")
+  fi
+
+  local forwarded_args=()
+  local i arg next
+  for ((i = 0; i < ${#extra_args[@]}; i++)); do
+    arg="${extra_args[$i]}"
+    next="${extra_args[$((i + 1))]:-}"
+    case "$arg" in
+      -i|--input|--render-input)
+        ((i++))
+        ;;
+      -i=*|--input=*|--render-input=*)
+        ;;
+      *)
+        forwarded_args+=("$arg")
+        ;;
+    esac
+  done
+
+  "$PROXY_TAP_BIN" --render-input "$render_input" "${forwarded_args[@]}"
+}
+
 case "$action" in
   start) start_proxy ;;
   stop) stop_proxy ;;
   restart) stop_proxy || true; start_proxy ;;
   status) status_proxy ;;
+  render) render_proxy ;;
   *)
     usage
     exit 2

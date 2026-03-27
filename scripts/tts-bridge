@@ -267,13 +267,19 @@ start_bridge() {
     > "$log_file" 2>&1 &
 
   write_pid "$pid_name" "$!"
+  start_log_marktime "$pid_name" "$pid_name" "$log_file"
   echo "Started $pid_name pid=$! log=$log_file"
+}
+
+stop_bridge() {
+  stop_by_name "$pid_name"
+  stop_log_marktime "$pid_name"
 }
 
 case "$ACTION" in
   start) start_bridge "$@" ;;
-  stop) stop_by_name "$pid_name" ;;
-  restart) stop_by_name "$pid_name" || true; start_bridge "$@" ;;
+  stop) stop_bridge ;;
+  restart) stop_bridge || true; start_bridge "$@" ;;
   status) status_bridge ;;
   -h|--help|help) usage ;;
   *)

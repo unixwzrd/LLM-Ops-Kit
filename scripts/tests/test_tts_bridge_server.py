@@ -7,6 +7,7 @@ import argparse
 import importlib.util
 import json
 import socket
+import sys
 import tempfile
 import threading
 import unittest
@@ -17,6 +18,9 @@ from urllib import request
 
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / "tts_bridge_server.py"
+SCRIPTS_DIR = MODULE_PATH.parent
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
 SPEC = importlib.util.spec_from_file_location("tts_bridge_server", MODULE_PATH)
 assert SPEC is not None
 assert SPEC.loader is not None

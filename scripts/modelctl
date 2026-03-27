@@ -71,6 +71,7 @@ load_model_defaults() {
   local m="$1"
   local model_file="$SCRIPT_DIR/models/${m}.sh"
   local model_override_file="$LLMOPS_CONFIG_DIR/${m}.env"
+  local legacy_override_file="$LLMOPS_CONFIG_DIR/${m}.sh"
   [[ -f "$model_file" ]] || { echo "Model defaults not found: $model_file" >&2; exit 2; }
 
   # Precedence (highest -> lowest):
@@ -85,6 +86,11 @@ load_model_defaults() {
   if [[ -f "$model_override_file" ]]; then
     # shellcheck disable=SC1090
     . "$model_override_file"
+  elif [[ -f "$legacy_override_file" ]]; then
+    echo "modelctl: legacy per-model override detected at $legacy_override_file" >&2
+    echo "modelctl: prefer renaming it to $model_override_file" >&2
+    # shellcheck disable=SC1090
+    . "$legacy_override_file"
   fi
 
   # 4) model profile
@@ -235,9 +241,17 @@ ensure_model_override_template() {
   local m="$1"
   local model_file="$SCRIPT_DIR/models/${m}.sh"
   local model_override_file="$LLMOPS_CONFIG_DIR/${m}.env"
+  local legacy_override_file="$LLMOPS_CONFIG_DIR/${m}.sh"
 
   [[ -f "$model_file" ]] || return 0
-  [[ -f "$model_override_file" ]] && return 0
+  if [[ -f "$model_override_file" ]]; then
+    return 0
+  fi
+  if [[ -f "$legacy_override_file" ]]; then
+    echo "modelctl: legacy per-model override already exists for '$m': $legacy_override_file" >&2
+    echo "modelctl: rename it to $model_override_file to match the current convention" >&2
+    return 0
+  fi
 
   mkdir -p "$LLMOPS_CONFIG_DIR"
   cp "$model_file" "$model_override_file"
@@ -485,6 +499,7 @@ start_model() {
   pid="$!"
   write_pid "$pid_name" "$pid"
   write_model_state "$pid"
+  start_log_marktime "$pid_name" "$MODEL_PROFILE" "$LOG_FILE"
   echo "Started $pid_name pid=$pid log=$LOG_FILE"
 }
 
@@ -498,6 +513,7 @@ stop_model() {
     fi
   fi
   stop_by_name "$pid_name"
+  stop_log_marktime "$pid_name"
   clear_model_state
 }
 
