@@ -204,7 +204,7 @@ prune_runtime_backups() {
 
 prune_runtime_artifacts() {
   ensure_runtime_dirs
-  prune_runtime_backups
+  prune_runtime_backups "$LLMOPS_BACKUP_KEEP" "$LLMOPS_BACKUP_MAX_AGE_DAYS"
 }
 
 retention_summary_line() {
@@ -357,6 +357,7 @@ start_log_marktime() {
     rm -f "$pf"
   fi
 
+  # shellcheck disable=SC2016
   nohup bash -c '
       label="$1"
       log_file="$2"

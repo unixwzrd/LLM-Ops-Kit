@@ -16,7 +16,13 @@ requested_target="${2:-${LLMOPS_GATEWAY_BACKEND:-openclaw}}"
 
 openclaw_app_log_path() {
   local latest
-  latest="$(ls -1t /tmp/openclaw/openclaw-*.log 2>/dev/null | head -n 1 || true)"
+  latest="$(
+    find /tmp/openclaw -maxdepth 1 -type f -name 'openclaw-*.log' -print 2>/dev/null \
+      | xargs -I{} stat -f '%m %N' "{}" 2>/dev/null \
+      | sort -nr \
+      | head -n 1 \
+      | cut -d' ' -f2- || true
+  )"
   if [[ -n "$latest" ]]; then
     printf '%s\n' "$latest"
   else

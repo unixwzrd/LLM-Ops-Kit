@@ -94,7 +94,7 @@ load_model_defaults() {
   fi
 
   # 4) model profile
-  # shellcheck disable=SC1091
+  # shellcheck disable=SC1090,SC1091
   . "$model_file"
 
   # 5) model-type defaults
@@ -492,8 +492,7 @@ start_model() {
       --log-timestamps \
       --log-file "$LOG_FILE" \
       "${MODE_FLAGS[@]}" \
-      "${EXTRA_ARGS[@]}" \
-      > "$LOG_FILE" 2>&1 &
+      "${EXTRA_ARGS[@]}" &
   fi
 
   pid="$!"
@@ -525,7 +524,6 @@ server_base_url() {
   printf 'http://%s:%s\n' "$h" "$PORT"
 }
 
-REPORTED_MODEL_IDS=""
 REPORTED_PRIMARY_MODEL=""
 
 extract_model_ids() {
@@ -560,7 +558,6 @@ verify_model() {
     return 1
   fi
   ids="$(extract_model_ids "$body")"
-  REPORTED_MODEL_IDS="$ids"
   REPORTED_PRIMARY_MODEL="$(extract_primary_model_id "$body")"
   if [[ -n "$ids" ]]; then
     echo "verify: reported_models=$ids"
