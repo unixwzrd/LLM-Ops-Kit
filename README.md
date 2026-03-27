@@ -1,7 +1,7 @@
 # LLM-Ops-Kit
 
 **Created**: 2026-02-20
-**Updated**: 2026-03-09
+**Updated**: 2026-03-27
 
 
 Operational toolkit for running, deploying, and maintaining a local OpenClaw stack across hosts.
@@ -187,6 +187,20 @@ Operational notes:
 - `gateway`, `model-proxy`, and `tts-bridge` status now print retention settings.
 - Runtime logs rotate in place and install backups under `~/.llm-ops/backups` are pruned by policy.
 - In the current direct-run gateway mode, use `~/bin/gateway logs` instead of relying on `openclaw logs --follow`.
+
+## Local Precheck
+
+Before committing or pushing, run:
+
+```bash
+./scripts/precheck
+```
+
+It mirrors the core CI checks:
+
+- shell syntax checks for the main wrappers
+- `shellcheck`
+- Python regression tests under `scripts/tests`
 
 ## Link Management (Single Source of Truth)
 

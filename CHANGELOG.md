@@ -8,10 +8,10 @@ All notable changes to LLM-Ops-Kit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-### 2026-03-27 — Release v0.7.5 Model-proxy render mode and chat-template replay hardening
+### 2026-03-27 — Release v0.7.5 Model-proxy render mode, chat-template replay hardening, and local precheck tooling
 
-- **Scope:** `LLM-Ops-Kit/scripts/model-proxy`, `LLM-Ops-Kit/scripts/model_proxy_tap.py`, `LLM-Ops-Kit/scripts/tests/test_model_proxy_stats.py`, `LLM-Ops-Kit/docs/scripts/model-proxy.md`, `LLM-Ops-Kit/docs/CONFIGURATION.md`
-- **Category:** `proxy`, `prompt-debugging`, `testing`, `documentation`
+- **Scope:** `LLM-Ops-Kit/scripts/model-proxy`, `LLM-Ops-Kit/scripts/model_proxy_tap.py`, `LLM-Ops-Kit/scripts/precheck`, `LLM-Ops-Kit/scripts/lib/common.sh`, `LLM-Ops-Kit/scripts/modelctl`, `LLM-Ops-Kit/scripts/gateway`, `LLM-Ops-Kit/scripts/tests/test_model_proxy_stats.py`, `LLM-Ops-Kit/docs/scripts/model-proxy.md`, `LLM-Ops-Kit/docs/CONFIGURATION.md`, `LLM-Ops-Kit/README.md`
+- **Category:** `proxy`, `prompt-debugging`, `testing`, `documentation`, `shell`
 - **What changed:**
   - Added `model-proxy render` as a render-only debugging mode for chat-template investigation.
   - Added `-i`, `--input`, and `--render-input` support for render-only payload input.
@@ -21,8 +21,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - when `tool_calls[*].function.arguments` arrives as a JSON string on the wire, it is parsed into a mapping for template rendering only
     - raw request logging remains unchanged
   - Added regression coverage for stringified assistant tool-call arguments in the render path.
+  - Added `scripts/precheck` so we can run local shell syntax checks, `shellcheck`, and the Python regression suite before commit/push.
+  - Cleaned up shell wrapper issues surfaced by CI `shellcheck`, including:
+    - explicit argument passing for runtime-backup pruning helpers
+    - safer `llama-server --log-file` launch behavior in `modelctl`
+    - removal of unused shell variables
+    - a safer log-discovery path in `gateway`
+  - Documented the local precheck workflow in the README.
 - **Why:**
-  - Make prompt/template debugging reproducible from captured request payloads, and keep original model templates usable when the OpenAI-style wire payload contains stringified tool-call arguments.
+  - Make prompt/template debugging reproducible from captured request payloads, keep original model templates usable when the OpenAI-style wire payload contains stringified tool-call arguments, and make it easier to catch shell/test regressions locally before pushing.
 
 ### 2026-03-26 — Release v0.7.0 Log marktime markers, gateway backend selection, and per-model override cleanup
 
