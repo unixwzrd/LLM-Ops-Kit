@@ -554,15 +554,16 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
 
         if self.chat_template_renderer and isinstance(req_json, dict):
             try:
+                normalized_req_json = normalize_payload_for_template(req_json)
                 context = {
-                    "messages": req_json.get("messages", []),
-                    "tools": req_json.get("tools", []),
-                    "system_prompt": req_json.get("system_prompt"),
-                    "add_generation_prompt": req_json.get("add_generation_prompt", True),
-                    "bos_token": req_json.get("bos_token", ""),
-                    "eos_token": req_json.get("eos_token", ""),
-                    "enable_thinking": req_json.get("enable_thinking"),
-                    "model": req_json.get("model"),
+                    "messages": normalized_req_json.get("messages", []),
+                    "tools": normalized_req_json.get("tools", []),
+                    "system_prompt": normalized_req_json.get("system_prompt"),
+                    "add_generation_prompt": normalized_req_json.get("add_generation_prompt", True),
+                    "bos_token": normalized_req_json.get("bos_token", ""),
+                    "eos_token": normalized_req_json.get("eos_token", ""),
+                    "enable_thinking": normalized_req_json.get("enable_thinking"),
+                    "model": normalized_req_json.get("model"),
                 }
                 rendered_prompt = self.chat_template_renderer.render(**context)
                 if len(rendered_prompt) > self.chat_template_max_chars:
