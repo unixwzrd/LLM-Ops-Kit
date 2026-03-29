@@ -51,15 +51,18 @@ Use this file when you are:
 Scripts use this precedence:
 
 1. CLI flags (when supported)
-2. Exported environment variables
-3. `~/.llm-ops/config.env` user config
-4. `~/.llm-ops/config/<ModelProfile>.env` per-model overrides for model launchers
-5. Repo defaults (`scripts/config/hosts.env`)
-6. Script defaults
+2. `~/.llm-ops/config.env` user config for non-secret runtime values
+3. `seckit` exports when `LLMOPS_USE_SECKIT=1`
+4. `~/.env` and inherited process environment as fallback secret sources
+5. `~/.llm-ops/config/<ModelProfile>.env` per-model overrides for model launchers
+6. Repo defaults (`scripts/config/hosts.env`)
+7. Script defaults
 
 Note:
 - Toolkit scripts do not rely on `~/.openclaw/.env` by default.
 - Keep toolkit configuration in `~/.llm-ops/config.env`.
+- Keep runtime routing config in `~/.llm-ops/config.env`, not in `~/.env`.
+- Reserve `~/.env` for secret fallback values only.
 - For model-specific overrides, prefer `~/.llm-ops/config/<ModelProfile>.env`.
 - If a per-model override file is missing, `modelctl` auto-seeds it from the shipped model profile the first time that launcher is used and prints a notice.
 - Legacy per-model override files named `~/.llm-ops/config/<ModelProfile>.sh` are still detected and loaded, but `~/.llm-ops/config/<ModelProfile>.env` is now the preferred convention.
@@ -193,6 +196,7 @@ Notes:
 - `LLMOPS_SECKIT_BIN`: optional `seckit` binary path or command name (default `seckit`).
 - `LLMOPS_SECKIT_SERVICE`: `seckit` service namespace used during export (default `openclaw`).
 - `LLMOPS_SECKIT_ACCOUNT`: `seckit` account namespace used during export (default `default`).
+- `LLMOPS_SECRET_FALLBACK_WARN`: set to `0` to suppress warnings when wrappers fall back to env-provided secrets after `seckit` export fails.
 - `LLMOPS_LOG_ROTATE_BYTES`: rotate active logs after this many bytes.
 - `LLMOPS_LOG_ROTATE_KEEP`: number of rotated logs to keep per active log.
 - `LLMOPS_LOG_ROTATE_MAX_AGE_DAYS`: optional max age for rotated logs.
@@ -361,3 +365,14 @@ At the moment, the standard OpenClaw service path is considered deferred work:
 
 - `openclaw gateway start` expects an installed LaunchAgent on macOS
 - `openclaw logs --follow`, `openclaw gateway probe`, and `openclaw gateway health` may still fail against a live direct-run gateway because the CLI RPC attach path is not stable yet in this environment
+
+## Secrets Kit Fallback Behavior
+
+When `LLMOPS_USE_SECKIT=1`, wrappers try `seckit` first for secrets. If export succeeds, those values are used with no warning. If export fails, wrappers continue with environment-based secret fallback instead of aborting.
+
+Warnings are only emitted when both of these are true:
+
+- the current wrapper declares relevant secret names
+- one or more of those secrets is actually present in environment fallback
+
+This keeps commands like `tts-bridge status` quiet when they do not need secrets at all, while still warning when a command is running on env-backed secrets instead of `seckit`.

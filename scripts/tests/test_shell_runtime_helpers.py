@@ -87,6 +87,142 @@ class ShellRuntimeHelperTests(unittest.TestCase):
             self.assertIn("TOP_K=77", proc.stdout)
             self.assertFalse((config_dir / "Qwen3.5.env").exists())
 
+    def test_seckit_export_failure_is_quiet_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fake_bin = Path(tmp) / "fake-seckit"
+            fake_bin.write_text(
+                "#!/usr/bin/env bash\n"
+                "echo 'ERROR: export failed' >&2\n"
+                "exit 1\n",
+                encoding="utf-8",
+            )
+            fake_bin.chmod(0o755)
+            script = f"""
+                . \"{COMMON_SH}\"
+                export LLMOPS_USE_SECKIT=1
+                export LLMOPS_SECKIT_BIN=\"{fake_bin}\"
+                maybe_load_seckit_env
+                printf 'ok\\n'
+            """
+            proc = self.run_bash(script)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertEqual(proc.stderr, "")
+            self.assertEqual(proc.stdout.strip(), "ok")
+
+    def test_seckit_export_failure_can_be_verbose(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fake_bin = Path(tmp) / "fake-seckit"
+            fake_bin.write_text(
+                "#!/usr/bin/env bash\n"
+                "echo 'ERROR: export failed' >&2\n"
+                "exit 1\n",
+                encoding="utf-8",
+            )
+            fake_bin.chmod(0o755)
+            script = f"""
+                . \"{COMMON_SH}\"
+                export LLMOPS_USE_SECKIT=1
+                export LLMOPS_SECKIT_BIN=\"{fake_bin}\"
+                export LLMOPS_SECKIT_QUIET_FAILURES=0
+                maybe_load_seckit_env
+            """
+            proc = self.run_bash(script)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertIn("Secrets Kit export failed", proc.stderr)
+            self.assertIn("ERROR: export failed", proc.stderr)
+
+    def test_seckit_failed_with_env_secret_fallback_warns(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fake_bin = Path(tmp) / "fake-seckit"
+            fake_bin.write_text(
+                "#!/usr/bin/env bash\n"
+                "echo 'ERROR: export failed' >&2\n"
+                "exit 1\n",
+                encoding="utf-8",
+            )
+            fake_bin.chmod(0o755)
+            script = f"""
+                . \"{COMMON_SH}\"
+                export LLMOPS_USE_SECKIT=1
+                export LLMOPS_SECKIT_BIN=\"{fake_bin}\"
+                export LLMOPS_REQUIRED_SECRETS=\"OPENAI_API_KEY TELEGRAM_BOT_TOKEN\"
+                export OPENAI_API_KEY=sk-local
+                maybe_load_seckit_env
+                maybe_warn_env_secret_fallback
+            """
+            proc = self.run_bash(script)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertIn("Secrets Kit fallback in use", proc.stderr)
+            self.assertIn("OPENAI_API_KEY", proc.stderr)
+
+    def test_seckit_env_secret_fallback_warning_can_be_suppressed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fake_bin = Path(tmp) / "fake-seckit"
+            fake_bin.write_text(
+                "#!/usr/bin/env bash\n"
+                "echo 'ERROR: export failed' >&2\n"
+                "exit 1\n",
+                encoding="utf-8",
+            )
+            fake_bin.chmod(0o755)
+            script = f"""
+                . \"{COMMON_SH}\"
+                export LLMOPS_USE_SECKIT=1
+                export LLMOPS_SECKIT_BIN=\"{fake_bin}\"
+                export LLMOPS_REQUIRED_SECRETS=\"OPENAI_API_KEY\"
+                export OPENAI_API_KEY=sk-local
+                export LLMOPS_SECRET_FALLBACK_WARN=0
+                maybe_load_seckit_env
+                maybe_warn_env_secret_fallback
+                printf 'ok\n'
+            """
+            proc = self.run_bash(script)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertEqual(proc.stderr, "")
+            self.assertEqual(proc.stdout.strip(), "ok")
+
+    def test_gateway_warns_on_env_secret_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            home = root / "home"
+            llmops_home = home / ".llm-ops"
+            hermes_home = home / ".hermes"
+            invocations = root / "gateway-invocations.log"
+            fake_cmd = self._write_fake_gateway_cmd(root)
+            fake_seckit = root / "fake-seckit"
+            fake_seckit.write_text(
+                "#!/usr/bin/env bash\n"
+                "echo 'ERROR: export failed' >&2\n"
+                "exit 1\n",
+                encoding="utf-8",
+            )
+            fake_seckit.chmod(0o755)
+
+            proc = self.run_bash(
+                f'"{GATEWAY}" start openclaw',
+                env={
+                    "HOME": str(home),
+                    "LLMOPS_HOME": str(llmops_home),
+                    "HERMES_HOME": str(hermes_home),
+                    "LLMOPS_USE_SECKIT": "1",
+                    "LLMOPS_SECKIT_BIN": str(fake_seckit),
+                    "OPENCLAW_GATEWAY_CMD": str(fake_cmd),
+                    "HERMES_GATEWAY_CMD": str(fake_cmd),
+                    "FAKE_GATEWAY_INVOCATIONS": str(invocations),
+                    "TELEGRAM_BOT_TOKEN": "env-telegram-token",
+                },
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertIn("Secrets Kit fallback in use", proc.stderr)
+            self.assertIn("TELEGRAM_BOT_TOKEN", proc.stderr)
+            stop = self.run_bash(f'"{GATEWAY}" stop openclaw', env={
+                "HOME": str(home),
+                "LLMOPS_HOME": str(llmops_home),
+                "HERMES_HOME": str(hermes_home),
+                "LLMOPS_USE_SECKIT": "0",
+            })
+            self.assertEqual(stop.returncode, 0, stop.stderr)
+
     def _write_fake_gateway_cmd(self, root: Path) -> Path:
         script = root / "fake-gateway"
         script.write_text(

@@ -12,6 +12,7 @@ SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
 . "$SCRIPT_DIR/lib/common.sh"
 
 ACTION="${1:-status}"
+LLMOPS_REQUIRED_SECRETS="${LLMOPS_REQUIRED_SECRETS:-}"
 shift || true
 
 load_shell_env
