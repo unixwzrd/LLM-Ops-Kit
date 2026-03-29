@@ -500,6 +500,8 @@ start_model() {
   write_model_state "$pid"
   start_log_marktime "$pid_name" "$MODEL_PROFILE" "$LOG_FILE"
   echo "Started $pid_name pid=$pid log=$LOG_FILE"
+  sleep 1
+  status_model || true
 }
 
 stop_model() {

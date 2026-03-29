@@ -223,6 +223,7 @@ Example:
 - maps a friendly incoming voice name to a clone sample
 - supports a top-level `defaults` block for shared `sample_dir` and fallback `sample`
 - derives the transcript path from the sample basename unless `ref_text` is explicitly set in the alias
+- `sample` is required; `ref_text` is optional
 - is case-insensitive on lookup
 - is only used when the request does not already supply explicit `ref_audio` and `ref_text`
 - if nothing supplies a direct non-alias voice, the bridge leaves `voice` unset rather than silently choosing one in code
@@ -255,7 +256,7 @@ Fail-fast behavior:
 - malformed JSON fails startup
 - malformed alias entries fail startup
 - missing local sample directory is logged as a warning and startup continues
-- alias-resolved missing sample or transcript fails the request with an explicit error
+- alias-resolved sample and transcript paths may be valid only on the upstream MLX host; if they are missing locally on the bridge machine, the bridge now logs a warning and still forwards the path strings upstream
 
 The bridge `/health` endpoint reports the resolved config directory, config file paths, whether the files exist, entry counts, and the resolved samples directory.
 
@@ -336,7 +337,7 @@ curl -sS http://<remote-mlx-host>:11439/v1/audio/speech \
   --output "$OUT"
 ```
 
-For this deployment, `ref_audio` and `ref_text` are server-side paths on the MLX host. Do not inline the transcript text into the JSON payload.
+For this deployment, `ref_audio` and `ref_text` are server-side paths on the MLX host. They do not need to exist on the bridge machine. Do not inline the transcript text into the JSON payload.
 
 For the current MLX build, these are the predefined speaker names reported for speaker-mode requests:
 

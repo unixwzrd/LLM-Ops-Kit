@@ -6,6 +6,8 @@
 
 Operational toolkit for running, deploying, and maintaining a local OpenClaw stack across hosts.
 
+Note: `gateway` is being retired in favor of `agentctl` for naming consistency with `modelctl`. Treat `agentctl` as the supported command surface going forward.
+
 ![LLM Ops Kit](docs/images/LLM-OPS-Kit-banner.png)
 
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-informational)](#) [![Shell](https://img.shields.io/badge/Shell-bash-blue)](#) [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -151,7 +153,7 @@ cd ~/projects/LLM-Ops-Kit
 ~/bin/Qwen3 settings
 
 # 5) Start services
-~/bin/gateway start
+~/bin/agentctl start
 ~/bin/Qwen3 start
 ~/bin/BGEm3 start
 ~/bin/model-proxy start
@@ -162,8 +164,9 @@ Installed runtime is the default operating mode. After install, normal operation
 ## Runtime Command Surface
 
 ```bash
-~/bin/gateway [start|stop|restart|status]
-~/bin/gateway logs
+~/bin/agentctl [start|stop|restart|status]
+~/bin/agentctl logs
+~/bin/gateway [start|stop|restart|status]  # deprecated, scheduled for removal
 ~/bin/model-proxy [start|stop|restart|status]
 ~/bin/tts [start|stop|restart|status]
 ~/bin/tts-bridge [start|stop|restart|status]
@@ -186,7 +189,8 @@ Operational notes:
 - `modelctl settings` now prints `RUNTIME_MODE` and `RUNTIME_ROOT`.
 - `gateway`, `model-proxy`, and `tts-bridge` status now print retention settings.
 - Runtime logs rotate in place and install backups under `~/.llm-ops/backups` are pruned by policy.
-- In the current direct-run gateway mode, use `~/bin/gateway logs` instead of relying on `openclaw logs --follow`.
+- In the current direct-run agent wrapper mode, use `~/bin/agentctl logs` instead of relying on `openclaw logs --follow`.
+- `gateway` is now deprecated in favor of `agentctl` and will be removed in a future release.
 
 ## Local Precheck
 

@@ -1,5 +1,7 @@
 # gateway
 
+`gateway` is deprecated. Use `agentctl` instead.
+
 **Created**: 2026-02-26
 **Updated**: 2026-03-26
 

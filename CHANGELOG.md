@@ -5,6 +5,8 @@
 - **Scope:** `LLM-Ops-Kit/scripts/lib/common.sh`, `LLM-Ops-Kit/scripts/tts-bridge`, `LLM-Ops-Kit/scripts/model-proxy`, `LLM-Ops-Kit/scripts/gateway`, `LLM-Ops-Kit/scripts/tests/test_shell_runtime_helpers.py`, `LLM-Ops-Kit/docs/CONFIGURATION.md`
 - **Category:** `security`, `runtime`, `integration`, `tts`, `documentation`, `testing`
 - **What changed:**
+  - Breaking rename: `agentctl` replaces `gateway` as the supported operator-facing command for agent and messaging runtime control.
+  - `gateway` is now deprecated and will be removed after the transition window; operator docs should treat `agentctl` as the canonical surface.
   - Formalized fresh-shell runtime precedence so toolkit runtime config comes from `~/.llm-ops/config.env`, `seckit` remains the preferred secret source, and `~/.env`/process env act as fallback secret sources.
   - Added shared runtime tracking for `seckit` export status and environment-secret fallback warnings.
   - `seckit` export failures remain non-fatal and quiet by default.
@@ -13,6 +15,7 @@
   - Kept `tts-bridge` and `model-proxy` quiet when they do not require secrets for the active command path.
   - Added regression coverage for quiet `seckit` failure, explicit environment-secret fallback warning behavior, warning suppression, and gateway startup with env-backed secret fallback.
   - Updated configuration docs to document integrated precedence, fallback behavior, and the operator rule that runtime routing values belong in `config.env`, not `~/.env`.
+  - Updated TTS bridge documentation to clarify that alias-resolved `ref_audio` and `ref_text` paths may be valid only on the upstream MLX host and should be forwarded even when the bridge machine cannot see those files locally.
 - **Why:**
   - Make fresh-shell startup deterministic, reduce noisy `seckit` complaints for commands that do not need secrets, and support integrated end-to-end validation of `LLM-Ops-Kit` with `Secrets-Kit`.
 

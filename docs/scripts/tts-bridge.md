@@ -10,7 +10,7 @@ The bridge can now:
 - rewrite incoming text through a pronunciation dictionary
 - map friendly voice names to clone samples and matching transcripts
 - load config from a dedicated bridge config directory
-- fail loudly when alias-resolved files or config are wrong
+- fail loudly when configuration is malformed or the upstream request itself is invalid
 
 ```bash
 ~/bin/tts-bridge [start|stop|restart|status]
@@ -118,7 +118,9 @@ Voice map behavior:
 - when an alias matches, the bridge resolves clone refs from the map and does not need a mapped speaker name
 - if no voice is provided by the request and no non-alias fallback applies, the bridge leaves `voice` unset instead of inventing one
 - transcript defaults to the sample basename with `.txt`
-- missing alias sample or transcript is a hard request failure
+- alias entries may point to sample and transcript files that exist only on the upstream MLX host
+- local bridge-side file existence is not authoritative for clone refs; alias-resolved `ref_audio` and `ref_text` are forwarded as path strings for server-side resolution
+- `ref_text` may be set explicitly in the map; if omitted, the bridge derives it from the sample basename with `.txt`
 
 Allowed empty defaults:
 
@@ -131,7 +133,7 @@ Startup and failure behavior:
 - malformed JSON causes startup failure with the exact file path and parse error
 - malformed alias entries cause startup failure
 - missing local samples directory is logged as a warning and startup continues
-- alias-resolved missing files cause request failure with the exact missing path
+- alias-resolved sample and transcript paths that are missing locally are logged as warnings and still forwarded upstream for server-side resolution
 
 Startup logging:
 
@@ -223,7 +225,7 @@ What to expect from the smoke test:
 Compatibility notes:
 
 - Unsupported OpenAI-style output formats such as `opus` and `ogg` are normalized to `wav` before forwarding to MLX Audio.
-- In this deployment, the bridge forwards `ref_audio` and `ref_text` as server-side paths on the MLX host.
+- In this deployment, the bridge forwards `ref_audio` and `ref_text` as server-side paths on the MLX host. Those files do not need to exist on the bridge machine.
 - Correct cloning with `CustomVoice` depends on the upstream `mlx-audio` path resolving `ref_text` server-side and preferring the ICL clone path when clone refs are present.
 
 OpenClaw wiring:

@@ -9,6 +9,7 @@ For the broader operator docs map, start with:
 
 - [`../README.md`](../README.md)
 
+- [`agentctl.md`](./agentctl.md)
 - [`gateway.md`](./gateway.md)
 - [`model-proxy.md`](./model-proxy.md)
 - [`tts.md`](./tts.md)

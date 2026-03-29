@@ -374,11 +374,23 @@ def _resolve_output_ref(
         return str(explicit_value)
     if alias_path is not None:
         if not alias_path.is_file():
-            raise BridgeRequestError(500, missing_domain, missing_message.format(path=alias_path))
+            _log(
+                "request warning ["
+                + missing_domain
+                + "]: "
+                + missing_message.format(path=alias_path)
+                + " (forwarding path anyway for upstream/server-side resolution)"
+            )
         return str(alias_path)
     if default_path is not None:
         if not default_path.is_file():
-            raise BridgeRequestError(500, missing_domain, missing_message.format(path=default_path))
+            _log(
+                "request warning ["
+                + missing_domain
+                + "]: "
+                + missing_message.format(path=default_path)
+                + " (forwarding path anyway for upstream/server-side resolution)"
+            )
         return str(default_path)
     if cfg_value:
         return cfg_value
