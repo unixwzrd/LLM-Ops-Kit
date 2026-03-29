@@ -158,24 +158,48 @@ def _validate_optional_text(label: str, alias_name: str, value: Any, path: Path)
     return value.strip()
 
 
+def _copy_optional_text_fields(
+    target: dict[str, Any],
+    source: dict[str, Any],
+    field_names: tuple[str, ...],
+    *,
+    alias_name: str,
+    path: Path,
+) -> None:
+    for field in field_names:
+        if field in source:
+            target[field] = _validate_optional_text(field, alias_name, source[field], path)
+
+
+def _copy_optional_passthrough_fields(
+    target: dict[str, Any],
+    incoming: dict[str, Any],
+    fallback: dict[str, Any],
+    field_names: tuple[str, ...],
+) -> None:
+    for field in field_names:
+        if field in incoming:
+            target[field] = incoming[field]
+        elif field in fallback:
+            target[field] = fallback[field]
+
+
 def _normalize_voice_alias_entry(alias_name: str, entry: dict[str, Any], path: Path) -> dict[str, Any]:
-    missing = [
-        field
-        for field in ("speaker", "sample")
-        if field not in entry or not isinstance(entry[field], str) or not str(entry[field]).strip()
-    ]
-    if missing:
+    if "sample" not in entry or not isinstance(entry["sample"], str) or not entry["sample"].strip():
         raise BridgeConfigError(
-            f"voice-map alias '{alias_name}' missing required fields {missing} in {path}"
+            f"voice-map alias '{alias_name}' missing required field 'sample' in {path}"
         )
     normalized: dict[str, Any] = {
         "alias": alias_name.strip(),
-        "speaker": _validate_optional_text("speaker", alias_name, entry["speaker"], path),
         "sample": _validate_optional_text("sample", alias_name, entry["sample"], path),
     }
-    for field in ("ref_text", "response_format", "language", "sample_dir"):
-        if field in entry:
-            normalized[field] = _validate_optional_text(field, alias_name, entry[field], path)
+    _copy_optional_text_fields(
+        normalized,
+        entry,
+        ("ref_text", "response_format", "language", "sample_dir"),
+        alias_name=alias_name,
+        path=path,
+    )
     if "speed" in entry:
         speed = entry["speed"]
         if not isinstance(speed, (int, float, str)):
@@ -188,9 +212,13 @@ def _normalize_voice_alias_entry(alias_name: str, entry: dict[str, Any], path: P
 
 def _normalize_voice_map_defaults(path: Path, entry: dict[str, Any]) -> dict[str, Any]:
     normalized: dict[str, Any] = {}
-    for field in ("speaker", "sample", "ref_text", "response_format", "language", "sample_dir"):
-        if field in entry:
-            normalized[field] = _validate_optional_text(field, "defaults", entry[field], path)
+    _copy_optional_text_fields(
+        normalized,
+        entry,
+        ("sample", "ref_text", "response_format", "language", "sample_dir"),
+        alias_name="defaults",
+        path=path,
+    )
     if "speed" in entry:
         speed = entry["speed"]
         if not isinstance(speed, (int, float, str)):
@@ -281,6 +309,80 @@ def _resolve_sample_root(cfg: dict[str, Any], mapping: dict[str, Any] | None = N
     if raw:
         return _resolve_alias_path(Path(cfg["samples_dir"]), raw)
     return Path(cfg["samples_dir"])
+
+
+def _select_requested_voice(incoming: dict[str, Any], cfg: dict[str, Any]) -> str:
+    if cfg.get("prefer_incoming_voice"):
+        selected = incoming.get("voice") or cfg.get("voice")
+    else:
+        selected = cfg.get("voice") or incoming.get("voice")
+    return str(selected or "")
+
+
+def _resolve_voice_mapping(
+    selected_voice: str,
+    cfg: dict[str, Any],
+) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+    voice_mapping = _find_voice_alias(selected_voice, cfg["voice_map"])
+    defaults = cfg.get("voice_map_defaults", {})
+    if voice_mapping is None:
+        return None, defaults
+    resolved_voice_mapping = dict(defaults)
+    resolved_voice_mapping.update(voice_mapping)
+    return voice_mapping, resolved_voice_mapping
+
+
+def _resolve_clone_ref_paths(
+    cfg: dict[str, Any],
+    voice_mapping: dict[str, Any] | None,
+    resolved_voice_mapping: dict[str, Any],
+) -> tuple[Path | None, Path | None, Path | None, Path | None]:
+    alias_sample_path: Path | None = None
+    alias_ref_text_path: Path | None = None
+    default_sample_path: Path | None = None
+    default_ref_text_path: Path | None = None
+
+    if voice_mapping is not None:
+        alias_sample_path, alias_ref_text_path = _build_ref_paths_for_alias(
+            resolved_voice_mapping, _resolve_sample_root(cfg, resolved_voice_mapping)
+        )
+        return alias_sample_path, alias_ref_text_path, default_sample_path, default_ref_text_path
+
+    if "sample" in resolved_voice_mapping:
+        default_mapping = {
+            "sample": resolved_voice_mapping["sample"],
+            "ref_text": resolved_voice_mapping.get("ref_text", ""),
+        }
+        default_sample_path, default_ref_text_path = _build_ref_paths_for_alias(
+            default_mapping,
+            _resolve_sample_root(cfg, resolved_voice_mapping),
+        )
+
+    return alias_sample_path, alias_ref_text_path, default_sample_path, default_ref_text_path
+
+
+def _resolve_output_ref(
+    *,
+    explicit_value: Any,
+    alias_path: Path | None,
+    default_path: Path | None,
+    cfg_value: str,
+    missing_domain: str,
+    missing_message: str,
+) -> str | None:
+    if explicit_value:
+        return str(explicit_value)
+    if alias_path is not None:
+        if not alias_path.is_file():
+            raise BridgeRequestError(500, missing_domain, missing_message.format(path=alias_path))
+        return str(alias_path)
+    if default_path is not None:
+        if not default_path.is_file():
+            raise BridgeRequestError(500, missing_domain, missing_message.format(path=default_path))
+        return str(default_path)
+    if cfg_value:
+        return cfg_value
+    return None
 
 
 def _build_health_payload(cfg: dict[str, Any]) -> dict[str, Any]:
@@ -417,102 +519,69 @@ def build_upstream_payload(
     if model:
         output["model"] = model
 
-    if cfg.get("prefer_incoming_voice"):
-        selected_voice = incoming.get("voice") or cfg.get("voice")
-    else:
-        selected_voice = cfg.get("voice") or incoming.get("voice")
+    selected_voice = _select_requested_voice(incoming, cfg)
+    voice_mapping, resolved_voice_mapping = _resolve_voice_mapping(selected_voice, cfg)
+    (
+        alias_sample_path,
+        alias_ref_text_path,
+        default_sample_path,
+        default_ref_text_path,
+    ) = _resolve_clone_ref_paths(cfg, voice_mapping, resolved_voice_mapping)
 
-    alias = _find_voice_alias(str(selected_voice or ""), cfg["voice_map"])
-    defaults = cfg.get("voice_map_defaults", {})
-    alias_sample_path: Path | None = None
-    alias_ref_text_path: Path | None = None
-    default_sample_path: Path | None = None
-    default_ref_text_path: Path | None = None
-
-    if alias:
-        _log(f"voice alias matched: '{selected_voice}' -> '{alias['alias']}'")
-        alias_voice = _normalize_custom_voice(str(alias["speaker"]))
-        if alias_voice:
-            output["voice"] = alias_voice
-        alias_sample_path, alias_ref_text_path = _build_ref_paths_for_alias(
-            alias, _resolve_sample_root(cfg, alias)
-        )
+    if voice_mapping is not None:
+        _log(f"voice alias matched: '{selected_voice}' -> '{voice_mapping['alias']}'")
     else:
         _log(f"voice alias skipped: '{selected_voice or ''}'")
-        fallback_voice = str(selected_voice or defaults.get("speaker", "") or "")
-        normalized_fallback_voice = _normalize_custom_voice(fallback_voice)
+        normalized_fallback_voice = _normalize_custom_voice(selected_voice)
         if normalized_fallback_voice:
             output["voice"] = normalized_fallback_voice
-        if "sample" in defaults:
-            default_mapping = {
-                "sample": defaults["sample"],
-                "ref_text": defaults.get("ref_text", ""),
-            }
-            default_sample_path, default_ref_text_path = _build_ref_paths_for_alias(
-                default_mapping,
-                _resolve_sample_root(cfg, defaults),
-            )
+        if default_sample_path is not None:
             _log("voice-map defaults applied for fallback clone refs")
 
-    explicit_ref_audio = incoming.get("ref_audio")
-    explicit_ref_text = incoming.get("ref_text")
+    resolved_ref_audio = _resolve_output_ref(
+        explicit_value=incoming.get("ref_audio"),
+        alias_path=alias_sample_path,
+        default_path=default_sample_path,
+        cfg_value=str(cfg.get("ref_audio", "")),
+        missing_domain="alias_resolution",
+        missing_message=(
+            f"voice alias '{voice_mapping['alias']}' resolved sample missing: {{path}}"
+            if voice_mapping is not None
+            else "voice-map defaults resolved sample missing: {path}"
+        ),
+    )
+    if resolved_ref_audio is not None:
+        output["ref_audio"] = resolved_ref_audio
 
-    if explicit_ref_audio:
-        output["ref_audio"] = explicit_ref_audio
-    elif alias_sample_path is not None:
-        if not alias_sample_path.is_file():
-            raise BridgeRequestError(
-                500,
-                "alias_resolution",
-                f"voice alias '{alias['alias']}' resolved sample missing: {alias_sample_path}",
-            )
-        output["ref_audio"] = str(alias_sample_path)
-    elif default_sample_path is not None:
-        if not default_sample_path.is_file():
-            raise BridgeRequestError(
-                500,
-                "alias_resolution",
-                f"voice-map defaults resolved sample missing: {default_sample_path}",
-            )
-        output["ref_audio"] = str(default_sample_path)
-    elif cfg.get("ref_audio"):
-        output["ref_audio"] = cfg["ref_audio"]
+    resolved_ref_text = _resolve_output_ref(
+        explicit_value=incoming.get("ref_text"),
+        alias_path=alias_ref_text_path,
+        default_path=default_ref_text_path,
+        cfg_value=str(cfg.get("ref_text", "")),
+        missing_domain="alias_resolution",
+        missing_message=(
+            f"voice alias '{voice_mapping['alias']}' resolved transcript missing: {{path}}"
+            if voice_mapping is not None
+            else "voice-map defaults resolved transcript missing: {path}"
+        ),
+    )
+    if resolved_ref_text is not None:
+        output["ref_text"] = resolved_ref_text
 
-    if explicit_ref_text:
-        output["ref_text"] = explicit_ref_text
-    elif alias_ref_text_path is not None:
-        if not alias_ref_text_path.is_file():
-            raise BridgeRequestError(
-                500,
-                "alias_resolution",
-                f"voice alias '{alias['alias']}' resolved transcript missing: {alias_ref_text_path}",
-            )
-        output["ref_text"] = str(alias_ref_text_path)
-    elif default_ref_text_path is not None:
-        if not default_ref_text_path.is_file():
-            raise BridgeRequestError(
-                500,
-                "alias_resolution",
-                f"voice-map defaults resolved transcript missing: {default_ref_text_path}",
-            )
-        output["ref_text"] = str(default_ref_text_path)
-    elif cfg.get("ref_text"):
-        output["ref_text"] = cfg["ref_text"]
-
-    if alias:
-        for key in ("speed", "language"):
-            if key in incoming:
-                output[key] = incoming[key]
-            elif key in alias:
-                output[key] = alias[key]
-        if "response_format" not in incoming and "response_format" in alias:
+    if voice_mapping is not None:
+        _copy_optional_passthrough_fields(
+            output,
+            incoming,
+            resolved_voice_mapping,
+            ("speed", "language"),
+        )
+        if "response_format" not in incoming and "response_format" in resolved_voice_mapping:
             output["response_format"], downgraded_from = _normalize_response_format(
-                str(alias["response_format"]), str(cfg.get("response_format", "wav"))
+                str(resolved_voice_mapping["response_format"]),
+                str(cfg.get("response_format", "wav")),
             )
     else:
-        for key in ("speed", "language", "verbose"):
-            if key in incoming:
-                output[key] = incoming[key]
+        _copy_optional_passthrough_fields(output, incoming, {}, ("speed", "language", "verbose"))
 
     if "verbose" in incoming:
         output["verbose"] = incoming["verbose"]

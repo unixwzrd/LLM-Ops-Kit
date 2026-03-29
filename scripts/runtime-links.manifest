@@ -10,6 +10,7 @@ model-proxy|scripts/model-proxy
 modelctl|scripts/modelctl
 openclaw-report|scripts/openclaw-report.sh
 openclaw-stack|scripts/openclaw-stack
+precheck|scripts/precheck
 Qwen3.5|scripts/Qwen3.5
 Qwen3|scripts/Qwen3
 Qwen3TTS|scripts/Qwen3TTS

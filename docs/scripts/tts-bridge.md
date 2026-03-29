@@ -110,12 +110,13 @@ Pronunciation dictionary behavior:
 Voice map behavior:
 
 - voice alias lookup is case-insensitive
-- an optional top-level `defaults` object can declare `sample_dir`, `speaker`, and `sample`
-- alias entries require `speaker` and `sample`
+- an optional top-level `defaults` object can declare `sample_dir` and `sample`
+- alias entries require `sample`
 - alias sample paths resolve relative to alias `sample_dir`, then `defaults.sample_dir`, then the bridge `samples-dir`
 - alias-derived `ref_audio` and `ref_text` are only used when the request does not already provide explicit `ref_audio` or `ref_text`
-- if no alias matches and no explicit refs are sent, `defaults.sample` and `defaults.speaker` can act as the fallback clone voice
-- if no voice is provided by the request, alias, defaults, or bridge env, the bridge leaves `voice` unset instead of inventing one
+- if no alias matches and no explicit refs are sent, `defaults.sample` can act as the fallback clone voice
+- when an alias matches, the bridge resolves clone refs from the map and does not need a mapped speaker name
+- if no voice is provided by the request and no non-alias fallback applies, the bridge leaves `voice` unset instead of inventing one
 - transcript defaults to the sample basename with `.txt`
 - missing alias sample or transcript is a hard request failure
 
@@ -170,15 +171,12 @@ Example `voice-map.json`:
 {
   "defaults": {
     "sample_dir": ".",
-    "speaker": "serena",
     "sample": "speaker-reference-b.wav"
   },
   "Sol": {
-    "speaker": "Chelsie",
     "sample": "speaker-reference-a.wav"
   },
   "Guide": {
-    "speaker": "serena",
     "sample": "speaker-reference-b.wav"
   }
 }

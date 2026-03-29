@@ -220,12 +220,12 @@ Example:
 
 `voice-map.json`:
 
-- maps a friendly incoming voice name to a real speaker plus clone sample
-- supports a top-level `defaults` block for shared `sample_dir`, fallback `speaker`, and fallback `sample`
+- maps a friendly incoming voice name to a clone sample
+- supports a top-level `defaults` block for shared `sample_dir` and fallback `sample`
 - derives the transcript path from the sample basename unless `ref_text` is explicitly set in the alias
 - is case-insensitive on lookup
 - is only used when the request does not already supply explicit `ref_audio` and `ref_text`
-- if nothing supplies a speaker, the bridge leaves `voice` unset rather than silently choosing one in code
+- if nothing supplies a direct non-alias voice, the bridge leaves `voice` unset rather than silently choosing one in code
 
 Example:
 
@@ -233,15 +233,12 @@ Example:
 {
   "defaults": {
     "sample_dir": ".",
-    "speaker": "serena",
     "sample": "speaker-reference-a.wav"
   },
   "Sol": {
-    "speaker": "serena",
     "sample": "speaker-reference-b.wav"
   },
   "Guide": {
-    "speaker": "Chelsie",
     "sample": "speaker-reference-a.wav"
   }
 }

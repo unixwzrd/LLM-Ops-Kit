@@ -1,15 +1,12 @@
 {
   "defaults": {
     "sample_dir": ".",
-    "speaker": "serena",
     "sample": "speaker-reference-a.wav"
   },
   "Sol": {
-    "speaker": "Chelsie",
     "sample": "speaker-reference-a.wav"
   },
   "Guide": {
-    "speaker": "serena",
     "sample": "speaker-reference-b.wav"
   }
 }

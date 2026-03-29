@@ -103,7 +103,7 @@ class TTSBridgeServerTests(unittest.TestCase):
                 json.dumps({"/": " slash "}), encoding="utf-8"
             )
             (root / "voice-map.json").write_text(
-                json.dumps({"Faith": {"speaker": "serena", "sample": "faith.wav"}}),
+                json.dumps({"Faith": {"sample": "faith.wav"}}),
                 encoding="utf-8",
             )
             args = argparse.Namespace(
@@ -139,10 +139,9 @@ class TTSBridgeServerTests(unittest.TestCase):
                     {
                         "defaults": {
                             "sample_dir": "mia",
-                            "speaker": "serena",
                             "sample": "default.wav",
                         },
-                        "Faith": {"speaker": "serena", "sample": "faith.wav"},
+                        "Faith": {"sample": "faith.wav"},
                     }
                 ),
                 encoding="utf-8",
@@ -165,7 +164,6 @@ class TTSBridgeServerTests(unittest.TestCase):
             )
             cfg = MODULE.build_bridge_config(args)
             self.assertEqual(cfg["voice_map_defaults"]["sample_dir"], "mia")
-            self.assertEqual(cfg["voice_map_defaults"]["speaker"], "serena")
             self.assertEqual(cfg["voice_map_defaults"]["sample"], "default.wav")
 
     def test_build_bridge_config_invalid_json_fails_with_path(self) -> None:
@@ -202,7 +200,7 @@ class TTSBridgeServerTests(unittest.TestCase):
             samples_dir = root / "samples"
             samples_dir.mkdir()
             (root / "voice-map.json").write_text(
-                json.dumps({"Faith": {"speaker": "serena"}}),
+                json.dumps({"Faith": {}}),
                 encoding="utf-8",
             )
             args = argparse.Namespace(
@@ -223,7 +221,7 @@ class TTSBridgeServerTests(unittest.TestCase):
             )
             with self.assertRaises(MODULE.BridgeConfigError) as ctx:
                 MODULE.build_bridge_config(args)
-            self.assertIn("missing required fields", str(ctx.exception))
+            self.assertIn("missing required field 'sample'", str(ctx.exception))
             self.assertIn("Faith", str(ctx.exception))
 
     def test_build_upstream_payload_applies_alias_case_insensitively(self) -> None:
@@ -247,7 +245,6 @@ class TTSBridgeServerTests(unittest.TestCase):
                 "voice_map": {
                     "faith": {
                         "alias": "Faith",
-                        "speaker": "serena",
                         "sample": sample.name,
                     }
                 },
@@ -260,7 +257,7 @@ class TTSBridgeServerTests(unittest.TestCase):
             self.assertEqual(response_format, "wav")
             self.assertIsNone(downgraded_from)
             self.assertEqual(output["input"], "a slash b")
-            self.assertEqual(output["voice"], "serena")
+            self.assertNotIn("voice", output)
             self.assertEqual(output["ref_audio"], str(sample.resolve()))
             self.assertEqual(output["ref_text"], str(transcript.resolve()))
             self.assertEqual(output["model"], "model-path")
@@ -290,7 +287,6 @@ class TTSBridgeServerTests(unittest.TestCase):
                 "voice_map": {
                     "faith": {
                         "alias": "Faith",
-                        "speaker": "serena",
                         "sample": alias_sample.name,
                     }
                 },
@@ -325,7 +321,6 @@ class TTSBridgeServerTests(unittest.TestCase):
                 "voice_map": {
                     "faith": {
                         "alias": "Faith",
-                        "speaker": "serena",
                         "sample": "missing.wav",
                     }
                 },
@@ -342,7 +337,7 @@ class TTSBridgeServerTests(unittest.TestCase):
             "listen_host": "127.0.0.1",
             "listen_port": 11440,
             "model": "model-path",
-            "voice": "serena",
+            "voice": "",
             "ref_audio": "/tmp/sample.wav",
             "ref_text": "/tmp/sample.txt",
             "response_format": "wav",
@@ -353,7 +348,7 @@ class TTSBridgeServerTests(unittest.TestCase):
             "voice_map_config": "/tmp/config/voice-map.json",
             "voice_map_config_exists": False,
             "voice_map_defaults": {"sample_dir": "/tmp/samples"},
-            "voice_map": {"faith": {"alias": "Faith", "speaker": "serena", "sample": "faith.wav"}},
+            "voice_map": {"faith": {"alias": "Faith", "sample": "faith.wav"}},
             "samples_dir": "/tmp/samples",
             "samples_dir_exists": True,
         }
@@ -364,7 +359,7 @@ class TTSBridgeServerTests(unittest.TestCase):
         self.assertEqual(payload["config"]["voice_map_defaults"]["sample_dir"], "/tmp/samples")
         self.assertEqual(payload["config"]["samples_dir"], "/tmp/samples")
 
-    def test_voice_map_defaults_can_supply_sample_dir_and_fallback_voice(self) -> None:
+    def test_voice_map_defaults_can_supply_sample_dir_and_fallback_refs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             samples_dir = root / "global-samples"
@@ -384,7 +379,6 @@ class TTSBridgeServerTests(unittest.TestCase):
                 "response_format": "wav",
                 "pronounce_map": {},
                 "voice_map_defaults": {
-                    "speaker": "serena",
                     "sample": "default-faith.wav",
                     "sample_dir": "mia",
                 },
@@ -392,7 +386,6 @@ class TTSBridgeServerTests(unittest.TestCase):
                 "samples_dir": str(samples_dir),
             }
             output, _, _ = MODULE.build_upstream_payload({"input": "hello"}, cfg)
-            self.assertEqual(output["voice"], "serena")
             self.assertEqual(output["ref_audio"], str(sample.resolve()))
             self.assertEqual(output["ref_text"], str(transcript.resolve()))
 
@@ -421,7 +414,7 @@ class TTSBridgeServerTests(unittest.TestCase):
             voice_map = root / "voice-map.json"
             pronounce.write_text(json.dumps({"/": " slash "}), encoding="utf-8")
             voice_map.write_text(
-                json.dumps({"Faith": {"speaker": "serena", "sample": "faith.wav"}}),
+                json.dumps({"Faith": {"sample": "faith.wav"}}),
                 encoding="utf-8",
             )
             args = argparse.Namespace(
@@ -489,7 +482,6 @@ class TTSBridgeServerTests(unittest.TestCase):
             cfg["voice_map"] = {
                 "faith": {
                     "alias": "Faith",
-                    "speaker": "serena",
                     "sample": sample.name,
                 }
             }
@@ -519,7 +511,7 @@ class TTSBridgeServerTests(unittest.TestCase):
             self.assertEqual(len(_FakeUpstreamHandler.received), 1)
             upstream_payload = _FakeUpstreamHandler.received[0]
             self.assertEqual(upstream_payload["input"], "alpha slash beta")
-            self.assertEqual(upstream_payload["voice"], "serena")
+            self.assertNotIn("voice", upstream_payload)
             self.assertEqual(upstream_payload["model"], "model-path")
             self.assertEqual(upstream_payload["response_format"], "wav")
             self.assertEqual(upstream_payload["ref_audio"], str(sample.resolve()))
