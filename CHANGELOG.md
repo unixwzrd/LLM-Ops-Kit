@@ -1,31 +1,55 @@
 # Agent Ops Changelog
 
-### 2026-03-29 — Unreleased integrated Secrets-Kit fallback hardening
-
-- **Scope:** `LLM-Ops-Kit/scripts/lib/common.sh`, `LLM-Ops-Kit/scripts/tts-bridge`, `LLM-Ops-Kit/scripts/model-proxy`, `LLM-Ops-Kit/scripts/gateway`, `LLM-Ops-Kit/scripts/tests/test_shell_runtime_helpers.py`, `LLM-Ops-Kit/docs/CONFIGURATION.md`
-- **Category:** `security`, `runtime`, `integration`, `tts`, `documentation`, `testing`
-- **What changed:**
-  - Breaking rename: `agentctl` replaces `gateway` as the supported operator-facing command for agent and messaging runtime control.
-  - `gateway` is now deprecated and will be removed after the transition window; operator docs should treat `agentctl` as the canonical surface.
-  - Formalized fresh-shell runtime precedence so toolkit runtime config comes from `~/.llm-ops/config.env`, `seckit` remains the preferred secret source, and `~/.env`/process env act as fallback secret sources.
-  - Added shared runtime tracking for `seckit` export status and environment-secret fallback warnings.
-  - `seckit` export failures remain non-fatal and quiet by default.
-  - Added `LLMOPS_SECRET_FALLBACK_WARN=0` to suppress environment-secret fallback warnings when desired.
-  - Added wrapper-level required-secret declarations so warnings only appear for commands that actually depend on relevant secrets.
-  - Kept `tts-bridge` and `model-proxy` quiet when they do not require secrets for the active command path.
-  - Added regression coverage for quiet `seckit` failure, explicit environment-secret fallback warning behavior, warning suppression, and gateway startup with env-backed secret fallback.
-  - Updated configuration docs to document integrated precedence, fallback behavior, and the operator rule that runtime routing values belong in `config.env`, not `~/.env`.
-  - Updated TTS bridge documentation to clarify that alias-resolved `ref_audio` and `ref_text` paths may be valid only on the upstream MLX host and should be forwarded even when the bridge machine cannot see those files locally.
-- **Why:**
-  - Make fresh-shell startup deterministic, reduce noisy `seckit` complaints for commands that do not need secrets, and support integrated end-to-end validation of `LLM-Ops-Kit` with `Secrets-Kit`.
-
 **Created**: 2026-02-20
-**Updated**: 2026-03-27
+**Updated**: 2026-03-31
 
 All notable changes to LLM-Ops-Kit will be documented in this file.
-
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+### 2026-03-31 — Unreleased integrated runtime hardening, TTS bridge forwarding, and agentctl surface cleanup
+
+- **Scope:**
+  - Scripts
+    - `scripts/agentctl`
+    - `scripts/gateway`
+    - `scripts/openclaw-stack`
+    - `scripts/openclaw-report.sh`
+    - `scripts/lib/common.sh`
+    - `scripts/tts_bridge_server.py`
+    - `scripts/model-proxy`
+    - `scripts/modelctl`
+    - `scripts/precheck`
+    - `scripts/runtime-links.manifest`
+    - `scripts/tests/test_shell_runtime_helpers.py`
+  - Documents
+    - `docs/CONFIGURATION.md`
+    - `docs/QUICKSTART.md`
+    - `docs/DEPLOYMENT_SYNC_RUNBOOK.md`
+    - `docs/TROUBLESHOOTING.md`
+    - `docs/ARCHITECTURE.md`
+    - `docs/scripts/agentctl.md`
+    - `docs/scripts/tts-bridge.md`
+    - `docs/MLX_AUDIO_TTS_GUIDE.md`
+    - `README.md`
+- **Category:** `runtime`, `integration`, `security`, `tts`, `documentation`, `testing`
+- **What changed:**
+  - Formalized fresh-shell runtime precedence so toolkit runtime config comes from `~/.llm-ops/config.env`, `seckit` remains the preferred secret source, and `~/.env`/process env act as fallback secret sources.
+  - Added shared runtime tracking for `seckit` export status and environment-secret fallback warnings.
+  - `seckit` export failures now remain non-fatal and quiet by default, with `LLMOPS_SECRET_FALLBACK_WARN=0` available to suppress env-secret fallback warnings entirely.
+  - Added wrapper-level required-secret declarations so warnings only appear for commands that actually depend on relevant secrets, keeping `tts-bridge` and `model-proxy` quiet when no startup secrets are needed.
+  - Added backend-specific agent templates under `scripts/agents/` so `agentctl` can seed per-agent overrides and use an internal `launchd-run` path for backend-native `.env` plus selective `seckit` export.
+  - Promoted `agentctl` to the canonical agent runtime surface and moved the implementation there.
+  - Removed `gateway` as a supported operator command; it now exits with an error directing operators to `agentctl`.
+  - Removed `openclaw-stack` from the supported runtime surface in favor of a clean split: `agentctl` for agents and `modelctl` for models.
+  - Renamed wrapper-managed agent runtime state to `agentctl-*` log and pid names for clearer operator output.
+  - Updated `openclaw-report` and operator docs to report agents and models separately instead of treating them as a single bundled stack.
+  - Added regression coverage for quiet `seckit` failure, explicit environment-secret fallback warning behavior, warning suppression, launchd-oriented env loading, and the renamed `agentctl` wrapper status/log surface.
+  - Relaxed `tts-bridge` alias-resolution path validation so `ref_audio` and `ref_text` can point to files that exist only on the upstream MLX host; the bridge now forwards those paths with a warning instead of rejecting the request locally.
+  - Updated TTS bridge docs to clarify that voice-map `sample` and optional `ref_text` entries may resolve to upstream/server-side files that are not mounted on the bridge host.
+  - `modelctl` now prints the richer post-start status summary for the MLX TTS model path as well, matching the llama profile startup output.
+- **Why:**
+  - Make cold-start and launchd behavior deterministic, reduce unnecessary `seckit` noise, support server-side-only MLX clone references through the bridge, and simplify the operator surface around a clear agents-versus-models split.
 
 ### 2026-03-27 — Release v0.7.5 Model-proxy render mode, chat-template replay hardening, and local precheck tooling
 

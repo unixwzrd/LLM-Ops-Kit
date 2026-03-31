@@ -42,7 +42,9 @@ load_shell_env() {
       . "$f"
     fi
   done
-  maybe_load_seckit_env
+  if [[ "${LLMOPS_SKIP_SECKIT_LOAD:-0}" != "1" ]]; then
+    maybe_load_seckit_env
+  fi
   late_files+=("$HOME/.env")
   for f in "${late_files[@]}"; do
     if [[ -f "$f" ]]; then
@@ -55,7 +57,9 @@ load_shell_env() {
       set -u
     fi
   done
-  maybe_warn_env_secret_fallback
+  if [[ "${LLMOPS_SKIP_SECKIT_LOAD:-0}" != "1" ]]; then
+    maybe_warn_env_secret_fallback
+  fi
 }
 
 secret_var_is_set() {
@@ -84,13 +88,14 @@ maybe_warn_env_secret_fallback() {
 }
 
 maybe_load_seckit_env() {
-  local enabled bin service account export_cmd had_xtrace=0 quiet strict
+  local enabled bin service account names export_cmd had_xtrace=0 quiet strict
   enabled="${LLMOPS_USE_SECKIT:-0}"
   [[ "$enabled" == "1" ]] || { LLMOPS_SECKIT_LAST_STATUS="disabled"; return 0; }
 
   bin="${LLMOPS_SECKIT_BIN:-seckit}"
   service="${LLMOPS_SECKIT_SERVICE:-openclaw}"
   account="${LLMOPS_SECKIT_ACCOUNT:-default}"
+  names="${LLMOPS_SECKIT_NAMES:-}"
   quiet="${LLMOPS_SECKIT_QUIET_FAILURES:-1}"
   strict="${LLMOPS_SECKIT_STRICT:-0}"
 
@@ -102,13 +107,24 @@ maybe_load_seckit_env() {
     return 0
   fi
 
-  if ! export_cmd="$("$bin" export --format shell --service "$service" --account "$account" --all 2>&1)"; then
-    LLMOPS_SECKIT_LAST_STATUS="failed"
-    if [[ "$strict" == "1" || "$quiet" != "1" ]]; then
-      echo "warning: Secrets Kit export failed for service=$service account=$account; skipping secret export" >&2
-      [[ -n "$export_cmd" ]] && echo "$export_cmd" >&2
+  if [[ -n "$names" ]]; then
+    if ! export_cmd="$("$bin" export --format shell --service "$service" --account "$account" --names "$names" 2>&1)"; then
+      LLMOPS_SECKIT_LAST_STATUS="failed"
+      if [[ "$strict" == "1" || "$quiet" != "1" ]]; then
+        echo "warning: Secrets Kit export failed for service=$service account=$account names=$names; skipping secret export" >&2
+        [[ -n "$export_cmd" ]] && echo "$export_cmd" >&2
+      fi
+      return 0
     fi
-    return 0
+  else
+    if ! export_cmd="$("$bin" export --format shell --service "$service" --account "$account" --all 2>&1)"; then
+      LLMOPS_SECKIT_LAST_STATUS="failed"
+      if [[ "$strict" == "1" || "$quiet" != "1" ]]; then
+        echo "warning: Secrets Kit export failed for service=$service account=$account; skipping secret export" >&2
+        [[ -n "$export_cmd" ]] && echo "$export_cmd" >&2
+      fi
+      return 0
+    fi
   fi
   [[ -n "$export_cmd" ]] || { LLMOPS_SECKIT_LAST_STATUS="ok"; return 0; }
   case "$-" in

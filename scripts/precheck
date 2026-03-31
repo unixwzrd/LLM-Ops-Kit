@@ -14,10 +14,10 @@ cd "$REPO_ROOT"
 
 shell_targets=(
   "scripts/lib/common.sh"
+  "scripts/agentctl"
   "scripts/modelctl"
   "scripts/tts-bridge"
   "scripts/model-proxy"
-  "scripts/gateway"
 )
 
 echo "==> Shell syntax checks"

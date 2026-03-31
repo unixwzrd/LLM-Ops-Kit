@@ -78,9 +78,9 @@ Fix:
 Checks:
 
 ```bash
+~/bin/modelctl status
 ~/bin/Qwen3 status
 ~/bin/BGEm3 status
-~/bin/openclaw-stack status
 ```
 
 Then restart target cleanly:

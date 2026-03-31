@@ -6,7 +6,7 @@
 
 Operational toolkit for running, deploying, and maintaining a local OpenClaw stack across hosts.
 
-Note: `gateway` is being retired in favor of `agentctl` for naming consistency with `modelctl`. Treat `agentctl` as the supported command surface going forward.
+Note: `agentctl` is the supported command for agent runtime control. `modelctl` is the supported command for model runtime control.
 
 ![LLM Ops Kit](docs/images/LLM-OPS-Kit-banner.png)
 
@@ -36,7 +36,7 @@ Note: `gateway` is being retired in favor of `agentctl` for naming consistency w
 
 `LLM-Ops-Kit` is the operator layer around a local OpenClaw install:
 
-- Unified startup/shutdown/status scripts for gateway, model-proxy, TTS, LLM, and embeddings
+- Unified startup/shutdown/status scripts for agent runtimes, model-proxy, TTS, LLM, and embeddings
 - Model profile management (`Qwen3`, `Qwen3.5`, `BGEm3`) via one launcher architecture
 - Deployment helpers for cross-host sync and runtime link management
 - Installed-runtime defaults under `~/.llm-ops/current`, with repo mode kept for explicit developer workflows
@@ -164,9 +164,8 @@ Installed runtime is the default operating mode. After install, normal operation
 ## Runtime Command Surface
 
 ```bash
-~/bin/agentctl [start|stop|restart|status]
+~/bin/agentctl [start|stop|restart|status] [openclaw|hermes|all]
 ~/bin/agentctl logs
-~/bin/gateway [start|stop|restart|status]  # deprecated, scheduled for removal
 ~/bin/model-proxy [start|stop|restart|status]
 ~/bin/tts [start|stop|restart|status]
 ~/bin/tts-bridge [start|stop|restart|status]
@@ -179,7 +178,6 @@ Installed runtime is the default operating mode. After install, normal operation
 ~/bin/modelctl <ModelProfile> [start|stop|restart|status|settings|verify|test]
 ~/bin/install-runtime [--source <repo-path>] [--prefix <install-base>] [--bin-dir <bin-dir>] [--no-links]
 ~/bin/uninstall-runtime [--prefix <install-base>] [--bin-dir <bin-dir>] [--state-file <path>] [--keep-files]
-~/bin/openclaw-stack [start|stop|restart|status] [all|gateway|llm|embedding|tts|model-proxy|models]
 ~/bin/openclaw-report
 ~/bin/runtime-maintenance [status|rotate|prune|run]
 ```
@@ -187,10 +185,12 @@ Installed runtime is the default operating mode. After install, normal operation
 Operational notes:
 
 - `modelctl settings` now prints `RUNTIME_MODE` and `RUNTIME_ROOT`.
-- `gateway`, `model-proxy`, and `tts-bridge` status now print retention settings.
+- `agentctl`, `model-proxy`, and `tts-bridge` status now print retention settings.
+- `agentctl` now seeds backend override templates under `~/.llm-ops/config/agents/` and provides an internal `launchd-run` path so LaunchAgents can load backend-native `.env` files plus selective `seckit` exports without using workspace-local wrapper scripts.
 - Runtime logs rotate in place and install backups under `~/.llm-ops/backups` are pruned by policy.
 - In the current direct-run agent wrapper mode, use `~/bin/agentctl logs` instead of relying on `openclaw logs --follow`.
-- `gateway` is now deprecated in favor of `agentctl` and will be removed in a future release.
+- `agentctl` owns agent runtime lifecycle across OpenClaw and Hermes.
+- `modelctl` owns model runtime lifecycle; the older bundled stack wrapper is gone.
 
 ## Local Precheck
 

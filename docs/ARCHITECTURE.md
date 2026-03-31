@@ -11,7 +11,7 @@
 
 ## Components
 
-- OpenClaw runtime (`gateway`)
+- OpenClaw agent runtime
 - Model proxy wrapper (`model-proxy`) + tap (`model-proxy-tap`)
 - TTS service (`tts` via `mlx_audio.server`)
 - LLM service (`Qwen3` / `Qwen3.5` via `llama-server`)
@@ -20,8 +20,8 @@
 
 ## Flow
 
-1. User/channel input enters OpenClaw gateway.
-2. Gateway routes model calls through proxy tap (when enabled).
+1. User/channel input enters the OpenClaw agent runtime.
+2. The agent runtime routes model calls through proxy tap (when enabled).
 3. LLM inference served by local/remote `llama-server` profile.
 4. Memory search/indexing uses embedding service profile.
 5. Operator controls lifecycle via `~/bin/*` symlink commands.

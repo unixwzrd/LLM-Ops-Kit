@@ -84,20 +84,20 @@ ssh <host> '/usr/local/bin/bash ~/projects/LLM-Ops-Kit/scripts/verify-runtime-li
 All commands are extensionless and action-driven.
 
 ```bash
-~/bin/gateway [start|stop|restart|status]
+~/bin/agentctl [start|stop|restart|status]
+~/bin/modelctl status
 ~/bin/model-proxy [start|stop|restart|status]
 ~/bin/tts-bridge [start|stop|restart|status]
 ~/bin/Qwen3 [start|stop|restart|status]
 ~/bin/Qwen3.5 [start|stop|restart|status]
 ~/bin/BGEm3 [start|stop|restart|status]
-~/bin/openclaw-stack [start|stop|restart|status] [all|gateway|llm|embedding|model-proxy|models]
 ~/bin/openclaw-report
 ```
 
 Typical bring-up order:
 
 ```bash
-~/bin/gateway start
+~/bin/agentctl start
 ~/bin/Qwen3 start
 ~/bin/model-proxy start
 # Start embedding only if needed

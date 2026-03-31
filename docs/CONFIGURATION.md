@@ -74,7 +74,7 @@ model is:
 
 - `modelctl`: global env + per-model override file + shipped model profile
 - `model-proxy`: CLI flags + environment only
-- `gateway`: CLI flags + environment, with backend-specific native config owned by OpenClaw or Hermes
+- `agentctl`: CLI flags + environment + per-backend override templates, with backend-native config owned by OpenClaw or Hermes
 - `tts-bridge`: CLI flags + environment + bridge JSON config files
 
 ### `modelctl`
@@ -117,7 +117,7 @@ Notes:
   - `MODEL_PROXY_LISTEN_PORT`
   - `MODEL_PROXY_CHAT_TEMPLATE`
 
-### `gateway`
+### `agentctl`
 
 Effective precedence:
 
@@ -125,17 +125,18 @@ Effective precedence:
 2. exported environment variables
 3. `~/.llm-ops/config.env`
 4. built-in wrapper defaults
-5. backend-native config owned by the selected gateway stack
+5. backend-native config owned by the selected agent runtime
 
 Notes:
 
-- `gateway` itself does not own a dedicated config file.
+- `agentctl` now seeds optional per-backend override files under `~/.llm-ops/config/agents/`.
 - Select the default target with `LLMOPS_GATEWAY_BACKEND`:
   - `openclaw` (default)
   - `hermes`
   - `all`
-- OpenClaw-specific runtime behavior continues to come from the toolkit env layer.
-- Hermes-specific runtime behavior is loaded by Hermes from:
+- OpenClaw-specific runtime behavior can be customized in `~/.llm-ops/config/agents/openclaw.env`.
+- Hermes-specific wrapper defaults can be customized in `~/.llm-ops/config/agents/hermes.env`.
+- Hermes-native runtime behavior is loaded by Hermes from:
   - `~/.hermes/config.yaml`
   - `~/.hermes/.env`
   - legacy `~/.hermes/gateway.json`
@@ -174,9 +175,14 @@ Notes:
 - `LLMOPS_UPSTREAM_PORT`: default upstream model port for wrappers.
 - `MODEL_PROXY_LISTEN_HOST`: default bind host for proxy wrappers.
 - `MODEL_PROXY_LISTEN_PORT`: default bind port for proxy wrappers.
-- `LLMOPS_GATEWAY_BACKEND`: gateway wrapper backend selector (`openclaw` by default, `hermes` when set explicitly).
-- `LLMOPS_GATEWAY_PORT`: direct-run OpenClaw gateway port used by the toolkit wrapper.
-- `HERMES_GATEWAY_CMD`: command path/name used when the gateway backend is `hermes`.
+- `LLMOPS_GATEWAY_BACKEND`: `agentctl` backend selector (`openclaw` by default, `hermes` when set explicitly).
+- `LLMOPS_GATEWAY_PORT`: direct-run OpenClaw agent port used by `agentctl`.
+- `HERMES_GATEWAY_CMD`: command path/name used when the `agentctl` backend is `hermes`.
+- `~/.llm-ops/config/agents/openclaw.env`: optional OpenClaw backend override file seeded by `agentctl`.
+- `~/.llm-ops/config/agents/hermes.env`: optional Hermes backend override file seeded by `agentctl`.
+- `LLMOPS_AGENT_NATIVE_ENV_FILE`: backend-native `.env` file path used by the launchd runtime path.
+- `LLMOPS_AGENT_SECKIT_NAMES`: comma-separated `seckit` secret names to export for a specific backend launch.
+- `LLMOPS_SKIP_SECKIT_LOAD`: internal helper flag used when a wrapper needs to defer `seckit` loading until backend config is known.
 - `MODEL_PROXY_TAP_BIN`: optional explicit path to `model-proxy-tap`.
 - `MODEL_PROXY_LOG_ROTATE_SECONDS`: time-based rotation period for proxy-owned logs. Default `86400`.
 - `MODEL_PROXY_LOG_ROTATE_KEEP`: number of rotated proxy logs to keep. Default `5`.
@@ -293,21 +299,22 @@ LLMOPS_SECKIT_SERVICE=openclaw
 LLMOPS_SECKIT_ACCOUNT=miafour
 EOF
 
-# 4) Start stack normally
-~/bin/openclaw-stack restart all
+# 4) Start runtimes normally
+~/bin/agentctl restart
+~/bin/modelctl status
 ```
 
 Notes:
 
 - Keep non-secret host, port, and path settings in `~/.llm-ops/config.env`.
 - Keep tokens and API secrets in `seckit`.
-- When enabled, the shared runtime loader imports `seckit` exports before `gateway`, `model-proxy`, `tts-bridge`, and related wrappers start.
+- When enabled, the shared runtime loader imports `seckit` exports before `agentctl`, `model-proxy`, `tts-bridge`, and related wrappers start.
 - If `seckit` is missing or export fails, wrappers log a warning and continue without imported secrets.
 - Do not run wrapper startup under `bash -x` / `set -x` when `LLMOPS_USE_SECKIT=1`; shell tracing can expose exported secrets.
 
 Current runtime note:
 
-- `Secrets-Kit` integration is intentionally disabled for live OpenClaw startup on the primary operator machine while the gateway path is being stabilized.
+- `Secrets-Kit` integration is intentionally disabled for live OpenClaw startup on the primary operator machine while the agent runtime path is being stabilized.
 - The current operational setting is `LLMOPS_USE_SECKIT=0`.
 - `seckit` remains installed for manual use, migration, export, and future re-integration.
 
@@ -352,19 +359,19 @@ REPEAT_PENALTY=1.0
 EOF
 ```
 
-## Direct-Run Gateway Notes
+## Direct-Run Agent Runtime Notes
 
-The current known-good startup path on the primary operator machine is the direct-run `gateway` wrapper:
+The current known-good startup path on the primary operator machine is the direct-run `agentctl` wrapper:
 
-- `gateway start` launches `openclaw gateway run --port ...` under `nohup`
-- wrapper logs go to `~/.llm-ops/logs/gateway.log` and `~/.llm-ops/logs/gateway.err.log`
+- `agentctl start` launches the OpenClaw agent runtime under `nohup`
+- wrapper logs go to `~/.llm-ops/logs/agentctl-openclaw.log` and `~/.llm-ops/logs/agentctl-openclaw.err.log`
 - OpenClaw app logs go to `/tmp/openclaw/openclaw-YYYY-MM-DD.log`
-- `gateway logs` tails all three of those files together
+- `agentctl logs` tails all three of those files together
 
 At the moment, the standard OpenClaw service path is considered deferred work:
 
-- `openclaw gateway start` expects an installed LaunchAgent on macOS
-- `openclaw logs --follow`, `openclaw gateway probe`, and `openclaw gateway health` may still fail against a live direct-run gateway because the CLI RPC attach path is not stable yet in this environment
+- the native OpenClaw service entrypoint expects an installed LaunchAgent on macOS
+- `openclaw logs --follow` and related native health/probe commands may still fail against a live direct-run agent runtime because the CLI RPC attach path is not stable yet in this environment
 
 ## Secrets Kit Fallback Behavior
 

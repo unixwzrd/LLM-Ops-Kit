@@ -22,8 +22,9 @@ echo "log_dir: $LLMOPS_LOG_DIR"
 echo "openclaw_log_dir: $OPENCLAW_LOG_DIR"
 echo
 
-"$SCRIPT_DIR/openclaw-stack" status
+"$SCRIPT_DIR/agentctl" status
 echo
+"$SCRIPT_DIR/modelctl" status
 
 echo "Recent logs:"
 for log in \

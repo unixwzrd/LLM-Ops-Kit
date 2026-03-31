@@ -2,8 +2,7 @@
 
 `agentctl` is the supported operator-facing command for agent runtime control.
 
-Today it still delegates directly to the underlying toolkit gateway wrapper, but operators should treat `agentctl` as the canonical surface.
-Use it when you want a control surface that matches other toolkit commands such as `modelctl`.
+Use it when you want a control surface that matches `modelctl` and keeps agent operations separate from model operations.
 
 ## Usage
 
@@ -13,6 +12,6 @@ Use it when you want a control surface that matches other toolkit commands such 
 
 ## Notes
 
-- `agentctl` is currently implemented as a thin wrapper over the underlying gateway runtime script.
-- `gateway` is deprecated and scheduled for removal.
-- Backend behavior, config precedence, and status output are identical during the transition.
+- `agentctl` is the toolkit-owned implementation for OpenClaw and Hermes runtime control.
+- Per-agent overrides live under `~/.llm-ops/config/agents/`.
+- Launchd uses the internal `agentctl launchd-run <backend>` path so backend-native `.env` files and selective `seckit` exports can be loaded without workspace-local wrappers.

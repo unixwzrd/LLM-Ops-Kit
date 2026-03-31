@@ -5,8 +5,8 @@
 
 - [Quickstart (10 Minutes)](#quickstart-10-minutes)
   - [Requirements](#requirements)
-  - [Remote Models, Local Gateway](#remote-models-local-gateway)
-  - [Fully Local Models and Gateway](#fully-local-models-and-gateway)
+  - [Remote Models, Local Agent Runtime](#remote-models-local-agent-runtime)
+  - [Fully Local Models and Agent Runtime](#fully-local-models-and-agent-runtime)
   - [Remote sync + deploy](#remote-sync--deploy)
   - [Common checks](#common-checks)
 
@@ -39,9 +39,9 @@ cd ~/projects/LLM-Ops-Kit
 
 After that, use the linked commands in `~/bin`.
 
-## Remote Models, Local Gateway
+## Remote Models, Local Agent Runtime
 
-Use this when OpenClaw, `gateway`, `model-proxy`, and `tts-bridge` run locally, while the LLM, embeddings, and MLX TTS run on a remote model host.
+Use this when OpenClaw, `agentctl`, `model-proxy`, and `tts-bridge` run locally, while the LLM, embeddings, and MLX TTS run on a remote model host.
 
 Set these first in `~/.llm-ops/config.env`:
 
@@ -57,7 +57,7 @@ export TTS_BRIDGE_UPSTREAM_BASE=http://<remote-model-host>:11439/v1
 
 ```bash
 cd ~/projects/LLM-Ops-Kit
-~/bin/gateway start
+~/bin/agentctl start
 ~/bin/model-proxy restart --upstream http://<remote-model-host>:11434
 ~/bin/tts-bridge start
 ```
@@ -78,7 +78,7 @@ LLMOPS_SECKIT_ACCOUNT=miafour
 EOF
 ```
 
-When enabled, wrappers such as `gateway`, `model-proxy`, and `tts-bridge` will import secret values from `seckit` automatically during startup.
+When enabled, wrappers such as `agentctl`, `model-proxy`, and `tts-bridge` will import secret values from `seckit` automatically during startup.
 
 Important:
 
@@ -87,15 +87,15 @@ Important:
 
 Current stabilization mode on the primary operator machine:
 
-- `gateway` runs in direct-run mode through the wrapper, not through `openclaw gateway start`
+- `agentctl` runs in direct-run mode through the wrapper instead of the native OpenClaw service entrypoint
 - runtime `seckit` loading is currently disabled for startup (`LLMOPS_USE_SECKIT=0`)
 - live logs are:
-  - wrapper stdio: `~/.llm-ops/logs/gateway.log` and `~/.llm-ops/logs/gateway.err.log`
+  - wrapper stdio: `~/.llm-ops/logs/agentctl-openclaw.log` and `~/.llm-ops/logs/agentctl-openclaw.err.log`
   - OpenClaw app log: `/tmp/openclaw/openclaw-YYYY-MM-DD.log`
-- `openclaw logs --follow`, `openclaw gateway probe`, and `openclaw gateway health` may still fail even when the gateway itself is up in this mode
-- use `~/bin/gateway logs` for a reliable local follow view during this phase
+- `openclaw logs --follow` and related native health/probe commands may still fail even when the agent runtime itself is up in this mode
+- use `~/bin/agentctl logs` for a reliable local follow view during this phase
 
-## Fully Local Models and Gateway
+## Fully Local Models and Agent Runtime
 
 Use this when the LLM, embeddings, MLX TTS server, and OpenClaw all run on the same host.
 
@@ -124,9 +124,9 @@ cd ~/projects/LLM-Ops-Kit
 ## Common checks
 
 ```bash
-~/bin/openclaw-stack status
-~/bin/gateway status
-~/bin/gateway logs
+~/bin/agentctl status
+~/bin/agentctl logs
+~/bin/modelctl status
 ~/bin/Qwen3 settings
 ~/bin/BGEm3 settings
 ~/bin/model-proxy status
