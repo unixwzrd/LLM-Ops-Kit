@@ -166,6 +166,7 @@ Installed runtime is the default operating mode. After install, normal operation
 ```bash
 ~/bin/agentctl [start|stop|restart|status] [openclaw|hermes|all]
 ~/bin/agentctl logs
+~/bin/agentctl [launchd-install|launchd-start|launchd-stop|launchd-enable|launchd-disable|launchd-remove|launchd-status] [openclaw|hermes|all]
 ~/bin/model-proxy [start|stop|restart|status]
 ~/bin/tts [start|stop|restart|status]
 ~/bin/tts-bridge [start|stop|restart|status]

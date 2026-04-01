@@ -259,6 +259,52 @@ class ShellRuntimeHelperTests(unittest.TestCase):
         script.chmod(0o755)
         return script
 
+    def _write_fake_launchctl(self, root: Path) -> tuple[Path, Path, Path]:
+        script = root / "fake-launchctl"
+        log_path = root / "launchctl.log"
+        state_dir = root / "launchctl-state"
+        script.write_text(
+            "#!/usr/bin/env bash\n"
+            "set -euo pipefail\n"
+            "log_file=\"${FAKE_LAUNCHCTL_LOG:?}\"\n"
+            "state_dir=\"${FAKE_LAUNCHCTL_STATE_DIR:?}\"\n"
+            "mkdir -p \"$state_dir\"\n"
+            "printf '%s\\n' \"$*\" >> \"$log_file\"\n"
+            "key_for() {\n"
+            "  printf '%s' \"$1\" | tr '/' '_'\n"
+            "}\n"
+            "cmd=\"${1:-}\"\n"
+            "case \"$cmd\" in\n"
+            "  print)\n"
+            "    key=\"$(key_for \"${2:-}\")\"\n"
+            "    [[ -f \"$state_dir/$key.loaded\" ]]\n"
+            "    ;;\n"
+            "  bootstrap)\n"
+            "    domain=\"${2:-}\"\n"
+            "    plist=\"${3:-}\"\n"
+            "    base=\"$(basename \"$plist\" .plist)\"\n"
+            "    touch \"$state_dir/$(key_for \"$domain/$base\").loaded\"\n"
+            "    ;;\n"
+            "  kickstart)\n"
+            "    label=\"${!#}\"\n"
+            "    touch \"$state_dir/$(key_for \"$label\").loaded\"\n"
+            "    ;;\n"
+            "  bootout)\n"
+            "    key=\"$(key_for \"${2:-}\")\"\n"
+            "    rm -f \"$state_dir/$key.loaded\"\n"
+            "    ;;\n"
+            "  enable|disable)\n"
+            "    ;;\n"
+            "  *)\n"
+            "    echo \"unexpected launchctl command: $*\" >&2\n"
+            "    exit 1\n"
+            "    ;;\n"
+            "esac\n",
+            encoding="utf-8",
+        )
+        script.chmod(0o755)
+        return script, log_path, state_dir
+
     def test_gateway_launchd_run_openclaw_uses_backend_profile_and_selected_seckit_names(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -305,7 +351,7 @@ class ShellRuntimeHelperTests(unittest.TestCase):
             )
             self.assertEqual(proc.returncode, 0, proc.stderr)
             self.assertIn("gateway run --port 18789|sec-gateway|sec-telegram", invocations.read_text(encoding="utf-8"))
-            self.assertIn("--names OPENCLAW_GATEWAY_TOKEN,TELEGRAM_BOT_TOKEN", args_log.read_text(encoding="utf-8"))
+            self.assertIn("--names OPENCLAW_GATEWAY_TOKEN,TELEGRAM_BOT_TOKEN,OPENAI_API_KEY,HUGGINGFACE_API_KEY,LOCAL_EMBEDDING_API_KEY,BRAVE_SEARCH_API_KEY,ELEVENLABS_API_KEY,SAG_API_KEY", args_log.read_text(encoding="utf-8"))
             self.assertTrue((llmops_home / "config" / "agents" / "openclaw.env").exists())
 
     def test_gateway_start_stop_openclaw_with_fake_command(self) -> None:
@@ -363,6 +409,7 @@ class ShellRuntimeHelperTests(unittest.TestCase):
             self.assertEqual(start.returncode, 0, start.stderr)
             self.assertIn("agentctl[openclaw]: started pid=", start.stdout)
             self.assertIn("agentctl[hermes]: started pid=", start.stdout)
+            self.assertIn("gateway run --replace", invocations.read_text(encoding="utf-8"))
 
             status = self.run_bash(f'"{AGENTCTL}" status all', env=base_env)
             self.assertEqual(status.returncode, 0, status.stderr)
@@ -379,6 +426,143 @@ class ShellRuntimeHelperTests(unittest.TestCase):
             self.assertEqual(stop.returncode, 0, stop.stderr)
             self.assertIn("agentctl-openclaw: stopped pid", stop.stdout)
             self.assertIn("agentctl-hermes: stopped pid", stop.stdout)
+
+    def test_gateway_start_hermes_sources_agent_shell_init(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            home = root / "home"
+            llmops_home = home / ".llm-ops"
+            hermes_home = home / ".hermes"
+            invocations = root / "gateway-invocations.log"
+            fake_cmd = self._write_fake_gateway_cmd(root)
+            bashrc = home / ".bashrc"
+            bashrc.parent.mkdir(parents=True, exist_ok=True)
+            bashrc.write_text("export HERMES_FROM_BASHRC=1\n", encoding="utf-8")
+            fake_cmd.write_text(
+                "#!/usr/bin/env bash\n"
+                "trap 'exit 0' TERM INT\n"
+                "echo \"$0 $*|${HERMES_FROM_BASHRC:-}\" >> \"$FAKE_GATEWAY_INVOCATIONS\"\n"
+                "while :; do sleep 1; done\n",
+                encoding="utf-8",
+            )
+            fake_cmd.chmod(0o755)
+
+            base_env = {
+                "HOME": str(home),
+                "LLMOPS_HOME": str(llmops_home),
+                "HERMES_HOME": str(hermes_home),
+                "LLMOPS_USE_SECKIT": "0",
+                "HERMES_GATEWAY_CMD": str(fake_cmd),
+                "FAKE_GATEWAY_INVOCATIONS": str(invocations),
+            }
+
+            start = self.run_bash(f'"{AGENTCTL}" start hermes', env=base_env)
+            self.assertEqual(start.returncode, 0, start.stderr)
+            self.assertIn("agentctl[hermes]: started pid=", start.stdout)
+            self.assertIn("gateway run --replace|1", invocations.read_text(encoding="utf-8"))
+
+            stop = self.run_bash(f'"{AGENTCTL}" stop hermes', env=base_env)
+            self.assertEqual(stop.returncode, 0, stop.stderr)
+
+    def test_agentctl_launchd_install_start_stop_and_remove_openclaw(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            home = root / "home"
+            llmops_home = home / ".llm-ops"
+            hermes_home = home / ".hermes"
+            openclaw_home = home / ".openclaw"
+            openclaw_home.mkdir(parents=True)
+            fake_launchctl, launchctl_log, launchctl_state = self._write_fake_launchctl(root)
+
+            base_env = {
+                "HOME": str(home),
+                "LLMOPS_HOME": str(llmops_home),
+                "HERMES_HOME": str(hermes_home),
+                "OPENCLAW_HOME": str(openclaw_home),
+                "LLMOPS_USE_SECKIT": "0",
+                "LAUNCHCTL_BIN": str(fake_launchctl),
+                "FAKE_LAUNCHCTL_LOG": str(launchctl_log),
+                "FAKE_LAUNCHCTL_STATE_DIR": str(launchctl_state),
+            }
+
+            install = self.run_bash(f'"{AGENTCTL}" launchd-install openclaw', env=base_env)
+            self.assertEqual(install.returncode, 0, install.stderr)
+            self.assertIn("agentctl[openclaw]: installed launchd plist", install.stdout)
+            self.assertIn("agentctl[openclaw]: launchd started label=ai.openclaw.gateway", install.stdout)
+
+            plist_path = home / "Library" / "LaunchAgents" / "ai.openclaw.gateway.plist"
+            self.assertTrue(plist_path.exists())
+            plist_text = plist_path.read_text(encoding="utf-8")
+            self.assertIn("/scripts/agentctl", plist_text)
+            self.assertIn("<string>launchd-run</string>", plist_text)
+            self.assertIn("<string>openclaw</string>", plist_text)
+
+            status = self.run_bash(f'"{AGENTCTL}" launchd-status openclaw', env=base_env)
+            self.assertEqual(status.returncode, 0, status.stderr)
+            self.assertIn("agentctl[openclaw]: launchd loaded label=ai.openclaw.gateway", status.stdout)
+
+            stop = self.run_bash(f'"{AGENTCTL}" launchd-stop openclaw', env=base_env)
+            self.assertEqual(stop.returncode, 0, stop.stderr)
+            self.assertIn("agentctl[openclaw]: launchd stopped label=ai.openclaw.gateway", stop.stdout)
+
+            disabled = self.run_bash(f'"{AGENTCTL}" launchd-disable openclaw', env=base_env)
+            self.assertEqual(disabled.returncode, 0, disabled.stderr)
+            self.assertIn("agentctl[openclaw]: launchd disabled label=ai.openclaw.gateway", disabled.stdout)
+
+            removed = self.run_bash(f'"{AGENTCTL}" launchd-remove openclaw', env=base_env)
+            self.assertEqual(removed.returncode, 0, removed.stderr)
+            self.assertIn("agentctl[openclaw]: removed launchd plist", removed.stdout)
+            self.assertFalse(plist_path.exists())
+
+            launchctl_lines = launchctl_log.read_text(encoding="utf-8")
+            self.assertIn("enable gui/", launchctl_lines)
+            self.assertIn("bootstrap gui/", launchctl_lines)
+            self.assertIn("kickstart -k gui/", launchctl_lines)
+            self.assertIn("bootout gui/", launchctl_lines)
+
+    def test_agentctl_launchd_remove_does_not_require_seckit_or_seed_templates(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            home = root / "home"
+            llmops_home = home / ".llm-ops"
+            hermes_home = home / ".hermes"
+            openclaw_home = home / ".openclaw"
+            openclaw_home.mkdir(parents=True)
+            launch_agents = home / "Library" / "LaunchAgents"
+            launch_agents.mkdir(parents=True)
+            plist_path = launch_agents / "ai.openclaw.gateway.plist"
+            plist_path.write_text("<plist></plist>\n", encoding="utf-8")
+
+            fake_launchctl, launchctl_log, launchctl_state = self._write_fake_launchctl(root)
+            fake_seckit = root / "fake-seckit"
+            fake_seckit.write_text(
+                "#!/usr/bin/env bash\n"
+                "echo 'ERROR: export failed' >&2\n"
+                "exit 1\n",
+                encoding="utf-8",
+            )
+            fake_seckit.chmod(0o755)
+
+            proc = self.run_bash(
+                f'"{AGENTCTL}" launchd-remove openclaw',
+                env={
+                    "HOME": str(home),
+                    "LLMOPS_HOME": str(llmops_home),
+                    "HERMES_HOME": str(hermes_home),
+                    "OPENCLAW_HOME": str(openclaw_home),
+                    "LAUNCHCTL_BIN": str(fake_launchctl),
+                    "FAKE_LAUNCHCTL_LOG": str(launchctl_log),
+                    "FAKE_LAUNCHCTL_STATE_DIR": str(launchctl_state),
+                    "LLMOPS_USE_SECKIT": "1",
+                    "LLMOPS_SECKIT_BIN": str(fake_seckit),
+                    "BRAVE_SEARCH_API_KEY": "env-brave-key",
+                },
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertNotIn("Secrets Kit fallback in use", proc.stderr)
+            self.assertNotIn("copied template config", proc.stderr)
+            self.assertFalse(plist_path.exists())
+            self.assertFalse((llmops_home / "config" / "agents" / "openclaw.env").exists())
 
 
 if __name__ == "__main__":
