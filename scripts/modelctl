@@ -441,6 +441,15 @@ start_model() {
         echo "WARNING: DIRECT_IO=1 but llama-server does not support --direct-io; skipping."
       fi
     fi
+    if [[ "${DISABLE_TOOL_GRAMMAR:-0}" == "1" ]]; then
+      if /usr/local/bin/llama-server --help 2>&1 | rg -q -- '--no-tool-grammar'; then
+        EXTRA_ARGS+=(--no-tool-grammar)
+      elif /usr/local/bin/llama-server --help 2>&1 | rg -q -- '--disable-tool-grammar'; then
+        EXTRA_ARGS+=(--disable-tool-grammar)
+      else
+        echo "WARNING: DISABLE_TOOL_GRAMMAR=1 but llama-server has no known tool-grammar disable flag; skipping."
+      fi
+    fi
 
     [[ -n "${TEMP:-}" ]] && SAMPLING_FLAGS+=(--temp "$TEMP")
     [[ -n "${TOP_P:-}" ]] && SAMPLING_FLAGS+=(--top-p "$TOP_P")

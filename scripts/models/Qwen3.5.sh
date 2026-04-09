@@ -25,14 +25,15 @@ UBATCH_SIZE="${UBATCH_SIZE:-512}"
 USE_MLOCK="${USE_MLOCK:-1}"
 USE_NO_MMAP="${USE_NO_MMAP:-1}"
 DIRECT_IO="${DIRECT_IO:-1}"
+DISABLE_TOOL_GRAMMAR="${DISABLE_TOOL_GRAMMAR:-1}"
 
 USE_NO_WEBUI="${USE_NO_WEBUI:-1}"
 
 # Prompt/template settings
 #VERBOSE_PROMPT="${VERBOSE_PROMPT:-1}"
 VERBOSE_PROMPT="${VERBOSE_PROMPT:-0}"
-USE_CUSTOM_TEMPLATE="${USE_CUSTOM_TEMPLATE:-0}"
-CHAT_TEMPLATE="${CHAT_TEMPLATE:-}"
+USE_CUSTOM_TEMPLATE="${USE_CUSTOM_TEMPLATE:-1}"
+CHAT_TEMPLATE="${CHAT_TEMPLATE:-$HOME/.llm-ops/current/scripts/templates/Qwen-3_5-stock-template.jinja}"
 
 # Sampling defaults (external env or ~/.llm-ops/config.env can override directly)
 TEMP="${TEMP:-0.9}"

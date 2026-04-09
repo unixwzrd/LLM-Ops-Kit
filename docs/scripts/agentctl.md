@@ -8,6 +8,7 @@ Use it when you want a control surface that matches `modelctl` and keeps agent o
 
 ```bash
 ~/bin/agentctl [start|stop|restart|status|logs|setup] [openclaw|hermes|all]
+~/bin/agentctl exec [openclaw|hermes] <command> [args...]
 ~/bin/agentctl [launchd-install|launchd-start|launchd-stop|launchd-enable|launchd-disable|launchd-remove|launchd-status] [openclaw|hermes|all]
 ```
 
@@ -21,4 +22,5 @@ Use it when you want a control surface that matches `modelctl` and keeps agent o
 - `launchd-start` and `launchd-stop` manage the loaded agent without rewriting the plist.
 - `launchd-enable` and `launchd-disable` control whether launchd may run the agent automatically.
 - `launchd-remove` unloads the service and deletes the plist.
+- `exec` runs a backend CLI command under the same managed shell init, backend `.env`, and selective `seckit` export path used by the wrapper. Use this for commands like `agentctl exec openclaw status` or `agentctl exec openclaw update` when the standalone CLI would otherwise miss secrets.
 - Hermes gateway arguments can be customized in `~/.llm-ops/config/agents/hermes.env` with `HERMES_GATEWAY_ARGS`. The default is `--replace` so managed restarts clean up stale Hermes PID/session state.

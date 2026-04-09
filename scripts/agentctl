@@ -291,6 +291,21 @@ parse_gateway_extra_args() {
   printf '%s\n' "$@"
 }
 
+backend_cli_command() {
+  local backend="$1"
+  case "$backend" in
+    openclaw)
+      printf '%s\n' "${OPENCLAW_GATEWAY_CMD:-/usr/local/bin/openclaw}"
+      ;;
+    hermes)
+      printf '%s\n' "${HERMES_GATEWAY_CMD:-hermes}"
+      ;;
+    *)
+      return 2
+      ;;
+  esac
+}
+
 gateway_status_suffix() {
   local backend="$1"
   echo "  backend=$backend"
@@ -759,6 +774,7 @@ print_help() {
   cat <<'EOF'
 Usage:
   agentctl [start|stop|restart|status|logs|setup] [openclaw|hermes|all]
+  agentctl exec [openclaw|hermes] <command> [args...]
   agentctl [launchd-install|launchd-start|launchd-stop|launchd-enable|launchd-disable|launchd-remove|launchd-status] [openclaw|hermes|all]
 
 Agent runtime actions:
@@ -768,6 +784,7 @@ Agent runtime actions:
   status           Show wrapper/runtime status
   logs             Follow wrapper and backend-native logs
   setup            Run Hermes-native setup flow
+  exec             Run a backend CLI command with the managed env, shell init, and seckit exports
 
 Launchd actions:
   launchd-install  Write the backend plist to ~/Library/LaunchAgents and start it
@@ -839,6 +856,31 @@ setup_gateway() {
   esac
 }
 
+exec_gateway_command() {
+  local target="$1"
+  shift || true
+  local backend cmd
+
+  if [[ "$target" == "all" ]]; then
+    echo "agentctl: exec requires a concrete backend (openclaw or hermes)" >&2
+    return 2
+  fi
+  if [[ "$#" -eq 0 ]]; then
+    echo "agentctl: exec requires a backend command, for example: agentctl exec openclaw status" >&2
+    return 2
+  fi
+
+  backend="$target"
+  load_shell_env
+  load_agent_backend_runtime_env "$backend"
+  cmd="$(backend_cli_command "$backend")"
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    echo "agentctl[$backend]: command not found: $cmd" >&2
+    return 1
+  fi
+  exec "$cmd" "$@"
+}
+
 target="$(normalize_target "$requested_target")"
 
 case "$action" in
@@ -849,6 +891,7 @@ case "$action" in
   status) status_gateway "$target" ;;
   logs) follow_gateway_logs "$target" ;;
   setup) setup_gateway "$target" ;;
+  exec) shift 2; exec_gateway_command "$target" "$@" ;;
   launchd-run) launchd_run_gateway_backend "$target" ;;
   launchd-install) run_launchd_action install "$target" ;;
   launchd-start) run_launchd_action start "$target" ;;

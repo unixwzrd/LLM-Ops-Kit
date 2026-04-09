@@ -247,6 +247,49 @@ class ShellRuntimeHelperTests(unittest.TestCase):
             })
             self.assertEqual(stop.returncode, 0, stop.stderr)
 
+    def test_agentctl_exec_runs_backend_command_with_runtime_env(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            home = root / "home"
+            llmops_home = home / ".llm-ops"
+            hermes_home = home / ".hermes"
+            args_log = root / "args.log"
+            token_log = root / "token.log"
+            telegram_log = root / "telegram.log"
+            fake_cmd = root / "fake-openclaw"
+            fake_cmd.write_text(
+                "#!/usr/bin/env bash\n"
+                f"printf '%s\\n' \"$*\" > \"{args_log}\"\n"
+                f"printf '%s\\n' \"${{OPENCLAW_GATEWAY_TOKEN-}}\" > \"{token_log}\"\n"
+                f"printf '%s\\n' \"${{TELEGRAM_BOT_TOKEN-}}\" > \"{telegram_log}\"\n",
+                encoding="utf-8",
+            )
+            fake_cmd.chmod(0o755)
+            fake_seckit = root / "fake-seckit"
+            fake_seckit.write_text(
+                "#!/usr/bin/env bash\n"
+                "printf 'export OPENCLAW_GATEWAY_TOKEN=sec-openclaw\\n'\n"
+                "printf 'export TELEGRAM_BOT_TOKEN=sec-telegram\\n'\n",
+                encoding="utf-8",
+            )
+            fake_seckit.chmod(0o755)
+
+            proc = self.run_bash(
+                f'"{AGENTCTL}" exec openclaw status --json',
+                env={
+                    "HOME": str(home),
+                    "LLMOPS_HOME": str(llmops_home),
+                    "HERMES_HOME": str(hermes_home),
+                    "LLMOPS_USE_SECKIT": "1",
+                    "LLMOPS_SECKIT_BIN": str(fake_seckit),
+                    "OPENCLAW_GATEWAY_CMD": str(fake_cmd),
+                },
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertEqual(args_log.read_text(encoding="utf-8").strip(), "status --json")
+            self.assertEqual(token_log.read_text(encoding="utf-8").strip(), "sec-openclaw")
+            self.assertEqual(telegram_log.read_text(encoding="utf-8").strip(), "sec-telegram")
+
     def _write_fake_gateway_cmd(self, root: Path) -> Path:
         script = root / "fake-gateway"
         script.write_text(

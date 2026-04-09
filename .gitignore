@@ -548,6 +548,9 @@ AGENTS.macOSd
 .cursor/rules/*
 tools/*
 
+# LLM-Ops-Kit local template archives
+scripts/templates/_archive/
+
 
 .DS_Store
 .env
@@ -559,4 +562,3 @@ identity/device-auth.json
 docs/reports/
 *.local.md
 docs/internal/
-
