@@ -1,5 +1,7 @@
 # modelctl Guide
 
+Back: [docs/INDEX.md](./INDEX.md)
+
 **Created**: 2026-02-26
 **Updated**: 2026-03-06
 
@@ -24,6 +26,7 @@ Any launcher name is supported as long as `scripts/models/<Launcher>.sh` exists.
 ```bash
 ~/bin/<ModelProfile> [start|stop|restart|status|settings|verify|test]
 ~/bin/modelctl <ModelProfile> [start|stop|restart|status|settings|verify|test]
+~/bin/modelctl add --model <path> --name <label>
 ```
 
 - `status`: checks pidfile, validates pid is still running, validates process command shape via `ps`, and does a fast API probe.
@@ -32,6 +35,34 @@ Any launcher name is supported as long as `scripts/models/<Launcher>.sh` exists.
   - `llm`: `/v1/chat/completions`
   - `embedding`: `/v1/embeddings`
   - `tts`: `/v1/audio/speech`
+
+`modelctl add` registers a model in OpenClaw with optional GGUF metadata extraction, then prints a command to switch OpenClaw to it.
+
+## modelctl add (what it does)
+
+`modelctl add` is designed for non-technical use. It can infer values from the GGUF when possible.
+
+What it tries, in order:
+
+1. Use `--model` to infer the model id from the filename.
+2. If a GGUF tool is available (`gguf_dump` or `llama-gguf`), extract context length.
+3. If no GGUF tool is present, warn and fall back to safe defaults.
+4. If no `--id` or `--model` was provided, query `/v1/models` and pick the first id.
+
+Output:
+
+- Writes an entry into `~/.openclaw/agents/main/agent/models.json`.
+- Prints the exact `agentctl exec openclaw models set ...` command to switch OpenClaw to the model.
+
+Tip: you can always override with `--ctx` and `--max-tokens` if you want exact values.
+
+## verify and test (what they do)
+
+- `verify` hits `/v1/models` and prints the reported model ids so you can confirm what is actually running.
+- `test` sends a small, real request:
+  - LLM: asks for a single-word reply
+  - Embedding: requests a small embedding vector
+  - TTS: generates a tiny WAV sample and reports its size
 
 ## Precedence Order (highest -> lowest)
 
@@ -107,3 +138,9 @@ Set these values directly in `~/.llm-ops/config.env`, `~/.llm-ops/config/<Profil
 - State file: `$LLMOPS_RUN_DIR/<pid_name>.state`
 
 Use `status` to see active pid and log path.
+
+## See Also
+
+- [Adding a Model Profile](./ADDING_MODEL_PROFILE.md)
+- [Switching Models and Agents](./SWITCHING.md)
+- [Configuration](./CONFIGURATION.md)

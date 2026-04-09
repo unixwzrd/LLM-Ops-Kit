@@ -1,5 +1,7 @@
 # Adding a New Model Profile
 
+Back: [docs/INDEX.md](./INDEX.md)
+
 **Created**: 2026-02-26
 **Updated**: 2026-03-01
 
@@ -160,3 +162,9 @@ Example:
 ```bash
 agentctl exec openclaw models set llama_cpp/gemma-4-31B-it-UD-Q8_K_XL.gguf
 ```
+
+## See Also
+
+- [Switching Models and Agents](./SWITCHING.md)
+- [modelctl Guide](./MODELCTL_GUIDE.md)
+- [Configuration](./CONFIGURATION.md)

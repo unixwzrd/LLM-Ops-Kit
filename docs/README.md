@@ -5,9 +5,15 @@
 
 Entry point for the main operator docs in `LLM-Ops-Kit`.
 
+Primary index: [`INDEX.md`](./INDEX.md)
+
+Back: [docs/INDEX.md](./INDEX.md)
+
 ## Start Here
 
 - [`QUICKSTART.md`](./QUICKSTART.md) — fastest path to a working runtime
+- [`HOW_IT_WORKS.md`](./HOW_IT_WORKS.md) — plain-language overview
+- [`SWITCHING.md`](./SWITCHING.md) — switching models and agents
 - [`CONFIGURATION.md`](./CONFIGURATION.md) — runtime env, host, and path settings
 - [`TROUBLESHOOTING.md`](./TROUBLESHOOTING.md) — symptom-driven fixes
 - [`ARCHITECTURE.md`](./ARCHITECTURE.md) — component and runtime flow overview

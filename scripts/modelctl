@@ -13,7 +13,7 @@ SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
 
 is_action() {
   case "$1" in
-    start|stop|restart|status|status-all|settings|verify|test|list) return 0 ;;
+    start|stop|restart|status|status-all|settings|verify|test|list|add) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -26,6 +26,15 @@ normalize_action() {
     verfy|veirfy) echo "verify" ;;
     *) echo "$1" ;;
   esac
+}
+
+model_add_main() {
+  local helper="$SCRIPT_DIR/lib/model_registry.py"
+  if [[ ! -f "$helper" ]]; then
+    echo "modelctl add: helper not found: $helper" >&2
+    exit 2
+  fi
+  /usr/bin/env python3 "$helper" "$@"
 }
 
 resolve_model_from_invocation() {
@@ -49,6 +58,12 @@ resolve_args() {
   if [[ -z "$arg1" ]]; then
     model_name="$(resolve_model_from_invocation)"
     action="start"
+    return
+  fi
+
+  if [[ "$arg1" == "add" ]]; then
+    model_name="__add__"
+    action="add"
     return
   fi
 
@@ -221,9 +236,18 @@ resolve_args "${1:-}" "${2:-}"
 
 if ! is_action "$action"; then
   echo "Invalid action: $action" >&2
-  echo "Usage: $(basename "$0") [start|stop|restart|status|status-all|settings|verify|test|list]" >&2
+  echo "Usage: $(basename "$0") [start|stop|restart|status|status-all|settings|verify|test|list|add]" >&2
   echo "   or: modelctl <model-profile> [start|stop|restart|status|settings|verify|test]" >&2
   exit 2
+fi
+
+if [[ "$action" == "add" ]]; then
+  load_shell_env
+  if [[ "${1:-}" == "add" ]]; then
+    shift
+  fi
+  model_add_main "$@"
+  exit 0
 fi
 
 if [[ "$action" == "start" || "$action" == "restart" || "$action" == "status" || "$action" == "settings" || "$action" == "verify" || "$action" == "test" ]]; then

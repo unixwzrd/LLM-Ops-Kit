@@ -1,5 +1,7 @@
 # Quickstart (10 Minutes)
 
+Back: [docs/INDEX.md](./INDEX.md)
+
 **Created**: 2026-02-26
 **Updated**: 2026-03-13
 
@@ -134,3 +136,9 @@ cd ~/projects/LLM-Ops-Kit
 ```
 
 If anything looks off, go to `docs/TROUBLESHOOTING.md`.
+
+## See Also
+
+- [How It Works](./HOW_IT_WORKS.md)
+- [Switching Models and Agents](./SWITCHING.md)
+- [Configuration](./CONFIGURATION.md)

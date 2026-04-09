@@ -1,5 +1,7 @@
 # Troubleshooting
 
+Back: [docs/INDEX.md](./INDEX.md)
+
 **Created**: 2026-02-26
 **Updated**: 2026-03-01
 
@@ -109,3 +111,9 @@ Checks:
 - `ssh-add -l` shows key loaded.
 - `~/.ssh/authorized_keys` on remote contains your public key.
 - remote permissions: `~/.ssh` 700, `authorized_keys` 600.
+
+## See Also
+
+- [Quickstart](./QUICKSTART.md)
+- [Configuration](./CONFIGURATION.md)
+- [How It Works](./HOW_IT_WORKS.md)

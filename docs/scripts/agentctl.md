@@ -4,10 +4,19 @@
 
 Use it when you want a control surface that matches `modelctl` and keeps agent operations separate from model operations.
 
+## Quick Examples
+
+```bash
+~/bin/agentctl switch openclaw
+~/bin/agentctl switch hermes
+~/bin/agentctl current
+~/bin/agentctl status openclaw
+```
+
 ## Usage
 
 ```bash
-~/bin/agentctl [start|stop|restart|status|logs|setup] [openclaw|hermes|all]
+~/bin/agentctl [start|stop|restart|status|current|switch|logs|setup] [openclaw|hermes|all]
 ~/bin/agentctl exec [openclaw|hermes] <command> [args...]
 ~/bin/agentctl [launchd-install|launchd-start|launchd-stop|launchd-enable|launchd-disable|launchd-remove|launchd-status] [openclaw|hermes|all]
 ```
@@ -15,6 +24,8 @@ Use it when you want a control surface that matches `modelctl` and keeps agent o
 ## Notes
 
 - `agentctl` is the toolkit-owned implementation for OpenClaw and Hermes runtime control.
+- `current` prints which backend is active.
+- `switch` stops the other backend and starts the requested backend.
 - Per-agent overrides live under `~/.llm-ops/config/agents/`.
 - Launchd uses the internal `agentctl launchd-run <backend>` path so backend-native `.env` files and selective `seckit` exports can be loaded without workspace-local wrappers.
 - Agents may also source a small shell init file before their native `.env`; Hermes defaults this to `~/.bashrc` so Conda/Python initialization can be picked up in managed runs.

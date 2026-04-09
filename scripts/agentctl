@@ -532,6 +532,55 @@ status_gateway() {
   return "$rc"
 }
 
+list_active_backends() {
+  local backend pid
+  for backend in openclaw hermes; do
+    if pid="$(read_pid "$(gateway_pid_name "$backend")" 2>/dev/null)" && is_pid_running "$pid"; then
+      printf '%s\n' "$backend"
+    fi
+  done
+}
+
+current_gateway() {
+  local -a active=()
+  local backend
+  load_shell_env
+  while IFS= read -r backend; do
+    [[ -n "$backend" ]] && active+=("$backend")
+  done < <(list_active_backends)
+  if [[ "${#active[@]}" -eq 0 ]]; then
+    echo "agentctl: active=none"
+  else
+    echo "agentctl: active=$(IFS=,; echo "${active[*]}")"
+  fi
+}
+
+switch_gateway() {
+  local target="$1"
+  local other=""
+  load_shell_env
+  ensure_runtime_dirs
+  prune_runtime_artifacts
+
+  case "$target" in
+    all)
+      start_gateway "all"
+      return
+      ;;
+    openclaw) other="hermes" ;;
+    hermes) other="openclaw" ;;
+    *)
+      echo "agentctl: unsupported switch target '$target'" >&2
+      return 2
+      ;;
+  esac
+
+  if [[ -n "$other" ]]; then
+    stop_gateway_backend "$other" || true
+  fi
+  start_gateway_backend "$target"
+}
+
 follow_gateway_logs() {
   local target="$1"
   local backend
@@ -773,7 +822,7 @@ run_launchd_action() {
 print_help() {
   cat <<'EOF'
 Usage:
-  agentctl [start|stop|restart|status|logs|setup] [openclaw|hermes|all]
+  agentctl [start|stop|restart|status|current|switch|logs|setup] [openclaw|hermes|all]
   agentctl exec [openclaw|hermes] <command> [args...]
   agentctl [launchd-install|launchd-start|launchd-stop|launchd-enable|launchd-disable|launchd-remove|launchd-status] [openclaw|hermes|all]
 
@@ -782,6 +831,8 @@ Agent runtime actions:
   stop             Stop the selected agent runtime
   restart          Restart the selected agent runtime
   status           Show wrapper/runtime status
+  current          Print which backend is currently running
+  switch           Stop the other backend and start the requested backend
   logs             Follow wrapper and backend-native logs
   setup            Run Hermes-native setup flow
   exec             Run a backend CLI command with the managed env, shell init, and seckit exports
@@ -889,6 +940,8 @@ case "$action" in
   stop) stop_gateway "$target" ;;
   restart) stop_gateway "$target" || true; start_gateway "$target" ;;
   status) status_gateway "$target" ;;
+  current) current_gateway ;;
+  switch) switch_gateway "$target" ;;
   logs) follow_gateway_logs "$target" ;;
   setup) setup_gateway "$target" ;;
   exec) shift 2; exec_gateway_command "$target" "$@" ;;

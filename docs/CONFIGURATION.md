@@ -1,5 +1,7 @@
 # Configuration Guide
 
+Back: [docs/INDEX.md](./INDEX.md)
+
 **Created**: 2026-02-28  
 **Updated**: 2026-03-27
 
@@ -48,7 +50,7 @@ Use this file when you are:
 
 ## Configuration Precedence
 
-Scripts use this precedence:
+Scripts use this precedence (earlier items override later ones):
 
 1. CLI flags (when supported)
 2. `~/.llm-ops/config.env` user config for non-secret runtime values
@@ -60,7 +62,7 @@ Scripts use this precedence:
 
 Note:
 - Toolkit scripts do not rely on `~/.openclaw/.env` by default.
-- Keep toolkit configuration in `~/.llm-ops/config.env`.
+- Keep toolkit configuration in `~/.llm-ops/config.env`, but keep it minimal if you want per-model overrides to drive behavior.
 - Keep runtime routing config in `~/.llm-ops/config.env`, not in `~/.env`.
 - Reserve `~/.env` for secret fallback values only.
 - For model-specific overrides, prefer `~/.llm-ops/config/<ModelProfile>.env`.
@@ -163,47 +165,73 @@ Notes:
 
 ## Core Environment Variables
 
-- `~/.llm-ops/config.env`: user-owned toolkit config file for host/IP/path overrides.
-- `~/.llm-ops/config/<ModelProfile>.env`: optional model-specific override file loaded by `modelctl` after the global config and before the shipped model profile.
+### Files and override sources
+
+- `~/.llm-ops/config.env`: global toolkit config (keep minimal if you prefer per-model overrides).
+- `~/.llm-ops/config/<ModelProfile>.env`: per-model overrides loaded by `modelctl`.
+- `scripts/config/hosts.env`: repo-owned default host/IP config for wrappers.
+- `~/.llm-ops/config/agents/openclaw.env`: per-backend OpenClaw overrides seeded by `agentctl`.
+- `~/.llm-ops/config/agents/hermes.env`: per-backend Hermes overrides seeded by `agentctl`.
+
+### Toolkit roots and paths
+
 - `LLMOPS_HOME`: toolkit state root (default `~/.llm-ops`).
 - `LLMOPS_RUN_DIR`: runtime pid/state dir (default `$LLMOPS_HOME/run`).
 - `LLMOPS_LOG_DIR`: toolkit log dir (default `$LLMOPS_HOME/logs`).
-- `LLMOPS_ROOT`: canonical runtime asset root, resolved from the installed runtime payload or explicit override.
-- `scripts/config/hosts.env`: centralized default host/IP file for wrappers (sync/model-proxy) in the active runtime payload.
+- `LLMOPS_ROOT`: canonical runtime asset root for the installed payload.
+
+### Hosts and ports
+
 - `LLMOPS_UPSTREAM_HOST`: default upstream model host for wrappers.
-- `LLMOPS_SYNC_HOST`: optional dedicated sync host override (falls back to `LLMOPS_UPSTREAM_HOST`).
 - `LLMOPS_UPSTREAM_PORT`: default upstream model port for wrappers.
-- `MODEL_PROXY_LISTEN_HOST`: default bind host for proxy wrappers.
-- `MODEL_PROXY_LISTEN_PORT`: default bind port for proxy wrappers.
-- `LLMOPS_GATEWAY_BACKEND`: `agentctl` backend selector (`openclaw` by default, `hermes` when set explicitly).
-- `LLMOPS_GATEWAY_PORT`: direct-run OpenClaw agent port used by `agentctl`.
-- `HERMES_GATEWAY_CMD`: command path/name used when the `agentctl` backend is `hermes`.
-- `~/.llm-ops/config/agents/openclaw.env`: optional OpenClaw backend override file seeded by `agentctl`.
-- `~/.llm-ops/config/agents/hermes.env`: optional Hermes backend override file seeded by `agentctl`.
-- `LLMOPS_AGENT_NATIVE_ENV_FILE`: backend-native `.env` file path used by the launchd runtime path.
-- `LLMOPS_AGENT_SECKIT_NAMES`: comma-separated `seckit` secret names to export for a specific backend launch.
-- `LLMOPS_SKIP_SECKIT_LOAD`: internal helper flag used when a wrapper needs to defer `seckit` loading until backend config is known.
-- `MODEL_PROXY_TAP_BIN`: optional explicit path to `model-proxy-tap`.
-- `MODEL_PROXY_LOG_ROTATE_SECONDS`: time-based rotation period for proxy-owned logs. Default `86400`.
-- `MODEL_PROXY_LOG_ROTATE_KEEP`: number of rotated proxy logs to keep. Default `5`.
-- `USE_CUSTOM_TEMPLATE`: set to `1` to enable a llama.cpp custom chat template for LLM profiles.
-- `CHAT_TEMPLATE`: explicit llama.cpp chat template override path when `USE_CUSTOM_TEMPLATE=1`.
-- `TEMP`, `TOP_P`, `TOP_K`, `MIN_P`, `PRESENCE_PENALTY`, `REPEAT_PENALTY`: explicit sampling overrides for local LLM model profiles.
+- `LLMOPS_SYNC_HOST`: optional dedicated sync host override (falls back to `LLMOPS_UPSTREAM_HOST`).
+- `MODEL_PROXY_LISTEN_HOST`: bind host for `model-proxy`.
+- `MODEL_PROXY_LISTEN_PORT`: bind port for `model-proxy`.
+
+### Agent runtime
+
+- `LLMOPS_GATEWAY_BACKEND`: `agentctl` backend selector (`openclaw` default).
+- `LLMOPS_GATEWAY_PORT`: OpenClaw direct-run port used by `agentctl`.
+- `HERMES_GATEWAY_CMD`: Hermes command path/name used by `agentctl`.
+- `LLMOPS_AGENT_NATIVE_ENV_FILE`: backend-native `.env` file path for launchd runs.
+- `LLMOPS_AGENT_SECKIT_NAMES`: comma-separated `seckit` names to export for a backend.
+- `LLMOPS_SKIP_SECKIT_LOAD`: internal flag used to defer `seckit` loading until backend config is known.
+
+### LLM templates and sampling
+
+- `USE_CUSTOM_TEMPLATE`: set to `1` to enable a llama.cpp custom chat template.
+- `CHAT_TEMPLATE`: explicit template path when `USE_CUSTOM_TEMPLATE=1`.
+- `TEMP`, `TOP_P`, `TOP_K`, `MIN_P`, `PRESENCE_PENALTY`, `REPEAT_PENALTY`: sampling overrides.
+
+### Proxy and tap
+
+- `MODEL_PROXY_TAP_BIN`: explicit path to `model-proxy-tap`.
+- `MODEL_PROXY_LOG_ROTATE_SECONDS`: rotation period in seconds (default `86400`).
+- `MODEL_PROXY_LOG_ROTATE_KEEP`: number of rotated proxy logs to keep (default `5`).
+
+### TTS bridge
+
 - `OPENAI_TTS_BASE_URL`: OpenClaw OpenAI-TTS provider base URL (for example `http://127.0.0.1:11440/v1`).
 - `TTS_BRIDGE_HOST`: bind host for `tts-bridge`.
 - `TTS_BRIDGE_PORT`: bind port for `tts-bridge`.
 - `TTS_BRIDGE_UPSTREAM_BASE`: upstream MLX Audio base URL.
 - `TTS_BRIDGE_MODEL`: default model path injected by bridge.
-- `TTS_BRIDGE_VOICE`: default voice injected by bridge. Required fallback for `CustomVoice` bridge setups unless the caller always sends `voice`.
+- `TTS_BRIDGE_VOICE`: default voice injected by bridge.
 - `TTS_BRIDGE_REF_AUDIO`: default reference audio file.
-- `TTS_BRIDGE_REF_TEXT`: default reference transcript file (or literal text if passed directly).
-- `TTS_BRIDGE_PYTHON_BIN`: python binary used by bridge launcher.
-- `LLMOPS_USE_SECKIT`: set to `1` to load secrets from `seckit` during wrapper startup.
-- `LLMOPS_SECKIT_BIN`: optional `seckit` binary path or command name (default `seckit`).
-- `LLMOPS_SECKIT_SERVICE`: `seckit` service namespace used during export (default `openclaw`).
-- `LLMOPS_SECKIT_ACCOUNT`: `seckit` account namespace used during export (default `default`).
-- `LLMOPS_SECRET_FALLBACK_WARN`: set to `0` to suppress warnings when wrappers fall back to env-provided secrets after `seckit` export fails.
-- `LLMOPS_LOG_ROTATE_BYTES`: rotate active logs after this many bytes.
+- `TTS_BRIDGE_REF_TEXT`: default reference transcript file (or literal text).
+- `TTS_BRIDGE_PYTHON_BIN`: python binary used by the bridge launcher.
+
+### Secrets
+
+- `LLMOPS_USE_SECKIT`: set to `1` to load secrets from `seckit`.
+- `LLMOPS_SECKIT_BIN`: optional `seckit` binary path (default `seckit`).
+- `LLMOPS_SECKIT_SERVICE`: `seckit` service namespace (default `openclaw`).
+- `LLMOPS_SECKIT_ACCOUNT`: `seckit` account namespace (default `default`).
+- `LLMOPS_SECRET_FALLBACK_WARN`: set to `0` to suppress env fallback warnings.
+
+### Logs and backups
+
+- `LLMOPS_LOG_ROTATE_BYTES`: rotate logs after this many bytes.
 - `LLMOPS_LOG_ROTATE_KEEP`: number of rotated logs to keep per active log.
 - `LLMOPS_LOG_ROTATE_MAX_AGE_DAYS`: optional max age for rotated logs.
 - `LLMOPS_BACKUP_KEEP`: number of runtime install backups to keep.
@@ -383,3 +411,9 @@ Warnings are only emitted when both of these are true:
 - one or more of those secrets is actually present in environment fallback
 
 This keeps commands like `tts-bridge status` quiet when they do not need secrets at all, while still warning when a command is running on env-backed secrets instead of `seckit`.
+
+## See Also
+
+- [Quickstart](./QUICKSTART.md)
+- [How It Works](./HOW_IT_WORKS.md)
+- [Switching Models and Agents](./SWITCHING.md)

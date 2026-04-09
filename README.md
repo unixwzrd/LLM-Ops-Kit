@@ -8,6 +8,8 @@ Operational toolkit for running, deploying, and maintaining a local OpenClaw sta
 
 Note: `agentctl` is the supported command for agent runtime control. `modelctl` is the supported command for model runtime control.
 
+Docs index: [docs/INDEX.md](docs/INDEX.md)
+
 ![LLM Ops Kit](docs/images/LLM-OPS-Kit-banner.png)
 
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-informational)](#) [![Shell](https://img.shields.io/badge/Shell-bash-blue)](#) [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -165,6 +167,7 @@ Installed runtime is the default operating mode. After install, normal operation
 
 ```bash
 ~/bin/agentctl [start|stop|restart|status] [openclaw|hermes|all]
+~/bin/agentctl [current|switch] [openclaw|hermes|all]
 ~/bin/agentctl logs
 ~/bin/agentctl [launchd-install|launchd-start|launchd-stop|launchd-enable|launchd-disable|launchd-remove|launchd-status] [openclaw|hermes|all]
 ~/bin/model-proxy [start|stop|restart|status]
@@ -176,6 +179,7 @@ Installed runtime is the default operating mode. After install, normal operation
 ~/bin/BGEm3 [start|stop|restart|status|settings|verify|test]
 ~/bin/modelctl list
 ~/bin/modelctl status
+~/bin/modelctl add --model <path> --name <label>
 ~/bin/modelctl <ModelProfile> [start|stop|restart|status|settings|verify|test]
 ~/bin/install-runtime [--source <repo-path>] [--prefix <install-base>] [--bin-dir <bin-dir>] [--no-links]
 ~/bin/uninstall-runtime [--prefix <install-base>] [--bin-dir <bin-dir>] [--state-file <path>] [--keep-files]
@@ -250,10 +254,13 @@ A future optional path is to add `pyproject.toml` and package wrappers for insta
 
 ## Documentation Map
 
+- [DOCS INDEX](docs/INDEX.md) — primary documentation index
 - [DEPLOYMENT_SYNC_RUNBOOK](docs/DEPLOYMENT_SYNC_RUNBOOK.md) — sync/deploy/verify workflow
 - [PROXY_TAP_RUNBOOK](docs/PROXY_TAP_RUNBOOK.md) — proxy request/response visibility + jq recipes
 - [CHANGELOG](CHANGELOG.md) — chronological operational changes
 - [QUICKSTART](docs/QUICKSTART.md) — fast path setup and startup
+- [HOW_IT_WORKS](docs/HOW_IT_WORKS.md) — plain-language system overview
+- [SWITCHING](docs/SWITCHING.md) — switching models and agents
 - [CONFIGURATION](docs/CONFIGURATION.md) — environment overrides, host/path defaults, and optional `seckit` runtime export workflow
 - [SSH_SETUP_RUNBOOK](docs/SSH_SETUP_RUNBOOK.md) — SSH key setup and deployment auth flow
 - [TROUBLESHOOTING](docs/TROUBLESHOOTING.md) — symptom-driven fixes

@@ -1,5 +1,7 @@
 # Architecture Overview
 
+Back: [docs/INDEX.md](./INDEX.md)
+
 **Created**: 2026-02-26
 **Updated**: 2026-03-01
 
@@ -38,3 +40,9 @@
 - Source of truth: `~/projects/LLM-Ops-Kit`
 - Runtime command surface: `~/bin`
 - Cross-host updates via `sync-ops-scripts` + deploy/verify link scripts.
+
+## See Also
+
+- [How It Works](./HOW_IT_WORKS.md)
+- [Configuration](./CONFIGURATION.md)
+- [Switching Models and Agents](./SWITCHING.md)

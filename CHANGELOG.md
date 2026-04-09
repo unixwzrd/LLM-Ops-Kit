@@ -7,6 +7,34 @@ All notable changes to LLM-Ops-Kit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### 2026-04-09 — Switching UX, model registration helpers, docs index and cleanup
+
+- **Scope:**
+  - Scripts
+    - `scripts/agentctl`
+    - `scripts/modelctl`
+    - `scripts/lib/model_registry.py`
+  - Documents
+    - `docs/INDEX.md`
+    - `docs/HOW_IT_WORKS.md`
+    - `docs/SWITCHING.md`
+    - `docs/README.md`
+    - `docs/QUICKSTART.md`
+    - `docs/CONFIGURATION.md`
+    - `docs/TROUBLESHOOTING.md`
+    - `docs/ARCHITECTURE.md`
+    - `docs/ADDING_MODEL_PROFILE.md`
+    - `docs/MODELCTL_GUIDE.md`
+    - `docs/scripts/agentctl.md`
+    - `README.md`
+- **Category:** `runtime`, `documentation`
+- **What changed:**
+  - Added `agentctl switch` and `agentctl current` to simplify swapping OpenClaw/Hermes.
+  - Added `modelctl add` with GGUF metadata detection via llama.cpp tools and safe fallback behavior.
+  - Moved model registration logic into a dedicated Python helper to keep shell scripts readable.
+  - Introduced `docs/INDEX.md`, `HOW_IT_WORKS.md`, and `SWITCHING.md` to make navigation and switching workflows obvious.
+  - Reworked configuration documentation to group environment variables by function.
+
 ### 2026-03-31 — Unreleased integrated runtime hardening, TTS bridge forwarding, and agentctl surface cleanup
 
 - **Scope:**
