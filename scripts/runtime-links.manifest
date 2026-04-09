@@ -5,6 +5,7 @@ agentctl|scripts/agentctl
 BGEen|scripts/BGEen
 BGEm3|scripts/BGEm3
 gateway|scripts/gateway
+Gemma4|scripts/Gemma4
 install-runtime|scripts/install-runtime.sh
 model-proxy-tap|bin/model-proxy-tap
 model-proxy|scripts/model-proxy

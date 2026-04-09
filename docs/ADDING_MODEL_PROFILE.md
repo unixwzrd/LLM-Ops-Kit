@@ -13,6 +13,7 @@
   - [6) Template workflow](#6-template-workflow)
   - [7) Validate profile before start](#7-validate-profile-before-start)
   - [8) Optional: add provider model entry in `.openclaw/openclaw.json`](#8-optional-add-provider-model-entry-in-openclawopenclawjson)
+  - [9) Optional: register model in OpenClaw and switch primary](#9-optional-register-model-in-openclaw-and-switch-primary)
 
 ## Goal
 
@@ -117,3 +118,45 @@ If creating a new template:
 - Add model entry under appropriate provider.
 - Start with placeholder id if runtime id is unknown.
 - Finalize id after first successful run confirms exact model name/id.
+
+## 9) Optional: register model in OpenClaw and switch primary
+
+OpenClaw tracks model metadata in:
+
+- `~/.openclaw/agents/main/agent/models.json`
+
+To lock the model id (as reported by llama.cpp), use one of:
+
+```bash
+~/bin/<Profile> verify
+curl -sS http://127.0.0.1:11434/v1/models
+```
+
+Then add the model under `providers.llama_cpp.models` (or the relevant provider) using the exact id.
+
+Example entry:
+
+```json
+{
+  "id": "gemma-4-31B-it-UD-Q8_K_XL.gguf",
+  "name": "Gemma4 31B IT (llama.cpp)",
+  "api": "openai-completions",
+  "reasoning": true,
+  "input": ["text", "image"],
+  "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+  "contextWindow": 262144,
+  "maxTokens": 8192
+}
+```
+
+Switch the primary model with:
+
+```bash
+agentctl exec openclaw models set llama_cpp/<model_id>
+```
+
+Example:
+
+```bash
+agentctl exec openclaw models set llama_cpp/gemma-4-31B-it-UD-Q8_K_XL.gguf
+```
