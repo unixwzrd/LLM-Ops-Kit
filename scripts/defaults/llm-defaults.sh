@@ -5,7 +5,6 @@
 
 # Identity/profile
 MODEL_TYPE="${MODEL_TYPE:-llm}"
-MODEL_PROFILE="${MODEL_PROFILE:-llm-generic}"
 
 # Model artifacts
 MODEL="${MODEL:-}"
@@ -22,6 +21,8 @@ CTX_SIZE="${CTX_SIZE:-32768}"
 GPU_LAYERS="${GPU_LAYERS:-99}"
 BATCH_SIZE="${BATCH_SIZE:-512}"
 UBATCH_SIZE="${UBATCH_SIZE:-512}"
+CACHE_TYPE_K="${CACHE_TYPE_K:-}"
+CACHE_TYPE_V="${CACHE_TYPE_V:-}"
 
 # Runtime feature flags
 USE_MLOCK="${USE_MLOCK:-1}"

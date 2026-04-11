@@ -1,9 +1,8 @@
 # shellcheck shell=bash
-# Model-specific defaults for Qwen3.5 (applied before model-kind defaults).
+# Model-specific defaults for Gemma4 (applied before model-kind defaults).
 # Fill only when still unset so external env can override.
 # Identity/profile
 MODEL_TYPE="${MODEL_TYPE:-llm}"
-MODEL_PROFILE="${MODEL_PROFILE:-Qwen3_5}"
 
 # Model artifacts
 MODEL="${MODEL:-$HOME/LLM_Repository/gemma-4-31B-it-GGUF/gemma-4-31B-it-UD-Q8_K_XL.gguf}"
@@ -15,11 +14,13 @@ HOST="${HOST:-0.0.0.0}"
 THREADS="${THREADS:-$(default_threads)}"
 THREADS_BATCH="${THREADS_BATCH:-$THREADS}"
 
-# llama.cpp sizing (Qwen3.5-tuned defaults)
+# llama.cpp sizing (Gemma4-tuned defaults)
 CTX_SIZE="${CTX_SIZE:-32768}"
 GPU_LAYERS="${GPU_LAYERS:-99}"
 BATCH_SIZE="${BATCH_SIZE:-1024}"
 UBATCH_SIZE="${UBATCH_SIZE:-512}"
+CACHE_TYPE_K="${CACHE_TYPE_K:-}"
+CACHE_TYPE_V="${CACHE_TYPE_V:-}"
 
 # Runtime feature flags
 USE_MLOCK="${USE_MLOCK:-1}"

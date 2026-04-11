@@ -202,6 +202,7 @@ Notes:
 - `USE_CUSTOM_TEMPLATE`: set to `1` to enable a llama.cpp custom chat template.
 - `CHAT_TEMPLATE`: explicit template path when `USE_CUSTOM_TEMPLATE=1`.
 - `TEMP`, `TOP_P`, `TOP_K`, `MIN_P`, `PRESENCE_PENALTY`, `REPEAT_PENALTY`: sampling overrides.
+- `CACHE_TYPE_K`, `CACHE_TYPE_V`: KV cache data types for llama.cpp (for example `q8_0`).
 
 ### Proxy and tap
 

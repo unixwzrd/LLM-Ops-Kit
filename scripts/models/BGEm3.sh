@@ -4,7 +4,6 @@
 
 # Identity/profile
 MODEL_TYPE="${MODEL_TYPE:-embedding}"
-MODEL_PROFILE="${MODEL_PROFILE:-bge-m3}"
 
 # Model artifacts
 MODEL="${MODEL:-$HOME/LLM_Repository/bge-m3-Q8_0-GGUF/bge-m3-q8_0.gguf}"
@@ -20,6 +19,8 @@ CTX_SIZE="${CTX_SIZE:-8192}"
 GPU_LAYERS="${GPU_LAYERS:-99}"
 BATCH_SIZE="${BATCH_SIZE:-3072}"
 UBATCH_SIZE="${UBATCH_SIZE:-3072}"
+CACHE_TYPE_K="${CACHE_TYPE_K:-}"
+CACHE_TYPE_V="${CACHE_TYPE_V:-}"
 
 # Embedding-specific
 POOLING="${POOLING:-mean}"

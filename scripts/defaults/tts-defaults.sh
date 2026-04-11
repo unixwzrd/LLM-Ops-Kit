@@ -3,7 +3,6 @@
 
 # Identity/profile
 MODEL_TYPE="${MODEL_TYPE:-tts}"
-MODEL_PROFILE="${MODEL_PROFILE:-tts-generic}"
 
 # TTS model reference (path or model id used by clients)
 MODEL="${MODEL:-}"

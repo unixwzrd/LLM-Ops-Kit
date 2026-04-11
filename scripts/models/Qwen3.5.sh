@@ -3,7 +3,6 @@
 # Fill only when still unset so external env can override.
 # Identity/profile
 MODEL_TYPE="${MODEL_TYPE:-llm}"
-MODEL_PROFILE="${MODEL_PROFILE:-Qwen3_5}"
 
 # Model artifacts
 MODEL="${MODEL:-$HOME/LLM_Repository/Qwen3.5-35B-A3B-GGUF/Qwen3.5-35B-A3B-Q8_0.gguf}"
@@ -20,6 +19,8 @@ CTX_SIZE="${CTX_SIZE:-32768}"
 GPU_LAYERS="${GPU_LAYERS:-99}"
 BATCH_SIZE="${BATCH_SIZE:-1024}"
 UBATCH_SIZE="${UBATCH_SIZE:-512}"
+CACHE_TYPE_K="${CACHE_TYPE_K:-}"
+CACHE_TYPE_V="${CACHE_TYPE_V:-}"
 
 # Runtime feature flags
 USE_MLOCK="${USE_MLOCK:-1}"

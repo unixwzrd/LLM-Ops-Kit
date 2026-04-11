@@ -32,6 +32,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   - Added `agentctl switch` and `agentctl current` to simplify swapping OpenClaw/Hermes.
   - Added `modelctl add` with GGUF metadata detection via llama.cpp tools and safe fallback behavior.
   - Moved model registration logic into a dedicated Python helper to keep shell scripts readable.
+  - Removed per-profile MODEL_PROFILE defaults; launcher name now defines the profile identity.
+  - Added `CACHE_TYPE_K` / `CACHE_TYPE_V` support for llama.cpp KV cache tuning.
   - Introduced `docs/INDEX.md`, `HOW_IT_WORKS.md`, and `SWITCHING.md` to make navigation and switching workflows obvious.
   - Reworked configuration documentation to group environment variables by function.
 

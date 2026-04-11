@@ -21,6 +21,8 @@ Back: [docs/INDEX.md](./INDEX.md)
 `modelctl` is the canonical launcher used by runtime commands like `Qwen3`, `Qwen3.5`, and `BGEm3`.
 Any launcher name is supported as long as `scripts/models/<Launcher>.sh` exists.
 
+`modelctl` uses the launcher name as the model profile identifier.
+
 ## Commands
 
 ```bash
@@ -115,7 +117,7 @@ Set these values directly in `~/.llm-ops/config.env`, `~/.llm-ops/config/<Profil
 
 `modelctl` validates required settings before start:
 
-- Common: `MODEL_PROFILE`, `MODEL`, `MODEL_TYPE`, `PORT`, `HOST`, `THREADS`, `THREADS_BATCH`, `CTX_SIZE`, `GPU_LAYERS`, `BATCH_SIZE`, `UBATCH_SIZE`
+- Common: `MODEL`, `MODEL_TYPE`, `PORT`, `HOST`, `THREADS`, `THREADS_BATCH`, `CTX_SIZE`, `GPU_LAYERS`, `BATCH_SIZE`, `UBATCH_SIZE`
 - LLM with template enabled: `CHAT_TEMPLATE`
 - Embedding: `POOLING`
 - TTS: `TTS_PYTHON_BIN`, `TTS_SERVER_MODULE`
@@ -128,13 +130,15 @@ Set these values directly in `~/.llm-ops/config.env`, `~/.llm-ops/config/<Profil
 - PID and log file path
 - `started_at` from model state file when available
 - API probe result (`ok`/`failed`) against `http://<HOST>:<PORT>/v1/models`
+ - Full settings output (all fields printed even when blank)
+ - A process check that verifies the PID matches the expected command shape
 
 ## Where logs/pids live
 
-- LLM/embedding PID name: `llama-$MODEL_PROFILE`
-- LLM/embedding log file: `$LLMOPS_LOG_DIR/llama-server-$MODEL_PROFILE.log`
-- TTS PID name: `tts-$MODEL_PROFILE`
-- TTS log file: `$LLMOPS_LOG_DIR/tts-server-$MODEL_PROFILE.log`
+- LLM/embedding PID name: `llama-$<Launcher>`
+- LLM/embedding log file: `$LLMOPS_LOG_DIR/llama-server-$<Launcher>.log`
+- TTS PID name: `tts-$<Launcher>`
+- TTS log file: `$LLMOPS_LOG_DIR/tts-server-$<Launcher>.log`
 - State file: `$LLMOPS_RUN_DIR/<pid_name>.state`
 
 Use `status` to see active pid and log path.

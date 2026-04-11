@@ -4,7 +4,6 @@
 
 # Identity/profile
 MODEL_TYPE="${MODEL_TYPE:-embedding}"
-MODEL_PROFILE="${MODEL_PROFILE:-bge-small-en}"
 
 # Model artifacts
 MODEL="${MODEL:-$HOME/LLM_Repository/bge-small-en-v1.5-Q8_0-GGUF/bge-small-en-v1.5-q8_0.gguf}"
@@ -21,6 +20,8 @@ CTX_SIZE="${CTX_SIZE:-512}"
 GPU_LAYERS="${GPU_LAYERS:-99}"
 BATCH_SIZE="${BATCH_SIZE:-1024}"
 UBATCH_SIZE="${UBATCH_SIZE:-1024}"
+CACHE_TYPE_K="${CACHE_TYPE_K:-}"
+CACHE_TYPE_V="${CACHE_TYPE_V:-}"
 
 # Embedding-specific
 POOLING="${POOLING:-mean}"

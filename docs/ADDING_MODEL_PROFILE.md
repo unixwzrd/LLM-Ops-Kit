@@ -42,7 +42,6 @@ Then edit only model-specific values.
 Set at minimum:
 
 - `MODEL_TYPE` (`llm`, `embedding`, stt, or `tts`)
-- `MODEL_PROFILE`
 - `MODEL`
 - `PORT`
 - `CTX_SIZE`, `GPU_LAYERS`, `BATCH_SIZE`, `UBATCH_SIZE`

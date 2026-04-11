@@ -19,12 +19,15 @@ is_action() {
 }
 
 normalize_action() {
-  case "$1" in
+  local raw="$1"
+  local lower
+  lower="$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]')"
+  case "$lower" in
     setttings|setings|settigns) echo "settings" ;;
     staus|statsu) echo "status" ;;
     restar|retsart) echo "restart" ;;
     verfy|veirfy) echo "verify" ;;
-    *) echo "$1" ;;
+    *) echo "$lower" ;;
   esac
 }
 
@@ -185,30 +188,32 @@ print_model_settings() {
   echo "modelctl settings ($model_name)"
   echo "  RUNTIME_MODE=$(runtime_mode)"
   echo "  RUNTIME_ROOT=$(runtime_asset_root)"
-  echo "  MODEL_PROFILE=$MODEL_PROFILE"
-  echo "  MODEL_TYPE=$MODEL_TYPE"
-  echo "  MODEL=$MODEL"
-  [[ -n "${MMPROJ:-}" ]] && echo "  MMPROJ=$MMPROJ"
-  echo "  PORT=$PORT"
-  echo "  HOST=$HOST"
+  echo "  MODEL_PROFILE=${MODEL_PROFILE:-}"
+  echo "  MODEL_TYPE=${MODEL_TYPE:-}"
+  echo "  MODEL=${MODEL:-}"
+  echo "  MMPROJ=${MMPROJ:-}"
+  echo "  HOST=${HOST:-}"
+  echo "  PORT=${PORT:-}"
   if [[ "$MODEL_TYPE" == "llm" || "$MODEL_TYPE" == "embedding" ]]; then
-    echo "  THREADS=$THREADS"
-    echo "  THREADS_BATCH=$THREADS_BATCH"
-    echo "  CTX_SIZE=$CTX_SIZE"
-    echo "  GPU_LAYERS=$GPU_LAYERS"
-    echo "  BATCH_SIZE=$BATCH_SIZE"
-    echo "  UBATCH_SIZE=$UBATCH_SIZE"
+    echo "  THREADS=${THREADS:-}"
+    echo "  THREADS_BATCH=${THREADS_BATCH:-}"
+    echo "  CTX_SIZE=${CTX_SIZE:-}"
+    echo "  GPU_LAYERS=${GPU_LAYERS:-}"
+    echo "  BATCH_SIZE=${BATCH_SIZE:-}"
+    echo "  UBATCH_SIZE=${UBATCH_SIZE:-}"
+    echo "  CACHE_TYPE_K=${CACHE_TYPE_K:-}"
+    echo "  CACHE_TYPE_V=${CACHE_TYPE_V:-}"
     echo "  TEMP=${TEMP:-}"
     echo "  TOP_P=${TOP_P:-}"
     echo "  TOP_K=${TOP_K:-}"
     echo "  MIN_P=${MIN_P:-}"
     echo "  PRESENCE_PENALTY=${PRESENCE_PENALTY:-}"
     echo "  REPEAT_PENALTY=${REPEAT_PENALTY:-}"
-    echo "  USE_NO_WEBUI=${USE_NO_WEBUI:-0}"
-    echo "  USE_NO_MMAP=${USE_NO_MMAP:-0}"
-    echo "  USE_MLOCK=${USE_MLOCK:-0}"
-    echo "  DIRECT_IO=${DIRECT_IO:-0}"
-    echo "  VERBOSE_PROMPT=${VERBOSE_PROMPT:-0}"
+    echo "  USE_NO_WEBUI=${USE_NO_WEBUI:-}"
+    echo "  USE_NO_MMAP=${USE_NO_MMAP:-}"
+    echo "  USE_MLOCK=${USE_MLOCK:-}"
+    echo "  DIRECT_IO=${DIRECT_IO:-}"
+    echo "  VERBOSE_PROMPT=${VERBOSE_PROMPT:-}"
   fi
   if [[ "$MODEL_TYPE" == "embedding" ]]; then
     echo "  POOLING=${POOLING:-}"
@@ -217,15 +222,14 @@ print_model_settings() {
     fi
   fi
   if [[ "$MODEL_TYPE" == "llm" ]]; then
-    echo "  USE_CUSTOM_TEMPLATE=${USE_CUSTOM_TEMPLATE:-0}"
-    if [[ "${USE_CUSTOM_TEMPLATE:-0}" == "1" ]]; then
-      echo "  CHAT_TEMPLATE=${CHAT_TEMPLATE:-}"
-    fi
+    echo "  USE_CUSTOM_TEMPLATE=${USE_CUSTOM_TEMPLATE:-}"
+    echo "  CHAT_TEMPLATE=${CHAT_TEMPLATE:-}"
   fi
   if [[ "$MODEL_TYPE" == "tts" ]]; then
     echo "  TTS_PYTHON_BIN=${TTS_PYTHON_BIN:-}"
     echo "  TTS_SERVER_MODULE=${TTS_SERVER_MODULE:-}"
     echo "  TTS_API_KEY=${TTS_API_KEY:+<set>}"
+    [[ -z "${TTS_API_KEY:-}" ]] && echo "  TTS_API_KEY="
     echo "  TTS_SERVER_ARGS=${TTS_SERVER_ARGS:-}"
   fi
 }
@@ -319,6 +323,10 @@ fi
 ensure_model_override_template "$model_name"
 load_model_defaults "$model_name"
 
+if [[ -z "${MODEL_PROFILE:-}" ]]; then
+  MODEL_PROFILE="$model_name"
+fi
+
 if [[ "$MODEL_TYPE" == "llm" || "$MODEL_TYPE" == "embedding" ]]; then
   THREADS_BATCH="${THREADS_BATCH:-$THREADS}"
 fi
@@ -385,31 +393,62 @@ status_probe() {
 }
 
 status_model() {
+  local show_settings="${1:-1}"
+  local pid_file
+  pid_file="$(pid_file_for "$pid_name")"
   if pid="$(read_pid "$pid_name" 2>/dev/null)"; then
     if is_pid_running "$pid"; then
       if ! pid_matches_expected_process "$pid"; then
-        echo "$pid_name: pid mismatch pid=$pid log=$model_log_file"
+        echo "$pid_name: status=pid_mismatch pid=$pid log=$model_log_file"
+        echo "  running=unknown"
+        echo "  expected=type=$MODEL_TYPE port=$PORT"
+        echo "  actual_command=$(ps -o command= -p "$pid" 2>/dev/null || echo '<unknown>')"
         [[ -f "$state_file" ]] && echo "  state_file=$state_file"
-        print_model_settings
+        if [[ "$show_settings" == "1" ]]; then
+          print_model_settings
+        fi
         return 1
       fi
-      echo "$pid_name: running pid=$pid log=$model_log_file"
+      echo "$pid_name: status=running pid=$pid log=$model_log_file"
+      echo "  running=true"
       if read_model_state 2>/dev/null; then
         echo "  started_at=${STARTED_AT:-unknown}"
         echo "  state_file=$state_file"
       fi
       status_probe
-      print_model_settings
+      if [[ "$show_settings" == "1" ]]; then
+        print_model_settings
+      fi
       return 0
     fi
-    echo "$pid_name: stale pid=$pid log=$model_log_file"
+    echo "$pid_name: status=stale pid=$pid log=$model_log_file"
+    echo "  running=false"
+    echo "  expected=type=$MODEL_TYPE port=$PORT"
     [[ -f "$state_file" ]] && echo "  state_file=$state_file"
-    print_model_settings
+    if [[ "$show_settings" == "1" ]]; then
+      print_model_settings
+    fi
+    stop_log_marktime "$pid_name"
+    rm -f "$pid_file"
+    clear_model_state
+    echo "  action=cleared_stale_pidfile"
     return 1
   fi
-  echo "$pid_name: stopped log=$model_log_file"
-  [[ -f "$state_file" ]] && echo "  state_file=$state_file"
-  print_model_settings
+  echo "$pid_name: status=stopped log=$model_log_file"
+  echo "  running=false"
+  if [[ -f "$state_file" ]]; then
+    echo "  state_file=$state_file"
+  else
+    echo "  state_file=<missing>"
+  fi
+  if [[ -f "$pid_file" ]]; then
+    echo "  pid_file=$pid_file"
+  else
+    echo "  pid_file=<missing>"
+  fi
+  if [[ "$show_settings" == "1" ]]; then
+    print_model_settings
+  fi
   return 1
 }
 
@@ -465,6 +504,12 @@ start_model() {
         echo "WARNING: DIRECT_IO=1 but llama-server does not support --direct-io; skipping."
       fi
     fi
+    if [[ -n "${CACHE_TYPE_K:-}" ]]; then
+      RUNTIME_FLAGS+=(--cache-type-k "$CACHE_TYPE_K")
+    fi
+    if [[ -n "${CACHE_TYPE_V:-}" ]]; then
+      RUNTIME_FLAGS+=(--cache-type-v "$CACHE_TYPE_V")
+    fi
     if [[ "${DISABLE_TOOL_GRAMMAR:-0}" == "1" ]]; then
       if /usr/local/bin/llama-server --help 2>&1 | rg -q -- '--no-tool-grammar'; then
         EXTRA_ARGS+=(--no-tool-grammar)
@@ -492,6 +537,12 @@ start_model() {
       else
         echo "WARNING: DIRECT_IO=1 but llama-server does not support --direct-io; skipping."
       fi
+    fi
+    if [[ -n "${CACHE_TYPE_K:-}" ]]; then
+      RUNTIME_FLAGS+=(--cache-type-k "$CACHE_TYPE_K")
+    fi
+    if [[ -n "${CACHE_TYPE_V:-}" ]]; then
+      RUNTIME_FLAGS+=(--cache-type-v "$CACHE_TYPE_V")
     fi
   elif [[ "$MODEL_TYPE" == "tts" ]]; then
     tts_cmd=( "$TTS_PYTHON_BIN" -m "$TTS_SERVER_MODULE" --host "$HOST" --port "$PORT" )
@@ -534,7 +585,7 @@ start_model() {
   start_log_marktime "$pid_name" "$MODEL_PROFILE" "$LOG_FILE"
   echo "Started $pid_name pid=$pid log=$LOG_FILE"
   sleep 1
-  status_model || true
+  status_model 0 || true
 }
 
 stop_model() {
@@ -666,7 +717,7 @@ case "$action" in
   start) start_model ;;
   stop) stop_model ;;
   restart) stop_model || true; start_model ;;
-  status) status_model ;;
+  status) status_model 1 ;;
   settings) print_model_settings ;;
   verify) verify_model ;;
   test) test_model ;;
