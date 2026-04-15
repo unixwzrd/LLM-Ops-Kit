@@ -29,6 +29,7 @@ Use it when you want a control surface that matches `modelctl` and keeps agent o
 - Per-agent overrides live under `~/.llm-ops/config/agents/`.
 - Launchd uses the internal `agentctl launchd-run <backend>` path so backend-native `.env` files and selective `seckit` exports can be loaded without workspace-local wrappers.
 - Agents may also source a small shell init file before their native `.env`; Hermes defaults this to `~/.bashrc` so Conda/Python initialization can be picked up in managed runs.
+- Hermes is configured in the template to use Seckit by default (`HERMES_USE_SECKIT=1`). Keep `~/.hermes/.env` placeholder-only.
 - `launchd-install` writes a per-backend plist under `~/Library/LaunchAgents/` and starts it immediately.
 - `launchd-start` and `launchd-stop` manage the loaded agent without rewriting the plist.
 - `launchd-enable` and `launchd-disable` control whether launchd may run the agent automatically.

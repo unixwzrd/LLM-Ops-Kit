@@ -86,15 +86,17 @@ Effective precedence:
 1. CLI action and any runtime flags passed directly to the launcher
 2. exported environment variables
 3. `~/.llm-ops/config.env`
-4. `~/.llm-ops/config/<ModelProfile>.env`
-5. shipped model profile under `scripts/models/<ModelProfile>.sh`
-6. model-type defaults under `scripts/defaults/`
+4. global defaults under `scripts/defaults/global-defaults.sh`
+5. model-type defaults under `scripts/defaults/`
+6. shipped model profile under `scripts/models/<ModelProfile>.sh`
+7. `~/.llm-ops/config/<ModelProfile>.env`
 
 Notes:
 
 - `modelctl` is the wrapper that owns per-model override files.
 - If the current `.env`-style override file is missing, `modelctl` auto-seeds it.
 - Legacy `~/.llm-ops/config/<ModelProfile>.sh` files are still loaded and warned about.
+- `modelctl` warns when overrides are missing new variables added to shipped profiles.
 
 ### `model-proxy`
 
@@ -140,10 +142,12 @@ Notes:
 - Hermes-specific wrapper defaults can be customized in `~/.llm-ops/config/agents/hermes.env`.
 - Hermes-native runtime behavior is loaded by Hermes from:
   - `~/.hermes/config.yaml`
-  - `~/.hermes/.env`
+  - `~/.hermes/.env` (keep placeholder-only; Hermes always reads it)
   - legacy `~/.hermes/gateway.json`
 - `LLMOPS_GATEWAY_PORT` only applies to the OpenClaw backend.
 - `HERMES_GATEWAY_CMD` overrides the command used to launch Hermes when `backend=hermes`.
+ - Secrets-Kit can be injected for Hermes by setting `HERMES_USE_SECKIT=1` and (optionally)
+   `HERMES_SECKIT_SERVICE`, `HERMES_SECKIT_ACCOUNT`, and `HERMES_SECKIT_NAMES`.
 
 ### `tts-bridge`
 
@@ -196,6 +200,11 @@ Notes:
 - `LLMOPS_AGENT_NATIVE_ENV_FILE`: backend-native `.env` file path for launchd runs.
 - `LLMOPS_AGENT_SECKIT_NAMES`: comma-separated `seckit` names to export for a backend.
 - `LLMOPS_SKIP_SECKIT_LOAD`: internal flag used to defer `seckit` loading until backend config is known.
+ - `HERMES_USE_SECKIT`: load secrets from `seckit` before Hermes reads `.env` (default `0`).
+ - `HERMES_SECKIT_SERVICE`: `seckit` service namespace for Hermes (default `hermes`).
+ - `HERMES_SECKIT_ACCOUNT`: `seckit` account namespace for Hermes (default `default`).
+ - `HERMES_SECKIT_NAMES`: comma-separated `seckit` names to export for Hermes.
+ - `HERMES_SKIP_DOTENV`: skip `~/.hermes/.env` entirely (default `0`).
 
 ### LLM templates and sampling
 
@@ -304,7 +313,7 @@ export MODEL_PROXY_LISTEN_PORT="<listen-port>"
 
 ## Optional: Secrets Kit Integration
 
-If you do not want sensitive values in `.env` files, use `seckit` and let the shared LLM-Ops-Kit runtime loader import those values during startup.
+If you do not want sensitive values in `.env` files, use `seckit` and let the shared LLM-Ops-Kit runtime loader import those values during startup. Keep `.env` files placeholder-only.
 
 Project:
 
@@ -340,12 +349,11 @@ Notes:
 - When enabled, the shared runtime loader imports `seckit` exports before `agentctl`, `model-proxy`, `tts-bridge`, and related wrappers start.
 - If `seckit` is missing or export fails, wrappers log a warning and continue without imported secrets.
 - Do not run wrapper startup under `bash -x` / `set -x` when `LLMOPS_USE_SECKIT=1`; shell tracing can expose exported secrets.
+- Use `scripts/seckit-migrate-service.sh` to copy secrets between namespaces (for example, OpenClaw → Hermes).
 
 Current runtime note:
 
-- `Secrets-Kit` integration is intentionally disabled for live OpenClaw startup on the primary operator machine while the agent runtime path is being stabilized.
-- The current operational setting is `LLMOPS_USE_SECKIT=0`.
-- `seckit` remains installed for manual use, migration, export, and future re-integration.
+- `seckit` is the preferred secret source for OpenClaw and Hermes.
 
 ## Bootstrapping
 

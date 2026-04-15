@@ -1,11 +1,34 @@
 # Agent Ops Changelog
 
 **Created**: 2026-02-20
-**Updated**: 2026-03-31
+**Updated**: 2026-04-13
 
 All notable changes to LLM-Ops-Kit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+### 2026-04-13 — Hermes Seckit defaults, model default layering, and recovery tooling
+
+- **Scope:**
+  - Scripts
+    - `scripts/agents/hermes.env`
+    - `scripts/modelctl`
+    - `scripts/defaults/global-defaults.sh`
+    - `scripts/seckit-migrate-service.sh`
+  - Documents
+    - `docs/CONFIGURATION.md`
+    - `docs/scripts/agentctl.md`
+    - `docs/internal/TODO.md`
+- **Category:** `security`, `runtime`, `configuration`, `documentation`
+- **What changed:**
+  - Switched the shipped Hermes agent template to prefer Seckit-managed secrets by default.
+  - Added explicit Hermes Seckit namespace knobs and documented the requirement that `~/.hermes/.env` stay placeholder-only.
+  - Added a global defaults layer to the `modelctl` precedence stack so configuration resolution is now global -> model type -> model profile -> user override.
+  - Added per-profile override drift warnings when shipped model profiles gain new settings missing from user-owned override files.
+  - Added `scripts/seckit-migrate-service.sh` to copy secrets between Seckit service/account namespaces for workflows such as OpenClaw -> Hermes migration.
+  - Updated internal TODO tracking to reflect the new Seckit runtime recovery direction.
+- **Why:**
+  - Keep secrets out of plaintext runtime files, make Hermes fit the same operational model as OpenClaw, and reduce silent configuration drift as model profiles evolve.
 
 ### 2026-04-09 — Switching UX, model registration helpers, docs index and cleanup
 

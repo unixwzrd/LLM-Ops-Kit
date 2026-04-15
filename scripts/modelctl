@@ -95,27 +95,16 @@ load_model_defaults() {
   # Precedence (highest -> lowest):
   # 1) external environment
   # 2) ~/.llm-ops/config.env (via load_shell_env)
-  # 3) ~/.llm-ops/config/<Model>.env
-  # 4) model profile
-  # 5) model-kind defaults
-  # 6) global llama.cpp defaults
+  # 3) global defaults
+  # 4) model-kind defaults
+  # 5) model profile
+  # 6) ~/.llm-ops/config/<Model>.env
 
-  # 3) user-owned per-model override
-  if [[ -f "$model_override_file" ]]; then
-    # shellcheck disable=SC1090
-    . "$model_override_file"
-  elif [[ -f "$legacy_override_file" ]]; then
-    echo "modelctl: legacy per-model override detected at $legacy_override_file" >&2
-    echo "modelctl: prefer renaming it to $model_override_file" >&2
-    # shellcheck disable=SC1090
-    . "$legacy_override_file"
-  fi
-
-  # 4) model profile
+  # 3) global defaults
   # shellcheck disable=SC1090,SC1091
-  . "$model_file"
+  . "$SCRIPT_DIR/defaults/global-defaults.sh"
 
-  # 5) model-type defaults
+  # 4) model-type defaults
   case "${MODEL_TYPE:-}" in
     llm)
       # shellcheck disable=SC1091
@@ -139,6 +128,38 @@ load_model_defaults() {
       exit 2
       ;;
   esac
+
+  # 5) model profile
+  # shellcheck disable=SC1090,SC1091
+  . "$model_file"
+
+  # 6) user-owned per-model override
+  if [[ -f "$model_override_file" ]]; then
+    # shellcheck disable=SC1090
+    . "$model_override_file"
+    warn_override_drift "$model_file" "$model_override_file"
+  elif [[ -f "$legacy_override_file" ]]; then
+    echo "modelctl: legacy per-model override detected at $legacy_override_file" >&2
+    echo "modelctl: prefer renaming it to $model_override_file" >&2
+    # shellcheck disable=SC1090
+    . "$legacy_override_file"
+    warn_override_drift "$model_file" "$legacy_override_file"
+  fi
+}
+
+warn_override_drift() {
+  local model_file="$1"
+  local override_file="$2"
+  local -a profile_vars=()
+  local -a override_vars=()
+  local missing
+  mapfile -t profile_vars < <(grep -E '^[A-Z][A-Z0-9_]*=' "$model_file" | cut -d= -f1 | sort -u)
+  mapfile -t override_vars < <(grep -E '^[A-Z][A-Z0-9_]*=' "$override_file" | cut -d= -f1 | sort -u)
+  missing="$(comm -23 <(printf '%s\n' "${profile_vars[@]}") <(printf '%s\n' "${override_vars[@]}") | tr '\n' ' ')"
+  if [[ -n "$missing" ]]; then
+    echo "modelctl: override missing new profile settings in $(basename "$override_file"):" >&2
+    echo "  $missing" >&2
+  fi
 }
 
 require_non_empty() {
