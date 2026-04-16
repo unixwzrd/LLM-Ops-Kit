@@ -95,16 +95,43 @@ load_model_defaults() {
   # Precedence (highest -> lowest):
   # 1) external environment
   # 2) ~/.llm-ops/config.env (via load_shell_env)
-  # 3) global defaults
-  # 4) model-kind defaults
-  # 5) model profile
-  # 6) ~/.llm-ops/config/<Model>.env
+  # 3) ~/.llm-ops/config/<Model>.env
+  # 4) model profile
+  # 5) model-kind defaults
+  # 6) global defaults
+  #
+  # Implementation detail:
+  # - source global defaults first
+  # - source the user override early because the seeded override file uses the
+  #   same ${VAR:-...} template style as the model profile
+  # - source the model profile once to discover MODEL_TYPE
+  # - source model-kind defaults
+  # - source the model profile again so profile values override kind defaults
+  # - do not re-source the user override late, or plain assignments would beat
+  #   explicit external environment settings
 
   # 3) global defaults
   # shellcheck disable=SC1090,SC1091
   . "$SCRIPT_DIR/defaults/global-defaults.sh"
 
-  # 4) model-type defaults
+  # 3) user-owned per-model override
+  if [[ -f "$model_override_file" ]]; then
+    # shellcheck disable=SC1090
+    . "$model_override_file"
+    warn_override_drift "$model_file" "$model_override_file"
+  elif [[ -f "$legacy_override_file" ]]; then
+    echo "modelctl: legacy per-model override detected at $legacy_override_file" >&2
+    echo "modelctl: prefer renaming it to $model_override_file" >&2
+    # shellcheck disable=SC1090
+    . "$legacy_override_file"
+    warn_override_drift "$model_file" "$legacy_override_file"
+  fi
+
+  # 4a) model profile discovery pass
+  # shellcheck disable=SC1090,SC1091
+  . "$model_file"
+
+  # 5) model-type defaults
   case "${MODEL_TYPE:-}" in
     llm)
       # shellcheck disable=SC1091
@@ -129,22 +156,9 @@ load_model_defaults() {
       ;;
   esac
 
-  # 5) model profile
+  # 4b) model profile precedence pass
   # shellcheck disable=SC1090,SC1091
   . "$model_file"
-
-  # 6) user-owned per-model override
-  if [[ -f "$model_override_file" ]]; then
-    # shellcheck disable=SC1090
-    . "$model_override_file"
-    warn_override_drift "$model_file" "$model_override_file"
-  elif [[ -f "$legacy_override_file" ]]; then
-    echo "modelctl: legacy per-model override detected at $legacy_override_file" >&2
-    echo "modelctl: prefer renaming it to $model_override_file" >&2
-    # shellcheck disable=SC1090
-    . "$legacy_override_file"
-    warn_override_drift "$model_file" "$legacy_override_file"
-  fi
 }
 
 warn_override_drift() {

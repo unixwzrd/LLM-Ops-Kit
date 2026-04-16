@@ -47,6 +47,13 @@ is_managed_link_target() {
   return 1
 }
 
+is_same_file_content() {
+  local a="$1"
+  local b="$2"
+  [[ -f "$a" && -f "$b" ]] || return 1
+  cmp -s "$a" "$b"
+}
+
 link_one() {
   local target="$1"
   local src="$2"
@@ -76,6 +83,12 @@ link_one() {
         echo "CONFLICT: $target -> $actual (expected $src); skipped." >&2
         conflicts=$((conflicts + 1))
         return 1
+      fi
+      if is_same_file_content "$target" "$src"; then
+        rm -f "$target"
+        ln -s "$src" "$target"
+        echo "HEALED_REGULAR_FILE: $target -> $src"
+        return 0
       fi
       echo "CONFLICT: $target exists and is not a symlink; skipped." >&2
       conflicts=$((conflicts + 1))

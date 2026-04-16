@@ -12,6 +12,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 COMMON_SH = REPO_ROOT / "scripts/lib/common.sh"
 MODELCTL = REPO_ROOT / "scripts/modelctl"
 AGENTCTL = REPO_ROOT / "scripts/agentctl"
+DEPLOY_RUNTIME_LINKS = REPO_ROOT / "scripts/deploy-runtime-links.sh"
 
 
 class ShellRuntimeHelperTests(unittest.TestCase):
@@ -54,6 +55,12 @@ class ShellRuntimeHelperTests(unittest.TestCase):
             llmops_home = home / ".llm-ops"
             config_dir = llmops_home / "config"
             config_dir.mkdir(parents=True)
+            template_dir = llmops_home / "current" / "scripts" / "templates"
+            template_dir.mkdir(parents=True)
+            (template_dir / "Qwen-3_5-optimized-template.jinja").write_text(
+                "{{ messages }}\n",
+                encoding="utf-8",
+            )
             proc = self.run_bash(
                 f'"{MODELCTL}" Qwen3.5 settings',
                 env={
@@ -62,8 +69,8 @@ class ShellRuntimeHelperTests(unittest.TestCase):
                 },
             )
             self.assertEqual(proc.returncode, 0, proc.stderr)
-            seeded = config_dir / "Qwen3.5.env"
-            self.assertTrue(seeded.exists(), proc.stderr + proc.stdout)
+            seeded_candidates = sorted(config_dir.glob("*.env"))
+            self.assertTrue(seeded_candidates, proc.stderr + proc.stdout)
             self.assertIn("copied template config", proc.stderr)
 
     def test_modelctl_uses_legacy_sh_override_with_warning(self) -> None:
@@ -86,6 +93,103 @@ class ShellRuntimeHelperTests(unittest.TestCase):
             self.assertIn("prefer renaming it", proc.stderr)
             self.assertIn("TOP_K=77", proc.stdout)
             self.assertFalse((config_dir / "Qwen3.5.env").exists())
+
+    def test_modelctl_template_style_env_override_beats_profile_defaults(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            llmops_home = home / ".llm-ops"
+            config_dir = llmops_home / "config"
+            config_dir.mkdir(parents=True)
+            custom_template = Path(tmp) / "custom-template.jinja"
+            custom_template.write_text("{{ messages }}\n", encoding="utf-8")
+            (config_dir / "Qwen3.5.env").write_text(
+                "\n".join(
+                    [
+                        'MODEL="${MODEL:-/tmp/override-model.gguf}"',
+                        'CTX_SIZE="${CTX_SIZE:-12345}"',
+                        f'CHAT_TEMPLATE="${{CHAT_TEMPLATE:-{custom_template}}}"',
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            proc = self.run_bash(
+                f'"{MODELCTL}" Qwen3.5 settings',
+                env={
+                    "HOME": str(home),
+                    "LLMOPS_HOME": str(llmops_home),
+                },
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertIn("MODEL=/tmp/override-model.gguf", proc.stdout)
+            self.assertIn("CTX_SIZE=12345", proc.stdout)
+            self.assertIn(f"CHAT_TEMPLATE={custom_template}", proc.stdout)
+
+    def test_modelctl_external_env_still_beats_template_style_env_override(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            llmops_home = home / ".llm-ops"
+            config_dir = llmops_home / "config"
+            config_dir.mkdir(parents=True)
+            custom_template = Path(tmp) / "override-template.jinja"
+            custom_template.write_text("{{ messages }}\n", encoding="utf-8")
+            external_template = Path(tmp) / "external-template.jinja"
+            external_template.write_text("{{ messages }}\n", encoding="utf-8")
+            (config_dir / "Qwen3.5.env").write_text(
+                "\n".join(
+                    [
+                        'MODEL="${MODEL:-/tmp/override-model.gguf}"',
+                        'CTX_SIZE="${CTX_SIZE:-12345}"',
+                        f'CHAT_TEMPLATE="${{CHAT_TEMPLATE:-{custom_template}}}"',
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            proc = self.run_bash(
+                f'"{MODELCTL}" Qwen3.5 settings',
+                env={
+                    "HOME": str(home),
+                    "LLMOPS_HOME": str(llmops_home),
+                    "MODEL": "/tmp/external-model.gguf",
+                    "CTX_SIZE": "777",
+                    "CHAT_TEMPLATE": str(external_template),
+                },
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertIn("MODEL=/tmp/external-model.gguf", proc.stdout)
+            self.assertIn("CTX_SIZE=777", proc.stdout)
+            self.assertIn(f"CHAT_TEMPLATE={external_template}", proc.stdout)
+
+    def test_deploy_runtime_links_heals_identical_regular_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            bin_dir = home / "bin"
+            runtime_dir = Path(tmp) / "runtime"
+            scripts_dir = runtime_dir / "scripts"
+            scripts_dir.mkdir(parents=True)
+            bin_dir.mkdir(parents=True)
+            source = scripts_dir / "seckit-migrate-service.sh"
+            source.write_text("#!/usr/bin/env bash\necho migrated\n", encoding="utf-8")
+            source.chmod(0o755)
+            manifest = runtime_dir / "runtime-links.manifest"
+            manifest.write_text("seckit-migrate-service|scripts/seckit-migrate-service.sh\n", encoding="utf-8")
+            target = bin_dir / "seckit-migrate-service"
+            target.write_text("#!/usr/bin/env bash\necho migrated\n", encoding="utf-8")
+            target.chmod(0o755)
+            proc = self.run_bash(
+                f'"{DEPLOY_RUNTIME_LINKS}"',
+                env={
+                    "HOME": str(home),
+                    "BIN_DIR": str(bin_dir),
+                    "RUNTIME_DIR": str(runtime_dir),
+                    "MANIFEST_FILE": str(manifest),
+                },
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertIn("HEALED_REGULAR_FILE:", proc.stdout)
+            self.assertTrue(target.is_symlink())
+            self.assertEqual(target.resolve(), source.resolve())
 
     def test_seckit_export_failure_is_quiet_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
