@@ -118,7 +118,8 @@
         {%- set reasoning_content = reasoning_content|trim %}
         {# Include assistant turns that only contain tool_calls (history), not only when is_current #}
         {%- if content or (message.tool_calls and message.tool_calls is iterable and message.tool_calls is not mapping) %}
-            {%- if is_current and loop.index0 > ns.last_query_index and reasoning_content %}
+            {# Match stock: post-query assistant uses redacted_thinking wrapper even when empty #}
+            {%- if loop.index0 > ns.last_query_index %}
                 {{- '<|im_start|>' + message.role + '\n<think>\n' + reasoning_content + '\n</think>\n\n' + content }}
             {%- else %}
                 {{- '<|im_start|>' + message.role + '\n' + content }}
@@ -141,7 +142,11 @@
                         {%- for args_name, args_value in tool_call.arguments|items %}
                             {{- '<parameter=' + args_name + '>\n' }}
                             {%- set args_value = args_value | tojson | safe if args_value is mapping or (args_value is sequence and args_value is not string) else args_value | string %}
-                            {{- args_value }}
+                            {%- if not is_current and args_value|length > 2000 %}
+                                {{- '[omitted ' ~ (args_value|length|string) ~ ' chars]' }}
+                            {%- else %}
+                                {{- args_value }}
+                            {%- endif %}
                             {{- '\n</parameter>\n' }}
                         {%- endfor %}
                     {%- endif %}
@@ -151,13 +156,20 @@
             {{- '<|im_end|>\n' }}
         {%- endif %}
     {%- elif message.role == "tool" %}
-        {# Always emit tool responses when present; gating on is_current dropped prior-turn results and broke tool chains #}
+        {# Prior turns: omit huge or PNG-like tool blobs. Any turn: cap at ~24k to avoid runaway prompts. #}
         {%- if content %}
+            {%- set tdp = namespace(s=content) %}
+            {%- set clen = content|length %}
+            {%- if not is_current and (clen > 4096 or 'iVBORw0KGgo' in content) %}
+                {%- set tdp.s = '[Omitted prior tool output (' ~ (clen|string) ~ ' chars).]' %}
+            {%- elif clen > 24576 %}
+                {%- set tdp.s = content[:24576] ~ '\n... [truncated; total ' ~ (clen|string) ~ ' chars]' %}
+            {%- endif %}
             {%- if loop.previtem and loop.previtem.role != "tool" %}
                 {{- '<|im_start|>user' }}
             {%- endif %}
             {{- '\n<tool_response>\n' }}
-            {{- content }}
+            {{- tdp.s }}
             {{- '\n</tool_response>' }}
             {%- if not loop.last and loop.nextitem.role != "tool" %}
                 {{- '<|im_end|>\n' }}
