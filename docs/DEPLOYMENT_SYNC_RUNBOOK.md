@@ -1,175 +1,151 @@
 # Deployment + Sync Runbook
 
 **Created**: 2026-02-24
-**Updated**: 2026-03-03
+**Updated**: 2026-04-17
 
 - [Deployment + Sync Runbook](#deployment--sync-runbook)
   - [Purpose](#purpose)
-  - [Preconditions](#preconditions)
-  - [1) Sync Code](#1-sync-code)
-  - [2) Runtime Link Manifest](#2-runtime-link-manifest)
-  - [3) Deploy Runtime Links on Remote](#3-deploy-runtime-links-on-remote)
-  - [4) Verify Runtime Links on Remote](#4-verify-runtime-links-on-remote)
-  - [5) Runtime Commands (Action-Based)](#5-runtime-commands-action-based)
-  - [6) Key Notes](#6-key-notes)
-  - [7) SSH Agent Safety](#7-ssh-agent-safety)
-  - [8) Troubleshooting](#8-troubleshooting)
-    - [A) `declare -A: invalid option`](#a-declare--a-invalid-option)
-    - [B) `mkpath: Operation not supported`](#b-mkpath-operation-not-supported)
-    - [C) Password prompts unexpectedly](#c-password-prompts-unexpectedly)
-  - [9) Post-Compaction Audit Drift Check](#9-post-compaction-audit-drift-check)
+  - [Phase 1 Workflow](#phase-1-workflow)
+  - [1) Deploy with One Command](#1-deploy-with-one-command)
+  - [2) Internal Helper Stages](#2-internal-helper-stages)
+  - [4) What Gets Installed](#4-what-gets-installed)
+  - [5) What Is Explicitly Out of Scope](#5-what-is-explicitly-out-of-scope)
+  - [6) Optional Runtime Venv + Secrets-Kit](#6-optional-runtime-venv--secrets-kit)
+  - [7) Verification and Audit](#7-verification-and-audit)
+  - [8) Legacy Repo Sync Path](#8-legacy-repo-sync-path)
 
 ## Purpose
 
-Deploy `LLM-Ops-Kit` changes safely to another host and keep runtime commands consistent using user-local links (`$HOME/bin`) only.
+Deploy `LLM-Ops-Kit` as a staged runtime payload over SSH/rsync without syncing the full git checkout to the target host as the primary workflow.
 
-## Preconditions
+Phase 1 is intentionally narrow:
 
-- Source repo: `~/projects/LLM-Ops-Kit`
-- Remote repo path target: `~/projects/LLM-Ops-Kit`
-- Remote host reachable via SSH
-- Remote has `/usr/local/bin/bash` (for scripts using bash features beyond macOS default bash 3)
+- one local admin machine
+- one selected deployment config per push
+- one-way sync only
+- target runtime owned by the target user
+- no `.openclaw` distribution
+- no secrets in the staged payload
 
-## 1) Sync Code
+## Phase 1 Workflow
 
-From local machine (recommended, one command):
+The staged deployment flow is:
 
-```bash
-~/bin/sync-ops-scripts --delete
-```
+1. clone or update the repo locally
+2. create or update a local deployment config
+3. build a staged virtual target filesystem locally
+4. push only that staged payload to one or more target hosts from that config
+5. run remote link/venv/verification checks on the deployed target
 
-This now performs:
+## 1) Deploy with One Command
 
-1. Manifest refresh (`scripts/generate-manifest`)
-2. `rsync` transfer
-3. Remote link deploy (`deploy-runtime-links.sh`)
-4. Remote link verify (`verify-runtime-links.sh`)
-
-Equivalent explicit form:
-
-```bash
-rsync -avz --delete ~/projects/LLM-Ops-Kit/ <host>:~/projects/LLM-Ops-Kit/
-```
-
-If you only want transfer (skip deploy+verify):
+Interactive deploy:
 
 ```bash
-~/bin/sync-ops-scripts --delete --no-links
+./build-stage -c default
 ```
 
-## 2) Runtime Link Manifest
-
-Link definitions are now centralized in:
-
-`~/projects/LLM-Ops-Kit/scripts/runtime-links.manifest`
-
-The manifest is auto-generated from launcher symlinks via `scripts/generate-manifest` (also run by `sync-ops-scripts`). Deploy and verify consume this file.
-
-## 3) Deploy Runtime Links on Remote
-
-Use explicit remote bash path:
+Verbose deploy:
 
 ```bash
-ssh <host> '/usr/local/bin/bash ~/projects/LLM-Ops-Kit/scripts/deploy-runtime-links.sh'
+./build-stage -c default -v
 ```
 
-## 4) Verify Runtime Links on Remote
+Non-interactive deploy with an existing config:
 
 ```bash
-ssh <host> '/usr/local/bin/bash ~/projects/LLM-Ops-Kit/scripts/verify-runtime-links.sh'
+./build-stage -c default -y
 ```
 
-## 5) Runtime Commands (Action-Based)
-
-All commands are extensionless and action-driven.
+Dry run:
 
 ```bash
-~/bin/agentctl [start|stop|restart|status]
-~/bin/modelctl status
-~/bin/model-proxy [start|stop|restart|status]
-~/bin/tts-bridge [start|stop|restart|status]
-~/bin/Qwen3 [start|stop|restart|status]
-~/bin/Qwen3.5 [start|stop|restart|status]
-~/bin/BGEm3 [start|stop|restart|status]
-~/bin/openclaw-report
+./build-stage -c default --dry-run
 ```
 
-Typical bring-up order:
+This uses a local-only config file at:
 
-```bash
-~/bin/agentctl start
-~/bin/Qwen3 start
-~/bin/model-proxy start
-# Start embedding only if needed
-~/bin/BGEm3 start
+```text
+./stage/deploy_config/default.env
 ```
 
-## 6) Key Notes
+The deployment config stays on the admin machine. It is not pushed to remote hosts.
 
-- Link management is intentionally limited to `$HOME/bin` for host portability.
-- No `/Volumes/...` assumptions in deploy/verify scripts.
-- If remote default bash is too old, run scripts with `/usr/local/bin/bash` explicitly.
+`build-stage` will:
 
-## 7) SSH Agent Safety
+1. create or update the named config if it is missing or if `-n` / `-d` is passed
+2. show the deployment plan
+3. ask for confirmation unless `-y` is used
+4. build `./stage/<config-name>/` as a virtual remote filesystem
+5. sync the staged install tree and staged bin tree to each configured host over SSH/rsync
+6. create or validate the configured runtime venv on the remote host
+7. deploy managed links into the configured bin dir
+8. verify the managed runtime surface on the target host
 
-Load deploy key for short window only:
+Push logs are written locally under:
 
-```bash
-eval "$(ssh-agent -s)"
-ssh-add -t 20m ~/.ssh/id_ed25519_misfour_deploy
+```text
+./stage/deploy_config/logs/<config-name>/
 ```
 
-After deploy:
+## 2) Internal Helper Stages
 
-```bash
-ssh-add -d ~/.ssh/id_ed25519_misfour_deploy
-# or clear all
-ssh-add -D
-```
+`build-stage` shells into `scripts/deploy-runtime`, which orchestrates these internal helper commands:
 
-## 8) Troubleshooting
+- `scripts/setup-deploy`: creates or overlays a named config file in `stage/deploy_config/`
+- `scripts/stage-runtime`: builds the staged virtual target filesystem in `stage/<config-name>/`
+- `scripts/push-runtime`: syncs the staged install/bin trees and runs remote post-deploy validation
 
-### A) `declare -A: invalid option`
+You can still run them directly for troubleshooting, but `build-stage` is the intended repo-root operator entrypoint.
 
-Run scripts with remote bash 5:
+## 4) What Gets Installed
 
-```bash
-ssh <host> '/usr/local/bin/bash ~/projects/LLM-Ops-Kit/scripts/verify-runtime-links.sh'
-```
+Phase 1 deployment manages exactly two target surfaces:
 
-### B) `mkpath: Operation not supported`
+- install root, default `~/.llm-ops`
+- managed command links, default `~/bin`
 
-Destination path is invalid for that host. Use home-relative target:
+The installed runtime remains relocatable by config:
 
-```bash
-<host>:~/projects/LLM-Ops-Kit/
-```
+- install prefix is configurable per config
+- bin dir is configurable per config
+- runtime state file is configurable per config
 
-### C) Password prompts unexpectedly
+## 5) What Is Explicitly Out of Scope
 
-New shell likely missing loaded key. Re-run `ssh-agent` + `ssh-add` with TTL.
+These are not distributed by the Phase 1 deploy flow:
 
-## 9) Post-Compaction Audit Drift Check
+- `~/.openclaw`
+- OpenClaw sessions, logs, or app-local config trees
+- secrets
+- arbitrary home-directory files
 
-If OpenClaw injects a warning like `Post-Compaction Audit`, extract the missing required startup-file patterns from logs:
+Remote config, logs, run state, and backups under the runtime root are preserved by default.
 
-```bash
-# Gateway wrapper stdio log (canonical)
-rg -n "Post-Compaction Audit|required startup files were not read|  - " ~/.openclaw/logs/gateway.log
+## 6) Optional Runtime Venv + Secrets-Kit
 
-# Rendered proxy prompt/response stream (optional)
-rg -n "Post-Compaction Audit|required startup files were not read|  - " ~/.llm-ops/logs/model-proxy.rendered.log
+Deployment configs may configure a runtime venv path. When provided, post-deploy validation will:
 
-# Compact view: only missing file/pattern lines
-rg -n "Post-Compaction Audit|required startup files were not read|  - " ~/.openclaw/logs/gateway.log \
-  | sed -n '/Post-Compaction Audit/,+6p'
-```
+- create the venv if missing
+- record it in runtime state
+- prepend its `bin/` directory to `PATH` for toolkit wrappers
 
-Current OpenClaw runtime default required reads (as of 2026-02-27) include:
+Profiles may also optionally request `Secrets-Kit` installation into that same venv.
 
-- `WORKFLOW_AUTO.md`
-- `memory/\\d{4}-\\d{2}-\\d{2}\\.md`
+That integration remains optional. `Secrets-Kit` distribution is still treated as a separate project concern.
 
-Recommended compatibility fix:
+## 7) Verification and Audit
 
-- Keep a lightweight `~/OpenClaw-workspace/WORKFLOW_AUTO.md` stub so compaction audits do not spam chat.
+Before final release:
+
+- verify staged payload contents are correct
+- verify managed links resolve to the installed runtime
+- confirm `stage/` is not tracked
+- confirm docs match the staged deployment workflow
+- run the release checklist in [RELEASE_AUDIT_CHECKLIST](./RELEASE_AUDIT_CHECKLIST.md)
+
+## 8) Legacy Repo Sync Path
+
+`sync-ops-scripts` remains available as a legacy repo-sync helper for existing operator flows.
+
+It is no longer the primary documented deployment path for Phase 1.

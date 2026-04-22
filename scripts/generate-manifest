@@ -4,11 +4,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BIN_SRC_DIR="$SCRIPT_DIR/../bin"
 MANIFEST_FILE="${MANIFEST_FILE:-$SCRIPT_DIR/runtime-links.manifest}"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 is_excluded_script() {
   local name="$1"
   case "$name" in
-    modelctl|generate-manifest|deploy-runtime-links.sh|verify-runtime-links.sh|setup-ssh-deploy-key.sh|post-commit-sync.sample|sanitized-daily-report.sh|jinja-snapshot.sh|node-hygiene.sh|model_proxy_tap.py|render_chatml_prompt.py)
+    modelctl|generate-manifest|deploy-runtime-links.sh|verify-runtime-links.sh|setup-ssh-deploy-key.sh|post-commit-sync.sample|sanitized-daily-report.sh|jinja-snapshot.sh|node-hygiene.sh|model_proxy_tap.py|render_chatml_prompt.py|setup-deploy|stage-runtime|push-runtime|install-runtime.sh)
       return 0
       ;;
     *.py|*.sample)
@@ -30,6 +31,23 @@ is_excluded_bin() {
       return 1
       ;;
   esac
+}
+
+is_allowed_untracked_runtime_script() {
+  local name="$1"
+  case "$name" in
+    deploy-runtime)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+is_tracked_repo_path() {
+  local path="$1"
+  git -C "$REPO_ROOT" ls-files --error-unmatch "$path" >/dev/null 2>&1
 }
 
 profile_names=()
@@ -106,11 +124,15 @@ while IFS= read -r path; do
   if is_excluded_script "$name"; then
     continue
   fi
+  rel_path="scripts/$name"
+  if [[ ! -L "$path" ]] && ! is_tracked_repo_path "$rel_path" && ! is_allowed_untracked_runtime_script "$name"; then
+    continue
+  fi
   target="$name"
   if [[ "$target" == *.sh ]]; then
     target="${target%.sh}"
   fi
-  runtime_entries+=("$target|scripts/$name")
+  runtime_entries+=("$target|$rel_path")
 done < <(find "$SCRIPT_DIR" -maxdepth 1 \( -type f -o -type l \) -perm -u+x | sort)
 
 # Ensure modelctl itself is always available in ~/bin.
@@ -123,11 +145,15 @@ if [[ -d "$BIN_SRC_DIR" ]]; then
     if is_excluded_bin "$name"; then
       continue
     fi
+    rel_path="bin/$name"
+    if [[ ! -L "$path" ]] && ! is_tracked_repo_path "$rel_path"; then
+      continue
+    fi
     target="$name"
     if [[ "$target" == *.sh ]]; then
       target="${target%.sh}"
     fi
-    runtime_entries+=("$target|bin/$name")
+    runtime_entries+=("$target|$rel_path")
   done < <(find "$BIN_SRC_DIR" -maxdepth 1 \( -type f -o -type l \) -perm -u+x | sort)
 fi
 

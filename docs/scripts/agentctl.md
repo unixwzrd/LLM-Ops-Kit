@@ -18,7 +18,7 @@ Use it when you want a control surface that matches `modelctl` and keeps agent o
 ```bash
 ~/bin/agentctl [start|stop|restart|status|current|switch|logs|setup] [openclaw|hermes|all]
 ~/bin/agentctl exec [openclaw|hermes] <command> [args...]
-~/bin/agentctl [launchd-install|launchd-start|launchd-stop|launchd-enable|launchd-disable|launchd-remove|launchd-status] [openclaw|hermes|all]
+~/bin/agentctl [launchd-install|launchd-start|launchd-stop|launchd-bootout|launchd-enable|launchd-disable|launchd-remove|launchd-status] [openclaw|hermes|all]
 ```
 
 ## Notes
@@ -32,6 +32,7 @@ Use it when you want a control surface that matches `modelctl` and keeps agent o
 - Hermes is configured in the template to use Seckit by default (`HERMES_USE_SECKIT=1`). Keep `~/.hermes/.env` placeholder-only.
 - `launchd-install` writes a per-backend plist under `~/Library/LaunchAgents/` and starts it immediately.
 - `launchd-start` and `launchd-stop` manage the loaded agent without rewriting the plist.
+- `launchd-bootout` exposes the raw launchd bootout action for cases where you want an explicit unload step without removing the plist.
 - `launchd-enable` and `launchd-disable` control whether launchd may run the agent automatically.
 - `launchd-remove` unloads the service and deletes the plist.
 - `exec` runs a backend CLI command under the same managed shell init, backend `.env`, and selective `seckit` export path used by the wrapper. Use this for commands like `agentctl exec openclaw status` or `agentctl exec openclaw update` when the standalone CLI would otherwise miss secrets.

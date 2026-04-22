@@ -40,7 +40,7 @@ Docs index: [docs/INDEX.md](docs/INDEX.md)
 
 - Unified startup/shutdown/status scripts for agent runtimes, model-proxy, TTS, LLM, and embeddings
 - Model profile management (`Qwen3`, `Qwen3.5`, `BGEm3`) via one launcher architecture
-- Deployment helpers for cross-host sync and runtime link management
+- Deployment helpers for staged SSH rollout and runtime link management
 - Installed-runtime defaults under `~/.llm-ops/current`, with repo mode kept for explicit developer workflows
 - Built-in runtime maintenance for log rotation and install-backup retention
 - Practical runbooks and changelog-driven operations
@@ -144,24 +144,21 @@ Bridge compatibility notes:
 git clone https://github.com/unixwzrd/LLM-Ops-Kit.git ~/projects/LLM-Ops-Kit
 cd ~/projects/LLM-Ops-Kit
 
-# 2) Install runtime payload and deploy commands into ~/bin
-./scripts/install-runtime --source "$PWD"
+# 2) Configure, stage, and deploy from the repo checkout
+./build-stage -c default
 
-# 3) Sync repo to target host (if needed)
-~/bin/sync-ops-scripts --delete
-
-# 4) Verify model settings / runtime root
+# 3) Verify model settings / runtime root on the target
 ~/bin/Qwen3.5 settings
 ~/bin/Qwen3 settings
 
-# 5) Start services
+# 4) Start services
 ~/bin/agentctl start
 ~/bin/Qwen3 start
 ~/bin/BGEm3 start
 ~/bin/model-proxy start
 ```
 
-Installed runtime is the default operating mode. After install, normal operation should not depend on the source checkout still existing at `~/projects/LLM-Ops-Kit`.
+The admin repo checkout is not the runtime install root. Phase 1 builds a virtual target filesystem under `./stage/<config>/`, mirroring the real destination paths, then rsyncs that staged tree to the remote host over SSH.
 
 ## Runtime Command Surface
 
@@ -169,7 +166,7 @@ Installed runtime is the default operating mode. After install, normal operation
 ~/bin/agentctl [start|stop|restart|status] [openclaw|hermes|all]
 ~/bin/agentctl [current|switch] [openclaw|hermes|all]
 ~/bin/agentctl logs
-~/bin/agentctl [launchd-install|launchd-start|launchd-stop|launchd-enable|launchd-disable|launchd-remove|launchd-status] [openclaw|hermes|all]
+~/bin/agentctl [launchd-install|launchd-start|launchd-stop|launchd-bootout|launchd-enable|launchd-disable|launchd-remove|launchd-status] [openclaw|hermes|all]
 ~/bin/model-proxy [start|stop|restart|status]
 ~/bin/tts [start|stop|restart|status]
 ~/bin/tts-bridge [start|stop|restart|status]
@@ -181,7 +178,7 @@ Installed runtime is the default operating mode. After install, normal operation
 ~/bin/modelctl status
 ~/bin/modelctl add --model <path> --name <label>
 ~/bin/modelctl <ModelProfile> [start|stop|restart|status|settings|verify|test]
-~/bin/install-runtime [--source <repo-path>] [--prefix <install-base>] [--bin-dir <bin-dir>] [--no-links]
+~/bin/deploy-runtime [-c <name>] [-n|-d] [-y] [--dry-run]
 ~/bin/uninstall-runtime [--prefix <install-base>] [--bin-dir <bin-dir>] [--state-file <path>] [--keep-files]
 ~/bin/openclaw-report
 ~/bin/runtime-maintenance [status|rotate|prune|run]
@@ -196,6 +193,10 @@ Operational notes:
 - In the current direct-run agent wrapper mode, use `~/bin/agentctl logs` instead of relying on `openclaw logs --follow`.
 - `agentctl` owns agent runtime lifecycle across OpenClaw and Hermes.
 - `modelctl` owns model runtime lifecycle; the older bundled stack wrapper is gone.
+- `build-stage` is the repo-root operator entrypoint for Phase 1 staged deployment.
+- `deploy-runtime` is the script-level orchestrator used by `build-stage` and can also be run directly from the repo or an installed runtime.
+- `setup-deploy`, `stage-runtime`, and `push-runtime` remain available under `scripts/` and inside the installed runtime tree as internal building blocks for configuration, staging, and transport.
+- `sync-ops-scripts` remains available as a legacy repo-sync helper, but staged deployment is now the primary operator workflow.
 
 ## Local Precheck
 
@@ -255,7 +256,8 @@ A future optional path is to add `pyproject.toml` and package wrappers for insta
 ## Documentation Map
 
 - [DOCS INDEX](docs/INDEX.md) — primary documentation index
-- [DEPLOYMENT_SYNC_RUNBOOK](docs/DEPLOYMENT_SYNC_RUNBOOK.md) — sync/deploy/verify workflow
+- [DEPLOYMENT_SYNC_RUNBOOK](docs/DEPLOYMENT_SYNC_RUNBOOK.md) — staged deploy, push, install, and verify workflow
+- [RELEASE_AUDIT_CHECKLIST](docs/RELEASE_AUDIT_CHECKLIST.md) — cleanup and audit pass before final release tag
 - [PROXY_TAP_RUNBOOK](docs/PROXY_TAP_RUNBOOK.md) — proxy request/response visibility + jq recipes
 - [CHANGELOG](CHANGELOG.md) — chronological operational changes
 - [QUICKSTART](docs/QUICKSTART.md) — fast path setup and startup

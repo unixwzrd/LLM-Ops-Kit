@@ -28,6 +28,7 @@ Use it to:
 - Override defaults without editing scripts
 - Configure sync behavior across local and remote hosts
 - Move sensitive values to an external secrets manager instead of `.env` files
+- Configure staged deployment profiles for local-to-remote or local-to-localhost rollout
 
 If you are only trying to start services quickly, use [QUICKSTART](./QUICKSTART.md) first.
 
@@ -45,6 +46,7 @@ Use this file when you are:
 - Main index: [`README`](../README.md)
 - Quickstart: [`QUICKSTART`](./QUICKSTART.md)
 - Sync/deploy workflow: [`DEPLOYMENT_SYNC_RUNBOOK`](./DEPLOYMENT_SYNC_RUNBOOK.md)
+- Release cleanup: [`RELEASE_AUDIT_CHECKLIST`](./RELEASE_AUDIT_CHECKLIST.md)
 - Template env file: [`.env.example`](../.env.example)
 - TTS API setup: [`MLX_AUDIO_TTS_GUIDE`](./MLX_AUDIO_TTS_GUIDE.md)
 
@@ -183,6 +185,16 @@ Notes:
 - `LLMOPS_RUN_DIR`: runtime pid/state dir (default `$LLMOPS_HOME/run`).
 - `LLMOPS_LOG_DIR`: toolkit log dir (default `$LLMOPS_HOME/logs`).
 - `LLMOPS_ROOT`: canonical runtime asset root for the installed payload.
+- `LLMOPS_RUNTIME_VENV_PATH`: optional runtime Python virtualenv prepended to `PATH` when present.
+
+### Deployment config
+
+- `LLMOPS_DEPLOY_CONFIG`: optional explicit deployment config file override.
+- `LLMOPS_DEPLOY_CONFIG_NAME`: selected deployment config name, used by `deploy-runtime` and helpers.
+- Default deploy config path: `./stage/deploy_config/default.env`
+- Default local deploy log dir: `./stage/deploy_config/logs/<config-name>`
+- Deployment configs are not pushed to remote hosts.
+- The staged virtual target filesystem is built under repo-local `stage/<config-name>/` and should remain ignored by git.
 
 ### Hosts and ports
 

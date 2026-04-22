@@ -8,6 +8,7 @@ Mini-manpages for key operator commands.
 For the broader operator docs map, start with:
 
 - [`../README.md`](../README.md)
+- repo-root `./build-stage` is the normal Phase 1 operator entrypoint
 
 - [`agentctl.md`](./agentctl.md)
 - [`model-proxy.md`](./model-proxy.md)
@@ -18,6 +19,10 @@ For the broader operator docs map, start with:
 - [`Qwen3.5.md`](./Qwen3.5.md)
 - [`BGEm3.md`](./BGEm3.md)
 - [`sync-ops-scripts.md`](./sync-ops-scripts.md)
+- [`deploy-runtime.md`](./deploy-runtime.md)
+- [`setup-deploy.md`](./setup-deploy.md)
+- [`stage-runtime.md`](./stage-runtime.md)
+- [`push-runtime.md`](./push-runtime.md)
 - [`setup-ssh-deploy-key.md`](./setup-ssh-deploy-key.md)
 - [`install-runtime.md`](./install-runtime.md)
 - [`uninstall-runtime.md`](./uninstall-runtime.md)

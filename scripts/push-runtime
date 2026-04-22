@@ -1,0 +1,289 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SOURCE="${BASH_SOURCE[0]}"
+while [[ -h "$SOURCE" ]]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+# shellcheck disable=SC1091
+. "$SCRIPT_DIR/lib/common.sh"
+
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+CONFIG_NAME="$(deploy_default_config_name)"
+CONFIG_FILE=""
+STAGE_DIR=""
+SKIP_STAGE=0
+DRY_RUN=0
+LOG_FILE=""
+PYTHON_PACKAGES="${LLMOPS_RUNTIME_VENV_PACKAGES-jinja2}"
+
+usage() {
+  cat <<USAGE
+Usage: $(basename "$0") [options]
+
+Options:
+  --config-name <name>  Deployment config name
+  --config-file <path>  Deployment config file path
+  --stage-dir <path>    Local stage directory (default: $REPO_ROOT/stage/<config-name>)
+  --skip-stage          Reuse the existing stage directory without rebuilding
+  -v, --verbose         Show detailed rsync and deploy activity
+  --dry-run             Show sync/post-check actions without changing remote hosts
+  --log-file <path>     Write sync/install logs to this file
+  -h, --help            Show this help
+USAGE
+}
+
+normalize_stage_dir() {
+  local raw="$1"
+  case "$raw" in
+    */stage|*/stage/)
+      printf '%s/%s\n' "${raw%/}" "$CONFIG_NAME"
+      ;;
+    *)
+      printf '%s\n' "${raw%/}"
+      ;;
+  esac
+}
+
+run_logged() {
+  local description="$1"
+  shift
+  echo "==> $description" | tee -a "$LOG_FILE"
+  "$@" 2>&1 | tee -a "$LOG_FILE"
+}
+
+expand_path() {
+  local raw="$1"
+  case "$raw" in
+    "~") printf '%s\n' "$HOME" ;;
+    "~/"*) printf '%s/%s\n' "$HOME" "${raw#\~/}" ;;
+    *) printf '%s\n' "$raw" ;;
+  esac
+}
+
+ensure_relative_to_base() {
+  local base_dir="$1"
+  local target="$2"
+  case "$target" in
+    "$base_dir") printf '.\n' ;;
+    "$base_dir"/*) printf '%s\n' "${target#"$base_dir"/}" ;;
+    *)
+      echo "Configured path is not under base dir: target=$target base=$base_dir" >&2
+      exit 1
+      ;;
+  esac
+}
+
+stage_path_for_absolute() {
+  local absolute_path="$1"
+  printf '%s/%s\n' "$STAGE_DIR" "${absolute_path#/}"
+}
+
+build_stage_if_needed() {
+  if [[ "$SKIP_STAGE" -eq 0 ]]; then
+    run_logged "Building staged virtual root" \
+      "$SCRIPT_DIR/stage-runtime" --config-name "$CONFIG_NAME" --config-file "$CONFIG_FILE" --stage-dir "$STAGE_DIR" --force
+  fi
+}
+
+resolve_remote_paths() {
+  local ssh_target="$1"
+  ssh "${ssh_args[@]}" "$ssh_target" /usr/local/bin/bash -s -- \
+    "$RAW_DEPLOY_INSTALL_PREFIX" \
+    "$RAW_DEPLOY_BIN_DIR" \
+    "$RAW_DEPLOY_STATE_FILE" \
+    "$RAW_DEPLOY_VENV_PATH" <<'EOF'
+set -euo pipefail
+expand_path() {
+  case "$1" in
+    "~") printf "%s\n" "$HOME" ;;
+    "~/"*) printf "%s/%s\n" "$HOME" "${1#\~/}" ;;
+    *) printf "%s\n" "$1" ;;
+  esac
+}
+expand_path "$1"
+expand_path "$2"
+expand_path "$3"
+if [[ -n "$4" ]]; then
+  expand_path "$4"
+else
+  printf '\n'
+fi
+EOF
+}
+
+deploy_to_host() {
+  local host="$1"
+  local ssh_target="${DEPLOY_USER}@${host}"
+  local -a ssh_args=()
+  local -a rsync_rsh_args=()
+  local -a rsync_args=( -az --delete )
+  local -a rsh_cmd=( ssh )
+  local -a remote_paths=()
+  local remote_install_prefix remote_bin_dir remote_state_file remote_venv_path
+  local local_install_stage local_bin_stage local_state_stage
+
+  if [[ -n "${DEPLOY_SSH_KEY_PATH:-}" ]]; then
+    ssh_args+=( -i "$DEPLOY_SSH_KEY_PATH" )
+    rsync_rsh_args+=( -i "$DEPLOY_SSH_KEY_PATH" )
+  fi
+
+  [[ "$DRY_RUN" -eq 1 ]] && rsync_args+=( --dry-run )
+  deploy_verbose_enabled && rsync_args+=( -v )
+  if [[ ${#rsync_rsh_args[@]} -gt 0 ]]; then
+    rsh_cmd+=( "${rsync_rsh_args[@]}" )
+  fi
+
+  ensure_relative_to_base "$DEPLOY_BASE_DIR" "$DEPLOY_INSTALL_PREFIX" >/dev/null
+  ensure_relative_to_base "$DEPLOY_BASE_DIR" "$DEPLOY_BIN_DIR" >/dev/null
+  ensure_relative_to_base "$DEPLOY_BASE_DIR" "$DEPLOY_STATE_FILE" >/dev/null
+  mapfile -t remote_paths < <(resolve_remote_paths "$ssh_target")
+  remote_install_prefix="${remote_paths[0]}"
+  remote_bin_dir="${remote_paths[1]}"
+  remote_state_file="${remote_paths[2]}"
+  remote_venv_path="${remote_paths[3]:-}"
+  local_install_stage="$(stage_path_for_absolute "$DEPLOY_INSTALL_PREFIX")"
+  local_bin_stage="$(stage_path_for_absolute "$DEPLOY_BIN_DIR")"
+  local_state_stage="$(stage_path_for_absolute "$DEPLOY_STATE_FILE")"
+  deploy_verbose_echo "LOCAL_STAGE_INSTALL: $local_install_stage"
+  deploy_verbose_echo "LOCAL_STAGE_BIN: $local_bin_stage"
+  deploy_verbose_echo "LOCAL_STAGE_STATE: $local_state_stage"
+  deploy_verbose_echo "REMOTE_INSTALL: $remote_install_prefix"
+  deploy_verbose_echo "REMOTE_BIN: $remote_bin_dir"
+  deploy_verbose_echo "REMOTE_STATE: $remote_state_file"
+
+  run_logged "Syncing staged install tree to ${ssh_target}:${remote_install_prefix}" \
+    rsync "${rsync_args[@]}" -e "${rsh_cmd[*]}" "$local_install_stage/" "${ssh_target}:${remote_install_prefix%/}/"
+
+  run_logged "Syncing staged bin tree to ${ssh_target}:${remote_bin_dir}" \
+    rsync "${rsync_args[@]}" -e "${rsh_cmd[*]}" "$local_bin_stage/" "${ssh_target}:${remote_bin_dir%/}/"
+
+  if [[ "$DEPLOY_STATE_FILE" != "$DEPLOY_INSTALL_PREFIX" && "$DEPLOY_STATE_FILE" != "$DEPLOY_INSTALL_PREFIX/"* ]]; then
+    run_logged "Syncing staged runtime state file to ${ssh_target}:${remote_state_file}" \
+      rsync -az -e "${rsh_cmd[*]}" "$local_state_stage" "${ssh_target}:${remote_state_file}"
+  fi
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo "DRY_RUN_ONLY: skipping remote validation for ${ssh_target}" | tee -a "$LOG_FILE"
+    return 0
+  fi
+
+  run_logged "Validating deployed runtime on ${ssh_target}" \
+    ssh "${ssh_args[@]}" "$ssh_target" /usr/local/bin/bash -s -- \
+      "$remote_install_prefix" \
+      "$remote_bin_dir" \
+      "$remote_state_file" \
+      "$remote_venv_path" \
+      "${DEPLOY_INSTALL_SECRETS_KIT:-0}" \
+      "${DEPLOY_SECRETS_KIT_SOURCE:-}" \
+      "$PYTHON_PACKAGES" <<'EOF'
+set -euo pipefail
+install_prefix="$1"
+bin_dir="$2"
+state_file="$3"
+venv_path_raw="$4"
+install_secrets_kit="$5"
+secrets_kit_source="$6"
+python_packages="$7"
+
+runtime_dir="$install_prefix/current"
+[[ -d "$runtime_dir/scripts" ]] || {
+  echo "Missing deployed runtime scripts: $runtime_dir/scripts" >&2
+  exit 1
+}
+mkdir -p "$bin_dir" "$(dirname "$state_file")"
+
+if [[ -n "$venv_path_raw" ]]; then
+  venv_path="$venv_path_raw"
+  python_bin="$venv_path/bin/python"
+  if [[ ! -x "$python_bin" ]]; then
+    echo "Creating runtime venv at: $venv_path"
+    python3 -m venv "$venv_path"
+  fi
+  if [[ -n "${python_packages// }" ]]; then
+    "$python_bin" -m pip install ${python_packages}
+  fi
+  if [[ "$install_secrets_kit" == "1" && -n "$secrets_kit_source" ]]; then
+    "$python_bin" -m pip install "$secrets_kit_source"
+  fi
+else
+  venv_path=""
+fi
+
+BIN_DIR="$bin_dir" RUNTIME_DIR="$runtime_dir" "$runtime_dir/scripts/deploy-runtime-links.sh" --replace-managed-links
+BIN_DIR="$bin_dir" RUNTIME_DIR="$runtime_dir" "$runtime_dir/scripts/verify-runtime-links.sh"
+
+cat > "$state_file" <<STATEEOF
+LLMOPS_INSTALL_MODE=installed
+LLMOPS_INSTALL_BASE=$install_prefix
+LLMOPS_INSTALL_DIR=$runtime_dir
+LLMOPS_BIN_DIR=$bin_dir
+LLMOPS_RUNTIME_VENV_PATH=$venv_path
+LLMOPS_UPDATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+STATEEOF
+
+echo "REMOTE_VALIDATE_OK: runtime=$runtime_dir bin=$bin_dir venv=${venv_path:-}"
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --config-name) CONFIG_NAME="$2"; shift 2 ;;
+    --config-file) CONFIG_FILE="$2"; shift 2 ;;
+    --stage-dir) STAGE_DIR="$2"; shift 2 ;;
+    --skip-stage) SKIP_STAGE=1; shift ;;
+    -v|--verbose) export LLMOPS_DEPLOY_VERBOSE=1; shift ;;
+    --dry-run) DRY_RUN=1; shift ;;
+    --log-file) LOG_FILE="$2"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
+  esac
+done
+
+if [[ -z "$CONFIG_FILE" ]]; then
+  CONFIG_FILE="$(deploy_config_path "$CONFIG_NAME")"
+fi
+if [[ -z "$CONFIG_NAME" ]]; then
+  CONFIG_NAME="$(basename "$CONFIG_FILE" .env)"
+fi
+if [[ -z "$STAGE_DIR" ]]; then
+  STAGE_DIR="$REPO_ROOT/stage/$CONFIG_NAME"
+fi
+STAGE_DIR="$(normalize_stage_dir "$STAGE_DIR")"
+
+deploy_load_config "$CONFIG_NAME" "$CONFIG_FILE"
+RAW_DEPLOY_BASE_DIR="$DEPLOY_BASE_DIR"
+RAW_DEPLOY_INSTALL_PREFIX="$DEPLOY_INSTALL_PREFIX"
+RAW_DEPLOY_BIN_DIR="$DEPLOY_BIN_DIR"
+RAW_DEPLOY_STATE_FILE="$DEPLOY_STATE_FILE"
+RAW_DEPLOY_VENV_PATH="${DEPLOY_VENV_PATH:-}"
+DEPLOY_BASE_DIR="$(expand_path "$DEPLOY_BASE_DIR")"
+DEPLOY_INSTALL_PREFIX="$(expand_path "$DEPLOY_INSTALL_PREFIX")"
+DEPLOY_BIN_DIR="$(expand_path "$DEPLOY_BIN_DIR")"
+DEPLOY_STATE_FILE="$(expand_path "$DEPLOY_STATE_FILE")"
+if [[ -n "${DEPLOY_VENV_PATH:-}" ]]; then
+  DEPLOY_VENV_PATH="$(expand_path "$DEPLOY_VENV_PATH")"
+fi
+
+if [[ -z "$LOG_FILE" ]]; then
+  mkdir -p "$(deploy_log_dir "$DEPLOY_CONFIG_NAME")"
+  LOG_FILE="$(deploy_log_dir "$DEPLOY_CONFIG_NAME")/push-$(date +%Y%m%d-%H%M%S).log"
+fi
+mkdir -p "$(dirname "$LOG_FILE")"
+touch "$LOG_FILE"
+
+build_stage_if_needed
+
+[[ -d "$STAGE_DIR" ]] || {
+  echo "Missing staged directory: $STAGE_DIR" >&2
+  exit 1
+}
+
+for arg in $DEPLOY_HOSTS; do
+  deploy_to_host "$arg"
+done
+
+echo "PUSH_RUNTIME_LOG: $LOG_FILE"

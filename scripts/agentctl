@@ -217,9 +217,12 @@ source_agent_native_env_file() {
   [[ -n "$env_file" ]] || return 0
   [[ -f "$env_file" ]] || return 0
   set +u
+  set -a
   # shellcheck disable=SC1090
   . "$env_file"
+  set +a
   set -u
+  strip_self_placeholder_env_values
 }
 
 source_agent_shell_init_file() {
@@ -227,8 +230,10 @@ source_agent_shell_init_file() {
   [[ -n "$init_file" ]] || return 0
   [[ -f "$init_file" ]] || return 0
   set +u
+  set -a
   # shellcheck disable=SC1090
   . "$init_file"
+  set +a
   set -u
 }
 
@@ -304,6 +309,10 @@ backend_cli_command() {
       return 2
       ;;
   esac
+}
+
+seckit_bin() {
+  printf '%s\n' "${LLMOPS_SECKIT_BIN:-seckit}"
 }
 
 gateway_status_suffix() {
@@ -725,17 +734,44 @@ launchd_start_backend() {
   echo "  plist=$plist_path"
 }
 
-launchd_stop_backend() {
+launchd_restart_backend() {
+  local backend="$1"
+  local launchctl label plist_path domain
+  launchctl="$(launchctl_bin)"
+  label="$(launchd_label_for_backend "$backend")"
+  plist_path="$(launchd_plist_path_for_backend "$backend")"
+  domain="$(launchd_domain)"
+  if [[ ! -f "$plist_path" ]]; then
+    echo "agentctl[$backend]: launchd plist not found: $plist_path" >&2
+    return 1
+  fi
+  "$launchctl" enable "$domain/$label" >/dev/null 2>&1 || true
+  if launchd_is_loaded_backend "$backend"; then
+    "$launchctl" bootout "$domain/$label" >/dev/null 2>&1 || true
+  fi
+  "$launchctl" bootstrap "$domain" "$plist_path"
+  "$launchctl" kickstart -k "$domain/$label" >/dev/null 2>&1 || true
+  echo "agentctl[$backend]: launchd restarted label=$label"
+  echo "  plist=$plist_path"
+}
+
+launchd_bootout_backend() {
   local backend="$1"
   local launchctl label
   launchctl="$(launchctl_bin)"
   label="$(launchd_label_for_backend "$backend")"
   if launchd_is_loaded_backend "$backend"; then
     "$launchctl" bootout "$(launchd_domain)/$label"
-    echo "agentctl[$backend]: launchd stopped label=$label"
+    echo "agentctl[$backend]: launchd booted out label=$label"
   else
-    echo "agentctl[$backend]: launchd already stopped label=$label"
+    echo "agentctl[$backend]: launchd already unloaded label=$label"
   fi
+}
+
+launchd_stop_backend() {
+  local backend="$1"
+  launchd_bootout_backend "$backend" >/dev/null 2>&1 || true
+  echo "agentctl[$backend]: launchd stopped label=$(launchd_label_for_backend "$backend")"
 }
 
 launchd_enable_backend() {
@@ -752,7 +788,7 @@ launchd_disable_backend() {
   local launchctl label
   launchctl="$(launchctl_bin)"
   label="$(launchd_label_for_backend "$backend")"
-  launchd_stop_backend "$backend" >/dev/null 2>&1 || true
+  launchd_bootout_backend "$backend" >/dev/null 2>&1 || true
   "$launchctl" disable "$(launchd_domain)/$label" >/dev/null 2>&1 || true
   echo "agentctl[$backend]: launchd disabled label=$label"
 }
@@ -774,18 +810,30 @@ launchd_remove_backend() {
 
 launchd_status_backend() {
   local backend="$1"
-  local plist_path label
+  local plist_path label pid pid_name port active_state
   label="$(launchd_label_for_backend "$backend")"
   plist_path="$(launchd_plist_path_for_backend "$backend")"
   load_agent_backend_config "$backend"
+  port="${LLMOPS_GATEWAY_PORT:-18789}"
+  pid_name="$(gateway_pid_name "$backend")"
   if launchd_is_loaded_backend "$backend"; then
     echo "agentctl[$backend]: launchd loaded label=$label"
   else
     echo "agentctl[$backend]: launchd unloaded label=$label"
   fi
+  pid=""
+  if pid="$(read_pid "$pid_name" 2>/dev/null)" && [[ -n "$pid" ]] && is_pid_running "$pid"; then
+    active_state="active (pid=$pid)"
+  elif lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
+    active_state="listening on port $port (pid file stale or wrapper bypassed)"
+  else
+    active_state="inactive"
+  fi
+  echo "  active=$active_state"
   echo "  plist=$plist_path"
   echo "  stdout=$(launchd_stdout_path_for_backend "$backend")"
   echo "  stderr=$(launchd_stderr_path_for_backend "$backend")"
+  echo "  port=$port"
   if [[ -n "${LLMOPS_AGENT_NATIVE_ENV_FILE:-}" ]]; then
     echo "  native_env=${LLMOPS_AGENT_NATIVE_ENV_FILE}"
   fi
@@ -802,7 +850,7 @@ run_launchd_action() {
       install|enable)
         load_agent_backend_config "$backend" 1
         ;;
-      start|stop|disable|remove|status)
+      start|stop|bootout|restart|disable|remove|status)
         load_agent_backend_config "$backend" 0
         ;;
     esac
@@ -810,6 +858,8 @@ run_launchd_action() {
       install) launchd_install_backend "$backend" || rc=$? ;;
       start) launchd_start_backend "$backend" || rc=$? ;;
       stop) launchd_stop_backend "$backend" || rc=$? ;;
+      bootout) launchd_bootout_backend "$backend" || rc=$? ;;
+      restart) launchd_restart_backend "$backend" || rc=$? ;;
       enable) launchd_enable_backend "$backend" || rc=$? ;;
       disable) launchd_disable_backend "$backend" || rc=$? ;;
       remove) launchd_remove_backend "$backend" || rc=$? ;;
@@ -824,7 +874,7 @@ print_help() {
 Usage:
   agentctl [start|stop|restart|status|current|switch|logs|setup] [openclaw|hermes|all]
   agentctl exec [openclaw|hermes] <command> [args...]
-  agentctl [launchd-install|launchd-start|launchd-stop|launchd-enable|launchd-disable|launchd-remove|launchd-status] [openclaw|hermes|all]
+  agentctl [launchd-install|launchd-start|launchd-stop|launchd-bootout|launchd-restart|launchd-enable|launchd-disable|launchd-remove|launchd-status] [openclaw|hermes|all]
 
 Agent runtime actions:
   start            Start the selected agent runtime under the toolkit wrapper
@@ -841,6 +891,8 @@ Launchd actions:
   launchd-install  Write the backend plist to ~/Library/LaunchAgents and start it
   launchd-start    Start an already-installed LaunchAgent
   launchd-stop     Stop a loaded LaunchAgent
+  launchd-bootout  Explicitly boot out a loaded LaunchAgent without deleting its plist
+  launchd-restart  Restart a loaded LaunchAgent
   launchd-enable   Enable and start a LaunchAgent
   launchd-disable  Disable a LaunchAgent without deleting its plist
   launchd-remove   Disable, unload, and delete the LaunchAgent plist
@@ -855,8 +907,9 @@ EOF
 
 launchd_run_gateway_backend() {
   local backend="$1"
-  local port hermes_cmd openclaw_cmd
+  local port hermes_cmd openclaw_cmd seckit_cmd
   local -a extra_args=()
+  local -a seckit_args=()
 
   if [[ "$backend" == "all" ]]; then
     echo "agentctl: launchd-run requires a concrete backend (openclaw or hermes)" >&2
@@ -864,15 +917,36 @@ launchd_run_gateway_backend() {
   fi
 
   LLMOPS_SKIP_SECKIT_LOAD=1 load_shell_env
-  load_agent_backend_launchd_env "$backend"
   port="${LLMOPS_GATEWAY_PORT:-18789}"
 
   case "$backend" in
     openclaw)
+      load_agent_backend_config "$backend"
+      source_agent_shell_init_file
       openclaw_cmd="${OPENCLAW_GATEWAY_CMD:-/usr/local/bin/openclaw}"
-      exec "$openclaw_cmd" gateway run --port "$port"
+      seckit_cmd="$(seckit_bin)"
+      if ! command -v "$openclaw_cmd" >/dev/null 2>&1; then
+        echo "agentctl[$backend]: command not found: $openclaw_cmd" >&2
+        return 1
+      fi
+      if ! command -v "$seckit_cmd" >/dev/null 2>&1; then
+        echo "agentctl[$backend]: command not found: $seckit_cmd" >&2
+        return 1
+      fi
+      seckit_args=(
+        run
+        --service "${LLMOPS_SECKIT_SERVICE:-openclaw}"
+        --account "${LLMOPS_SECKIT_ACCOUNT:-default}"
+      )
+      if [[ -n "${LLMOPS_AGENT_SECKIT_NAMES:-}" ]]; then
+        seckit_args+=(--names "${LLMOPS_AGENT_SECKIT_NAMES}")
+      else
+        seckit_args+=(--all)
+      fi
+      exec "$seckit_cmd" "${seckit_args[@]}" -- "$openclaw_cmd" gateway run --port "$port"
       ;;
     hermes)
+      load_agent_backend_launchd_env "$backend"
       hermes_cmd="${HERMES_GATEWAY_CMD:-hermes}"
       while IFS= read -r arg; do
         [[ -n "$arg" ]] && extra_args+=("$arg")
@@ -949,6 +1023,8 @@ case "$action" in
   launchd-install) run_launchd_action install "$target" ;;
   launchd-start) run_launchd_action start "$target" ;;
   launchd-stop) run_launchd_action stop "$target" ;;
+  launchd-bootout) run_launchd_action bootout "$target" ;;
+  launchd-restart) run_launchd_action restart "$target" ;;
   launchd-enable) run_launchd_action enable "$target" ;;
   launchd-disable) run_launchd_action disable "$target" ;;
   launchd-remove) run_launchd_action remove "$target" ;;

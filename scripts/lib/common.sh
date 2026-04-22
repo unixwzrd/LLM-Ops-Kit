@@ -22,6 +22,44 @@ ensure_runtime_dirs() {
   mkdir -p "$LLMOPS_RUN_DIR" "$LLMOPS_LOG_DIR" "$LLMOPS_BACKUP_DIR" "$LLMOPS_CONFIG_DIR"
 }
 
+state_file_path() {
+  printf '%s\n' "${LLMOPS_STATE_FILE:-$LLMOPS_HOME/runtime-state.env}"
+}
+
+prepend_path_once() {
+  local dir="$1"
+  [[ -d "$dir" ]] || return 0
+  case ":${PATH:-}:" in
+    *":$dir:"*) ;;
+    *) PATH="$dir${PATH:+:$PATH}" ;;
+  esac
+  export PATH
+}
+
+runtime_venv_path() {
+  local state_file venv
+  if [[ -n "${LLMOPS_RUNTIME_VENV_PATH:-}" ]]; then
+    printf '%s\n' "$LLMOPS_RUNTIME_VENV_PATH"
+    return 0
+  fi
+  state_file="$(state_file_path)"
+  if [[ -f "$state_file" ]]; then
+    venv="$(sed -n 's/^LLMOPS_RUNTIME_VENV_PATH=//p' "$state_file" | tail -n 1)"
+    if [[ -n "$venv" ]]; then
+      printf '%s\n' "$venv"
+      return 0
+    fi
+  fi
+  return 1
+}
+
+maybe_prepend_runtime_venv_bin() {
+  local venv=""
+  venv="$(runtime_venv_path 2>/dev/null || true)"
+  [[ -n "$venv" ]] || return 0
+  prepend_path_once "$venv/bin"
+}
+
 load_shell_env() {
   # Do not source interactive shell init files here; they may contain
   # framework hooks (venv managers, prompt tooling) that break non-interactive
@@ -38,10 +76,13 @@ load_shell_env() {
   early_files+=("$LLMOPS_HOME/config.env" "$LLMOPS_HOME/hosts.env")
   for f in "${early_files[@]}"; do
     if [[ -f "$f" ]]; then
+      set -a
       # shellcheck disable=SC1090
       . "$f"
+      set +a
     fi
   done
+  maybe_prepend_runtime_venv_bin
   if [[ "${LLMOPS_SKIP_SECKIT_LOAD:-0}" != "1" ]]; then
     maybe_load_seckit_env
   fi
@@ -52,14 +93,30 @@ load_shell_env() {
       # migration to Secrets-Kit. Source it with nounset disabled so existing
       # exported values from seckit win without tripping set -u.
       set +u
+      set -a
       # shellcheck disable=SC1090
       . "$f"
+      set +a
       set -u
+      strip_self_placeholder_env_values
     fi
   done
   if [[ "${LLMOPS_SKIP_SECKIT_LOAD:-0}" != "1" ]]; then
     maybe_warn_env_secret_fallback
   fi
+}
+
+strip_self_placeholder_env_values() {
+  local name value
+  while IFS='=' read -r name _; do
+    [[ "$name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+    value="${!name-}"
+    case "$value" in
+      "\${$name}"|"\$$name")
+        unset "$name" || true
+        ;;
+    esac
+  done < <(env)
 }
 
 secret_var_is_set() {
@@ -275,6 +332,165 @@ dir_usage_bytes() {
 
 config_hint_file() {
   printf '%s/config.env\n' "$LLMOPS_HOME"
+}
+
+deploy_config_dir() {
+  printf '%s/stage/deploy_config\n' "$(deploy_workspace_root)"
+}
+
+deploy_config_name() {
+  local name="${1:-${LLMOPS_DEPLOY_CONFIG_NAME:-default}}"
+  printf '%s\n' "$name"
+}
+
+deploy_config_path() {
+  local name="${1:-}"
+  if [[ -z "$name" && -n "${LLMOPS_DEPLOY_CONFIG:-}" ]]; then
+    printf '%s\n' "$LLMOPS_DEPLOY_CONFIG"
+    return 0
+  fi
+  name="$(deploy_config_name "$name")"
+  printf '%s/%s.env\n' "$(deploy_config_dir)" "$name"
+}
+
+deploy_log_dir() {
+  local name="${1:-}"
+  if [[ -n "${LLMOPS_DEPLOY_LOG_DIR:-}" ]]; then
+    printf '%s\n' "$LLMOPS_DEPLOY_LOG_DIR"
+    return 0
+  fi
+  if [[ -n "$name" ]]; then
+    printf '%s/logs/%s\n' "$(deploy_config_dir)" "$(deploy_profile_slug "$name")"
+    return 0
+  fi
+  printf '%s/logs\n' "$(deploy_config_dir)"
+}
+
+deploy_workspace_root() {
+  if [[ -n "${LLMOPS_DEPLOY_ROOT:-}" ]]; then
+    printf '%s\n' "$LLMOPS_DEPLOY_ROOT"
+    return 0
+  fi
+  if git -C "$LLMOPS_ROOT" rev-parse --show-toplevel >/dev/null 2>&1; then
+    git -C "$LLMOPS_ROOT" rev-parse --show-toplevel
+    return 0
+  fi
+  printf '%s\n' "$LLMOPS_ROOT"
+}
+
+deploy_profile_slug() {
+  local profile="${1:-}"
+  profile="${profile//[^A-Za-z0-9_]/_}"
+  printf '%s\n' "$profile"
+}
+
+deploy_host_list_normalize() {
+  local raw="${1:-}"
+  printf '%s\n' "$raw" | tr ',;' '  ' | awk '
+    {
+      for (i = 1; i <= NF; i++) {
+        if (!seen[$i]++) {
+          out = out (out ? " " : "") $i
+        }
+      }
+    }
+    END { print out }
+  '
+}
+
+prompt_yes_no() {
+  local label="$1"
+  local default="${2:-N}"
+  local answer=""
+  local normalized_default="N"
+  case "$default" in
+    Y|y) normalized_default="Y" ;;
+    *) normalized_default="N" ;;
+  esac
+  if [[ "$normalized_default" == "Y" ]]; then
+    printf '%s [Y/n]: ' "$label" >&2
+  else
+    printf '%s [y/N]: ' "$label" >&2
+  fi
+  if ! IFS= read -r answer; then
+    answer=""
+  fi
+  answer="$(printf '%s' "$answer" | tr '[:upper:]' '[:lower:]')"
+  case "$answer" in
+    y|yes) return 0 ;;
+    n|no) return 1 ;;
+    "")
+      [[ "$normalized_default" == "Y" ]]
+      return
+      ;;
+    *)
+      [[ "$normalized_default" == "Y" ]]
+      return
+      ;;
+  esac
+}
+
+deploy_verbose_enabled() {
+  case "${LLMOPS_DEPLOY_VERBOSE:-0}" in
+    1|true|TRUE|yes|YES|on|ON) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+deploy_verbose_echo() {
+  deploy_verbose_enabled || return 0
+  printf '%s\n' "$*"
+}
+
+deploy_default_config_name() {
+  if [[ -n "${LLMOPS_DEPLOY_CONFIG_NAME:-}" ]]; then
+    printf '%s\n' "$LLMOPS_DEPLOY_CONFIG_NAME"
+    return 0
+  fi
+  if [[ -f "$(deploy_config_path default)" ]]; then
+    printf 'default\n'
+    return 0
+  fi
+}
+
+deploy_load_config() {
+  local config_name="${1:-}"
+  local config_file="${2:-}"
+  local slug
+
+  if [[ -z "$config_file" ]]; then
+    config_file="$(deploy_config_path "$config_name")"
+  fi
+  [[ -f "$config_file" ]] || {
+    echo "Missing deployment config: $config_file" >&2
+    return 1
+  }
+  # shellcheck disable=SC1090
+  . "$config_file"
+
+  if [[ -z "$config_name" ]]; then
+    config_name="${LLMOPS_DEPLOY_CONFIG_NAME:-$(basename "$config_file" .env)}"
+  fi
+  slug="$(deploy_profile_slug "$config_name")"
+
+  export DEPLOY_CONFIG_FILE="$config_file"
+  export DEPLOY_CONFIG_NAME="$config_name"
+  export DEPLOY_CONFIG_SLUG="$slug"
+  export DEPLOY_HOSTS="$(deploy_host_list_normalize "${LLMOPS_DEPLOY_HOSTS:-}")"
+  [[ -n "$DEPLOY_HOSTS" ]] || {
+    echo "Deployment config has no hosts: $config_file" >&2
+    return 1
+  }
+  export DEPLOY_USER="${LLMOPS_DEPLOY_USER:-}"
+  export DEPLOY_BASE_DIR="${LLMOPS_DEPLOY_BASE_DIR:-}"
+  export DEPLOY_INSTALL_PREFIX="${LLMOPS_DEPLOY_INSTALL_PREFIX:-}"
+  export DEPLOY_BIN_DIR="${LLMOPS_DEPLOY_BIN_DIR:-}"
+  export DEPLOY_STATE_FILE="${LLMOPS_DEPLOY_STATE_FILE:-}"
+  export DEPLOY_VENV_PATH="${LLMOPS_DEPLOY_VENV_PATH:-}"
+  export DEPLOY_INSTALL_SECRETS_KIT="${LLMOPS_DEPLOY_INSTALL_SECRETS_KIT:-0}"
+  export DEPLOY_SECRETS_KIT_SOURCE="${LLMOPS_DEPLOY_SECRETS_KIT_SOURCE:-}"
+  export DEPLOY_SSH_KEY_PATH="${LLMOPS_DEPLOY_SSH_KEY_PATH:-}"
+  return 0
 }
 
 print_missing_config_hint() {

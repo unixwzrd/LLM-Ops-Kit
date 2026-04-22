@@ -13,6 +13,10 @@ COMMON_SH = REPO_ROOT / "scripts/lib/common.sh"
 MODELCTL = REPO_ROOT / "scripts/modelctl"
 AGENTCTL = REPO_ROOT / "scripts/agentctl"
 DEPLOY_RUNTIME_LINKS = REPO_ROOT / "scripts/deploy-runtime-links.sh"
+SETUP_DEPLOY = REPO_ROOT / "scripts/setup-deploy"
+STAGE_RUNTIME = REPO_ROOT / "scripts/stage-runtime"
+PUSH_RUNTIME = REPO_ROOT / "scripts/push-runtime"
+DEPLOY_RUNTIME = REPO_ROOT / "scripts/deploy-runtime"
 
 
 class ShellRuntimeHelperTests(unittest.TestCase):
@@ -21,7 +25,7 @@ class ShellRuntimeHelperTests(unittest.TestCase):
         if env:
             merged.update(env)
         return subprocess.run(
-            ["bash", "-lc", script],
+            ["bash", "--noprofile", "--norc", "-lc", script],
             text=True,
             capture_output=True,
             env=merged,
@@ -191,6 +195,286 @@ class ShellRuntimeHelperTests(unittest.TestCase):
             self.assertTrue(target.is_symlink())
             self.assertEqual(target.resolve(), source.resolve())
 
+    def test_setup_deploy_writes_named_config(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            home = Path(tmp) / "home"
+            llmops_home = home / ".llm-ops"
+            answers = "\n".join(
+                [
+                    "agent-user",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "y",
+                    "git+https://github.com/unixwzrd/Secrets-Kit.git",
+                    "",
+                ]
+            )
+            proc = self.run_bash(
+                f'printf "%s\n" "example-host\n\n{answers}" | "{SETUP_DEPLOY}" --config-name demo',
+                env={
+                    "HOME": str(home),
+                    "LLMOPS_HOME": str(llmops_home),
+                    "LLMOPS_ROOT": str(root),
+                },
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            config_path = root / "stage" / "deploy_config" / "demo.env"
+            self.assertTrue(config_path.exists())
+            config_text = config_path.read_text(encoding="utf-8")
+            self.assertIn('LLMOPS_DEPLOY_CONFIG_NAME=demo', config_text)
+            self.assertIn('LLMOPS_DEPLOY_HOSTS=example-host', config_text)
+            self.assertIn('LLMOPS_DEPLOY_BASE_DIR=/Users/agent-user', config_text)
+            self.assertIn('LLMOPS_DEPLOY_INSTALL_PREFIX=/Users/agent-user/.llm-ops', config_text)
+            self.assertIn('LLMOPS_DEPLOY_BIN_DIR=/Users/agent-user/bin', config_text)
+            self.assertIn('LLMOPS_DEPLOY_INSTALL_SECRETS_KIT=1', config_text)
+
+    def test_stage_runtime_builds_trimmed_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            home = root / "home"
+            stage_dir = Path(tmp) / "visible-stage"
+            config_dir = root / "stage" / "deploy_config"
+            config_dir.mkdir(parents=True)
+            config_path = config_dir / "demo.env"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        'LLMOPS_DEPLOY_CONFIG_NAME="demo"',
+                        'LLMOPS_DEPLOY_HOSTS="fake-host"',
+                        'LLMOPS_DEPLOY_USER="agent-user"',
+                        'LLMOPS_DEPLOY_BASE_DIR="~"',
+                        'LLMOPS_DEPLOY_INSTALL_PREFIX="~/.llm-ops"',
+                        'LLMOPS_DEPLOY_BIN_DIR="~/bin"',
+                        'LLMOPS_DEPLOY_STATE_FILE="~/.llm-ops/runtime-state.env"',
+                        'LLMOPS_DEPLOY_VENV_PATH="~/.llm-ops/venv"',
+                        'LLMOPS_DEPLOY_INSTALL_SECRETS_KIT="0"',
+                        'LLMOPS_DEPLOY_SECRETS_KIT_SOURCE="git+https://github.com/unixwzrd/Secrets-Kit.git"',
+                        'LLMOPS_DEPLOY_SSH_KEY_PATH=""',
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            proc = self.run_bash(
+                f'"{STAGE_RUNTIME}" --config-file "{config_path}" --stage-dir "{stage_dir}" --force',
+                env={
+                    "HOME": str(home),
+                },
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            staged_install = stage_dir / Path(str(home).lstrip("/")) / ".llm-ops" / "current"
+            staged_bin = stage_dir / Path(str(home).lstrip("/")) / "bin"
+            self.assertTrue((staged_install / "scripts" / "agentctl").exists())
+            self.assertTrue((staged_install / "scripts" / "runtime-links.manifest").exists())
+            self.assertTrue(staged_bin.is_dir())
+            self.assertTrue((stage_dir / "metadata" / "build-info.json").exists())
+            self.assertFalse((staged_install / "scripts" / "tests").exists())
+            self.assertFalse((stage_dir / "docs").exists())
+
+    def test_push_runtime_syncs_virtual_root_and_validates_remote_env(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            home = root / "home"
+            llmops_home = home / ".llm-ops"
+            config_dir = root / "stage" / "deploy_config"
+            config_dir.mkdir(parents=True)
+            config_path = config_dir / "demo.env"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        'LLMOPS_DEPLOY_CONFIG_NAME="demo"',
+                        'LLMOPS_DEPLOY_HOSTS="fake-host"',
+                        'LLMOPS_DEPLOY_USER="agent-user"',
+                        'LLMOPS_DEPLOY_BASE_DIR="~"',
+                        'LLMOPS_DEPLOY_INSTALL_PREFIX="~/.llm-ops"',
+                        'LLMOPS_DEPLOY_BIN_DIR="~/bin"',
+                        'LLMOPS_DEPLOY_STATE_FILE="~/.llm-ops/runtime-state.env"',
+                        'LLMOPS_DEPLOY_VENV_PATH="~/.llm-ops/venv"',
+                        'LLMOPS_DEPLOY_INSTALL_SECRETS_KIT="0"',
+                        'LLMOPS_DEPLOY_SECRETS_KIT_SOURCE="git+https://github.com/unixwzrd/Secrets-Kit.git"',
+                        'LLMOPS_DEPLOY_SSH_KEY_PATH=""',
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            stage_dir = root / "stage" / "demo"
+
+            fake_bin = root / "fake-bin"
+            fake_bin.mkdir()
+            remote_home = root / "remote-home"
+            remote_home.mkdir()
+            ssh_log = root / "ssh.log"
+            rsync_log = root / "rsync.log"
+
+            (fake_bin / "ssh").write_text(
+                "#!/usr/bin/env bash\n"
+                "set -euo pipefail\n"
+                "log_file=\"${FAKE_SSH_LOG:?}\"\n"
+                "remote_home=\"${FAKE_REMOTE_HOME:?}\"\n"
+                "while [[ $# -gt 0 ]]; do\n"
+                "  case \"$1\" in\n"
+                "    -i|-o|-p) shift 2 ;;\n"
+                "    -*) shift ;;\n"
+                "    *@*) target=\"$1\"; shift; break ;;\n"
+                "    *) break ;;\n"
+                "  esac\n"
+                "done\n"
+                "printf '%s :: %s\\n' \"${target:-}\" \"$*\" >> \"$log_file\"\n"
+                "HOME=\"$remote_home\" \"$@\"\n",
+                encoding="utf-8",
+            )
+            (fake_bin / "ssh").chmod(0o755)
+
+            (fake_bin / "rsync").write_text(
+                "#!/usr/bin/env bash\n"
+                "set -euo pipefail\n"
+                "log_file=\"${FAKE_RSYNC_LOG:?}\"\n"
+                "remote_home=\"${FAKE_REMOTE_HOME:?}\"\n"
+                "delete_mode=0\n"
+                "args=()\n"
+                "while [[ $# -gt 0 ]]; do\n"
+                "  case \"$1\" in\n"
+                "    -e) shift 2 ;;\n"
+                "    --delete) delete_mode=1; shift ;;\n"
+                "    -*) shift ;;\n"
+                "    *) args+=(\"$1\"); shift ;;\n"
+                "  esac\n"
+                "done\n"
+                "src=\"${args[0]}\"\n"
+                "dest=\"${args[1]}\"\n"
+                "remote_path=\"${dest#*:}\"\n"
+                "case \"$remote_path\" in\n"
+                "  '~') remote_path=\"$remote_home\" ;;\n"
+                "  '~/'*) remote_path=\"$remote_home/${remote_path#~/}\" ;;\n"
+                "esac\n"
+                "mkdir -p \"$remote_path\"\n"
+                "if [[ \"$delete_mode\" == \"1\" && -d \"$remote_path\" ]]; then\n"
+                "  find \"$remote_path\" -mindepth 1 -maxdepth 1 -exec rm -rf {} +\n"
+                "fi\n"
+                "cp -R \"$src\"/. \"$remote_path\"/\n"
+                "printf '%s -> %s\\n' \"$src\" \"$remote_path\" >> \"$log_file\"\n",
+                encoding="utf-8",
+            )
+            (fake_bin / "rsync").chmod(0o755)
+
+            proc = self.run_bash(
+                f'"{PUSH_RUNTIME}" --config-file "{config_path}" --stage-dir "{stage_dir}"',
+                env={
+                    "HOME": str(home),
+                    "LLMOPS_HOME": str(llmops_home),
+                    "LLMOPS_ROOT": str(REPO_ROOT),
+                    "LLMOPS_RUNTIME_VENV_PACKAGES": "",
+                    "PATH": f"{fake_bin}:{os.environ['PATH']}",
+                    "FAKE_REMOTE_HOME": str(remote_home),
+                    "FAKE_SSH_LOG": str(ssh_log),
+                    "FAKE_RSYNC_LOG": str(rsync_log),
+                },
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertTrue((remote_home / ".llm-ops" / "current" / "scripts" / "agentctl").exists())
+            self.assertTrue((remote_home / ".llm-ops" / "runtime-state.env").exists())
+            self.assertTrue((remote_home / ".llm-ops" / "venv" / "bin" / "python").exists())
+            self.assertTrue((remote_home / "bin" / "agentctl").is_symlink())
+            self.assertTrue(ssh_log.exists())
+            self.assertTrue(rsync_log.exists())
+
+    def test_deploy_runtime_uses_named_config_and_confirmation_bypass(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            home = root / "home"
+            llmops_home = home / ".llm-ops"
+            config_dir = root / "stage" / "deploy_config"
+            config_dir.mkdir(parents=True)
+            config_path = config_dir / "default.env"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        'LLMOPS_DEPLOY_CONFIG_NAME="default"',
+                        'LLMOPS_DEPLOY_HOSTS="fake-host"',
+                        'LLMOPS_DEPLOY_USER="agent-user"',
+                        'LLMOPS_DEPLOY_BASE_DIR="~"',
+                        'LLMOPS_DEPLOY_INSTALL_PREFIX="~/.llm-ops"',
+                        'LLMOPS_DEPLOY_BIN_DIR="~/bin"',
+                        'LLMOPS_DEPLOY_STATE_FILE="~/.llm-ops/runtime-state.env"',
+                        'LLMOPS_DEPLOY_VENV_PATH="~/.llm-ops/venv"',
+                        'LLMOPS_DEPLOY_INSTALL_SECRETS_KIT="0"',
+                        'LLMOPS_DEPLOY_SECRETS_KIT_SOURCE="git+https://github.com/unixwzrd/Secrets-Kit.git"',
+                        'LLMOPS_DEPLOY_SSH_KEY_PATH=""',
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            stage_dir = root / "stage"
+
+            fake_bin = root / "fake-bin"
+            fake_bin.mkdir()
+            remote_home = root / "remote-home"
+            remote_home.mkdir()
+            (fake_bin / "ssh").write_text(
+                "#!/usr/bin/env bash\n"
+                "set -euo pipefail\n"
+                "remote_home=\"${FAKE_REMOTE_HOME:?}\"\n"
+                "while [[ $# -gt 0 ]]; do\n"
+                "  case \"$1\" in\n"
+                "    -i|-o|-p) shift 2 ;;\n"
+                "    -*) shift ;;\n"
+                "    *@*) shift; break ;;\n"
+                "    *) break ;;\n"
+                "  esac\n"
+                "done\n"
+                "HOME=\"$remote_home\" \"$@\"\n",
+                encoding="utf-8",
+            )
+            (fake_bin / "ssh").chmod(0o755)
+            (fake_bin / "rsync").write_text(
+                "#!/usr/bin/env bash\n"
+                "set -euo pipefail\n"
+                "remote_home=\"${FAKE_REMOTE_HOME:?}\"\n"
+                "args=()\n"
+                "while [[ $# -gt 0 ]]; do\n"
+                "  case \"$1\" in\n"
+                "    -e) shift 2 ;;\n"
+                "    --delete) shift ;;\n"
+                "    -*) shift ;;\n"
+                "    *) args+=(\"$1\"); shift ;;\n"
+                "  esac\n"
+                "done\n"
+                "src=\"${args[0]}\"\n"
+                "dest=\"${args[1]}\"\n"
+                "remote_path=\"${dest#*:}\"\n"
+                "case \"$remote_path\" in\n"
+                "  '~') remote_path=\"$remote_home\" ;;\n"
+                "  '~/'*) remote_path=\"$remote_home/${remote_path#~/}\" ;;\n"
+                "esac\n"
+                "mkdir -p \"$remote_path\"\n"
+                "cp -R \"$src\"/. \"$remote_path\"/\n",
+                encoding="utf-8",
+            )
+            (fake_bin / "rsync").chmod(0o755)
+
+            proc = self.run_bash(
+                f'"{DEPLOY_RUNTIME}" -y --dry-run --config-file "{config_path}" --stage-dir "{stage_dir}"',
+                env={
+                    "HOME": str(home),
+                    "LLMOPS_HOME": str(llmops_home),
+                    "LLMOPS_ROOT": str(root),
+                    "PATH": f"{fake_bin}:{os.environ['PATH']}",
+                    "FAKE_REMOTE_HOME": str(remote_home),
+                },
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertIn("Deployment plan", proc.stdout)
+            self.assertTrue(config_path.exists())
+            self.assertTrue((stage_dir / "default" / "metadata" / "build-info.json").exists())
+
     def test_seckit_export_failure_is_quiet_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             fake_bin = Path(tmp) / "fake-seckit"
@@ -258,6 +542,75 @@ class ShellRuntimeHelperTests(unittest.TestCase):
             self.assertEqual(proc.returncode, 0, proc.stderr)
             self.assertIn("Secrets Kit fallback in use", proc.stderr)
             self.assertIn("OPENAI_API_KEY", proc.stderr)
+
+    def test_agentctl_launchd_run_openclaw_uses_seckit_run_parent_injection(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            llmops_home = home / ".llm-ops"
+            openclaw_home = home / ".openclaw"
+            config_dir = llmops_home / "config" / "agents"
+            config_dir.mkdir(parents=True)
+            openclaw_home.mkdir(parents=True)
+            (openclaw_home / ".env").write_text("OPENAI_API_KEY=from-dotenv\n", encoding="utf-8")
+
+            seckit_log = Path(tmp) / "seckit.log"
+            seckit_env = Path(tmp) / "seckit.env"
+            openclaw_log = Path(tmp) / "openclaw.log"
+            openclaw_env = Path(tmp) / "openclaw.env"
+
+            fake_openclaw = Path(tmp) / "fake-openclaw"
+            fake_openclaw.write_text(
+                "#!/usr/bin/env bash\n"
+                "printf '%s\\n' \"$@\" > \"" + str(openclaw_log) + "\"\n"
+                "printf 'OPENAI_API_KEY=%s\\n' \"${OPENAI_API_KEY:-}\" > \"" + str(openclaw_env) + "\"\n",
+                encoding="utf-8",
+            )
+            fake_openclaw.chmod(0o755)
+
+            fake_seckit = Path(tmp) / "fake-seckit"
+            fake_seckit.write_text(
+                "#!/usr/bin/env bash\n"
+                "printf '%s\\n' \"$@\" > \"" + str(seckit_log) + "\"\n"
+                "printf 'OPENAI_API_KEY=%s\\n' \"${OPENAI_API_KEY:-}\" > \"" + str(seckit_env) + "\"\n"
+                "export OPENAI_API_KEY=from-seckit\n"
+                "shift\n"
+                "while [[ \"$1\" != \"--\" ]]; do shift; done\n"
+                "shift\n"
+                "exec \"$@\"\n",
+                encoding="utf-8",
+            )
+            fake_seckit.chmod(0o755)
+
+            proc = self.run_bash(
+                f'"{AGENTCTL}" launchd-run openclaw',
+                env={
+                    "HOME": str(home),
+                    "LLMOPS_HOME": str(llmops_home),
+                    "OPENCLAW_HOME": str(openclaw_home),
+                    "OPENCLAW_GATEWAY_CMD": str(fake_openclaw),
+                    "LLMOPS_SECKIT_BIN": str(fake_seckit),
+                    "LLMOPS_SECKIT_ACCOUNT": "miafour",
+                },
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertEqual(seckit_env.read_text(encoding="utf-8").strip(), "OPENAI_API_KEY=")
+            self.assertEqual(openclaw_env.read_text(encoding="utf-8").strip(), "OPENAI_API_KEY=from-seckit")
+
+            seckit_args = seckit_log.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(
+                seckit_args[:7],
+                [
+                    "run",
+                    "--service",
+                    "openclaw",
+                    "--account",
+                    "miafour",
+                    "--names",
+                    "OPENCLAW_GATEWAY_TOKEN,TELEGRAM_BOT_TOKEN,OPENAI_API_KEY,HUGGINGFACE_API_KEY,LOCAL_EMBEDDING_API_KEY,BRAVE_SEARCH_API_KEY,ELEVENLABS_API_KEY,SAG_API_KEY",
+                ],
+            )
+            self.assertEqual(seckit_args[7:], ["--", str(fake_openclaw), "gateway", "run", "--port", "18789"])
+            self.assertEqual(openclaw_log.read_text(encoding="utf-8").splitlines(), ["gateway", "run", "--port", "18789"])
 
     def test_seckit_env_secret_fallback_warning_can_be_suppressed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -466,12 +819,18 @@ class ShellRuntimeHelperTests(unittest.TestCase):
                 encoding="utf-8",
             )
             args_log = root / "seckit-args.log"
+            seckit_env_log = root / "seckit-env.log"
             fake_seckit = root / "fake-seckit"
             fake_seckit.write_text(
                 "#!/usr/bin/env bash\n"
                 f"printf '%s\\n' \"$*\" > \"{args_log}\"\n"
-                "printf 'export OPENCLAW_GATEWAY_TOKEN=sec-gateway\\n'\n"
-                "printf 'export TELEGRAM_BOT_TOKEN=sec-telegram\\n'\n",
+                f"printf 'OPENCLAW_GATEWAY_TOKEN=%s\\nTELEGRAM_BOT_TOKEN=%s\\n' \"${{OPENCLAW_GATEWAY_TOKEN:-}}\" \"${{TELEGRAM_BOT_TOKEN:-}}\" > \"{seckit_env_log}\"\n"
+                "export OPENCLAW_GATEWAY_TOKEN=sec-gateway\n"
+                "export TELEGRAM_BOT_TOKEN=sec-telegram\n"
+                "shift\n"
+                "while [[ \"$1\" != \"--\" ]]; do shift; done\n"
+                "shift\n"
+                "exec \"$@\"\n",
                 encoding="utf-8",
             )
             fake_seckit.chmod(0o755)
@@ -493,12 +852,14 @@ class ShellRuntimeHelperTests(unittest.TestCase):
                     "OPENCLAW_HOME": str(openclaw_home),
                     "LLMOPS_USE_SECKIT": "1",
                     "LLMOPS_SECKIT_BIN": str(fake_seckit),
+                    "LLMOPS_SECKIT_ACCOUNT": "miafour",
                     "OPENCLAW_GATEWAY_CMD": str(fake_cmd),
                 },
             )
             self.assertEqual(proc.returncode, 0, proc.stderr)
             self.assertIn("gateway run --port 18789|sec-gateway|sec-telegram", invocations.read_text(encoding="utf-8"))
-            self.assertIn("--names OPENCLAW_GATEWAY_TOKEN,TELEGRAM_BOT_TOKEN,OPENAI_API_KEY,HUGGINGFACE_API_KEY,LOCAL_EMBEDDING_API_KEY,BRAVE_SEARCH_API_KEY,ELEVENLABS_API_KEY,SAG_API_KEY", args_log.read_text(encoding="utf-8"))
+            self.assertIn("run --service openclaw --account miafour --names OPENCLAW_GATEWAY_TOKEN,TELEGRAM_BOT_TOKEN,OPENAI_API_KEY,HUGGINGFACE_API_KEY,LOCAL_EMBEDDING_API_KEY,BRAVE_SEARCH_API_KEY,ELEVENLABS_API_KEY,SAG_API_KEY", args_log.read_text(encoding="utf-8"))
+            self.assertEqual(seckit_env_log.read_text(encoding="utf-8").splitlines(), ["OPENCLAW_GATEWAY_TOKEN=", "TELEGRAM_BOT_TOKEN="])
             self.assertTrue((llmops_home / "config" / "agents" / "openclaw.env").exists())
 
     def test_gateway_start_stop_openclaw_with_fake_command(self) -> None:
@@ -647,6 +1008,10 @@ class ShellRuntimeHelperTests(unittest.TestCase):
             status = self.run_bash(f'"{AGENTCTL}" launchd-status openclaw', env=base_env)
             self.assertEqual(status.returncode, 0, status.stderr)
             self.assertIn("agentctl[openclaw]: launchd loaded label=ai.openclaw.gateway", status.stdout)
+
+            bootout = self.run_bash(f'"{AGENTCTL}" launchd-bootout openclaw', env=base_env)
+            self.assertEqual(bootout.returncode, 0, bootout.stderr)
+            self.assertIn("agentctl[openclaw]: launchd booted out label=ai.openclaw.gateway", bootout.stdout)
 
             stop = self.run_bash(f'"{AGENTCTL}" launchd-stop openclaw', env=base_env)
             self.assertEqual(stop.returncode, 0, stop.stderr)

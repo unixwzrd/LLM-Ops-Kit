@@ -15,7 +15,45 @@ INSTALL_BASE="${LLMOPS_INSTALL_BASE:-$HOME/.llm-ops}"
 INSTALL_DIR="$INSTALL_BASE/current"
 BIN_DIR="${BIN_DIR:-$HOME/bin}"
 STATE_FILE="${LLMOPS_STATE_FILE:-$HOME/.llm-ops/runtime-state.env}"
+VENV_PATH="${LLMOPS_RUNTIME_VENV_PATH:-}"
+INSTALL_SECRETS_KIT=0
+SECRETS_KIT_SOURCE="${LLMOPS_SECRETS_KIT_SOURCE:-git+https://github.com/unixwzrd/Secrets-Kit.git}"
+PYTHON_PACKAGES="${LLMOPS_RUNTIME_VENV_PACKAGES:-jinja2}"
 NO_LINKS=0
+
+expand_path() {
+  local raw="$1"
+  case "$raw" in
+    "~") printf '%s\n' "$HOME" ;;
+    "~/"*) printf '%s/%s\n' "$HOME" "${raw#\~/}" ;;
+    *) printf '%s\n' "$raw" ;;
+  esac
+}
+
+ensure_runtime_venv() {
+  local venv="$1"
+  local python_bin
+  [[ -n "$venv" ]] || return 0
+
+  venv="$(expand_path "$venv")"
+  python_bin="$venv/bin/python"
+  if [[ ! -x "$python_bin" ]]; then
+    echo "Creating runtime venv at: $venv"
+    python3 -m venv "$venv"
+  fi
+
+  if [[ -n "${PYTHON_PACKAGES// }" ]]; then
+    echo "Installing runtime Python packages into: $venv"
+    "$python_bin" -m pip install ${PYTHON_PACKAGES}
+  fi
+
+  if [[ "$INSTALL_SECRETS_KIT" -eq 1 ]]; then
+    echo "Installing Secrets-Kit into runtime venv from: $SECRETS_KIT_SOURCE"
+    "$python_bin" -m pip install "$SECRETS_KIT_SOURCE"
+  fi
+
+  VENV_PATH="$venv"
+}
 
 usage() {
   cat <<USAGE
@@ -26,6 +64,9 @@ Options:
   --prefix <path>      Install base dir (default: ~/.llm-ops)
   --bin-dir <path>     Runtime bin dir (default: ~/bin)
   --state-file <path>  Runtime state file (default: ~/.llm-ops/runtime-state.env)
+  --venv-path <path>   Optional runtime Python virtualenv path
+  --install-secrets-kit  Install Secrets-Kit into the runtime venv
+  --secrets-kit-source <spec>  pip install source for Secrets-Kit
   --no-links           Install files only; skip link deploy/verify
   -h, --help           Show this help
 USAGE
@@ -37,11 +78,22 @@ while [[ $# -gt 0 ]]; do
     --prefix) INSTALL_BASE="$2"; shift 2 ;;
     --bin-dir) BIN_DIR="$2"; shift 2 ;;
     --state-file) STATE_FILE="$2"; shift 2 ;;
+    --venv-path) VENV_PATH="$2"; shift 2 ;;
+    --install-secrets-kit) INSTALL_SECRETS_KIT=1; shift ;;
+    --secrets-kit-source) SECRETS_KIT_SOURCE="$2"; shift 2 ;;
     --no-links) NO_LINKS=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
+
+SOURCE_DIR="$(expand_path "$SOURCE_DIR")"
+INSTALL_BASE="$(expand_path "$INSTALL_BASE")"
+BIN_DIR="$(expand_path "$BIN_DIR")"
+STATE_FILE="$(expand_path "$STATE_FILE")"
+if [[ -n "$VENV_PATH" ]]; then
+  VENV_PATH="$(expand_path "$VENV_PATH")"
+fi
 
 INSTALL_DIR="$INSTALL_BASE/current"
 STAGING_DIR="$INSTALL_BASE/.staging.$$"
@@ -71,6 +123,8 @@ fi
 mv "$STAGING_DIR" "$INSTALL_DIR"
 echo "Installed runtime to: $INSTALL_DIR"
 
+ensure_runtime_venv "$VENV_PATH"
+
 if [[ "$NO_LINKS" -eq 0 ]]; then
   pushd "$INSTALL_DIR/scripts" >/dev/null
   ./generate-manifest
@@ -92,6 +146,7 @@ LLMOPS_INSTALL_BASE=$INSTALL_BASE
 LLMOPS_INSTALL_DIR=$INSTALL_DIR
 LLMOPS_BIN_DIR=$BIN_DIR
 LLMOPS_SOURCE_DIR=$SOURCE_DIR
+LLMOPS_RUNTIME_VENV_PATH=$VENV_PATH
 LLMOPS_UPDATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 EOF
 echo "WROTE_STATE: $STATE_FILE"

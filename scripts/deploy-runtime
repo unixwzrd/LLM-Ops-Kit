@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SOURCE="${BASH_SOURCE[0]}"
+while [[ -h "$SOURCE" ]]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+# shellcheck disable=SC1091
+. "$SCRIPT_DIR/lib/common.sh"
+
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+CONFIG_NAME="$(deploy_default_config_name)"
+CONFIG_FILE=""
+CONFIGURE=0
+ASSUME_YES=0
+DRY_RUN=0
+STAGE_DIR="$REPO_ROOT/stage/$CONFIG_NAME"
+VERBOSE=0
+
+usage() {
+  cat <<USAGE
+Usage: $(basename "$0") [options]
+
+Options:
+  -c, --config <name>     Deployment config name (default: default)
+  --config-file <path>    Explicit deployment config file path
+  -n, -d, --define        Create or update the deployment config interactively
+  -y, --yes               Skip confirmation and deploy immediately
+  -v, --verbose           Show detailed staging and sync activity
+  --dry-run               Build and show the deployment without remote changes
+  --stage-dir <path>      Local stage directory (default: $REPO_ROOT/stage/<config-name>)
+  -h, --help              Show this help
+USAGE
+}
+
+normalize_stage_dir() {
+  local raw="$1"
+  case "$raw" in
+    */stage|*/stage/)
+      printf '%s/%s\n' "${raw%/}" "$CONFIG_NAME"
+      ;;
+    *)
+      printf '%s\n' "${raw%/}"
+      ;;
+  esac
+}
+
+show_plan() {
+  cat <<EOF
+Deployment plan
+  config_file=$DEPLOY_CONFIG_FILE
+  config_name=$DEPLOY_CONFIG_NAME
+  hosts=$DEPLOY_HOSTS
+  runtime_owner=$DEPLOY_USER
+  base_dir=$DEPLOY_BASE_DIR
+  install_prefix=$DEPLOY_INSTALL_PREFIX
+  bin_dir=$DEPLOY_BIN_DIR
+  state_file=$DEPLOY_STATE_FILE
+  venv_path=${DEPLOY_VENV_PATH:-}
+  install_secrets_kit=${DEPLOY_INSTALL_SECRETS_KIT:-0}
+  secrets_kit_source=${DEPLOY_SECRETS_KIT_SOURCE:-}
+  ssh_key_path=${DEPLOY_SSH_KEY_PATH:-}
+  local_stage_dir=$STAGE_DIR
+  mode=$( [[ "$DRY_RUN" -eq 1 ]] && printf dry-run || printf deploy )
+EOF
+}
+
+confirm_deploy() {
+  prompt_yes_no "Proceed with this deployment?" "N"
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -c|--config) CONFIG_NAME="$2"; shift 2 ;;
+    --config-file) CONFIG_FILE="$2"; shift 2 ;;
+    -n|-d|--define) CONFIGURE=1; shift ;;
+    -y|--yes) ASSUME_YES=1; shift ;;
+    -v|--verbose) VERBOSE=1; shift ;;
+    --dry-run) DRY_RUN=1; shift ;;
+    --stage-dir) STAGE_DIR="$2"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
+  esac
+done
+
+if [[ -z "$CONFIG_NAME" ]]; then
+  CONFIG_NAME="default"
+fi
+if [[ -z "$CONFIG_FILE" ]]; then
+  CONFIG_FILE="$(deploy_config_path "$CONFIG_NAME")"
+fi
+if [[ -z "$STAGE_DIR" ]]; then
+  STAGE_DIR="$REPO_ROOT/stage/$CONFIG_NAME"
+fi
+STAGE_DIR="$(normalize_stage_dir "$STAGE_DIR")"
+if [[ "$VERBOSE" -eq 1 ]]; then
+  export LLMOPS_DEPLOY_VERBOSE=1
+fi
+
+if [[ "$CONFIGURE" -eq 1 || ! -f "$CONFIG_FILE" ]]; then
+  "$SCRIPT_DIR/setup-deploy" --config-name "$CONFIG_NAME" --config-file "$CONFIG_FILE" --reset
+fi
+
+deploy_load_config "$CONFIG_NAME" "$CONFIG_FILE"
+show_plan
+
+if [[ "$ASSUME_YES" -ne 1 ]]; then
+  if ! confirm_deploy; then
+    echo "Deployment cancelled."
+    exit 1
+  fi
+fi
+
+"$SCRIPT_DIR/stage-runtime" --config-name "$CONFIG_NAME" --config-file "$CONFIG_FILE" --stage-dir "$STAGE_DIR" --force
+push_args=(
+  --config-name "$CONFIG_NAME"
+  --config-file "$CONFIG_FILE"
+  --stage-dir "$STAGE_DIR"
+  --skip-stage
+)
+if [[ "$DRY_RUN" -eq 1 ]]; then
+  push_args+=( --dry-run )
+fi
+"$SCRIPT_DIR/push-runtime" "${push_args[@]}"

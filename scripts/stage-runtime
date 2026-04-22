@@ -1,0 +1,219 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SOURCE="${BASH_SOURCE[0]}"
+while [[ -h "$SOURCE" ]]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+# shellcheck disable=SC1091
+. "$SCRIPT_DIR/lib/common.sh"
+
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+CONFIG_NAME="$(deploy_default_config_name)"
+CONFIG_FILE=""
+STAGE_DIR=""
+FORCE=0
+
+usage() {
+  cat <<USAGE
+Usage: $(basename "$0") [options]
+
+Options:
+  --config-name <name>  Deployment config name
+  --config-file <path>  Deployment config file path
+  --stage-dir <path>    Stage output directory (default: $REPO_ROOT/stage/<config-name>)
+  --force               Rebuild even if the stage dir already exists
+  -v, --verbose         Show staged file copy details
+  -h, --help            Show this help
+USAGE
+}
+
+normalize_stage_dir() {
+  local raw="$1"
+  case "$raw" in
+    */stage|*/stage/)
+      printf '%s/%s\n' "${raw%/}" "$DEPLOY_CONFIG_NAME"
+      ;;
+    *)
+      printf '%s\n' "${raw%/}"
+      ;;
+  esac
+}
+
+expand_path() {
+  local raw="$1"
+  case "$raw" in
+    "~") printf '%s\n' "$HOME" ;;
+    "~/"*) printf '%s/%s\n' "$HOME" "${raw#\~/}" ;;
+    *) printf '%s\n' "$raw" ;;
+  esac
+}
+
+ensure_relative_to_base() {
+  local base_dir="$1"
+  local target="$2"
+  case "$target" in
+    "$base_dir") printf '.\n' ;;
+    "$base_dir"/*) printf '%s\n' "${target#"$base_dir"/}" ;;
+    *)
+      echo "Configured path is not under base dir: target=$target base=$base_dir" >&2
+      exit 1
+      ;;
+  esac
+}
+
+stage_path_for_absolute() {
+  local absolute_path="$1"
+  printf '%s/%s\n' "${STAGE_FS_ROOT:-$STAGE_DIR}" "${absolute_path#/}"
+}
+
+write_build_metadata() {
+  local metadata_dir="$1"
+  local revision="unknown"
+  local branch="unknown"
+  local dirty="unknown"
+  mkdir -p "$metadata_dir"
+  if git -C "$REPO_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    revision="$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || printf 'unknown')"
+    branch="$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || printf 'unknown')"
+    if git -C "$REPO_ROOT" diff --quiet --ignore-submodules HEAD -- >/dev/null 2>&1; then
+      dirty="0"
+    else
+      dirty="1"
+    fi
+  fi
+  cat > "$metadata_dir/build-info.json" <<EOF
+{
+  "config_name": "${CONFIG_NAME:-}",
+  "source_root": "$REPO_ROOT",
+  "base_dir": "$DEPLOY_BASE_DIR",
+  "install_prefix": "$DEPLOY_INSTALL_PREFIX",
+  "bin_dir": "$DEPLOY_BIN_DIR",
+  "state_file": "$DEPLOY_STATE_FILE",
+  "venv_path": "${DEPLOY_VENV_PATH:-}",
+  "git_revision": "$revision",
+  "git_branch": "$branch",
+  "git_dirty": "$dirty",
+  "built_at_utc": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+EOF
+}
+
+copy_runtime_sources() {
+  local destination_root="$1"
+  local path=""
+  while IFS= read -r path; do
+    [[ -n "$path" ]] || continue
+    mkdir -p "$destination_root/$(dirname "$path")"
+    deploy_verbose_echo "STAGE_COPY: $path -> $destination_root/$path"
+    cp -pP "$REPO_ROOT/$path" "$destination_root/$path"
+  done < "$FILES_LIST"
+}
+
+append_allowed_untracked_paths() {
+  local rel=""
+  local -a allowed_paths=(
+    "scripts/deploy-runtime"
+    "scripts/setup-deploy"
+    "scripts/stage-runtime"
+    "scripts/push-runtime"
+  )
+  for rel in "${allowed_paths[@]}"; do
+    if [[ -e "$REPO_ROOT/$rel" ]]; then
+      printf '%s\n' "$rel"
+    fi
+  done
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --config-name) CONFIG_NAME="$2"; shift 2 ;;
+    --config-file) CONFIG_FILE="$2"; shift 2 ;;
+    --stage-dir) STAGE_DIR="$2"; shift 2 ;;
+    --force) FORCE=1; shift ;;
+    -v|--verbose) export LLMOPS_DEPLOY_VERBOSE=1; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
+  esac
+done
+
+if [[ -z "$CONFIG_FILE" ]]; then
+  CONFIG_FILE="$(deploy_config_path "$CONFIG_NAME")"
+fi
+if [[ -z "$CONFIG_NAME" ]]; then
+  CONFIG_NAME="$(basename "$CONFIG_FILE" .env)"
+fi
+
+deploy_load_config "$CONFIG_NAME" "$CONFIG_FILE"
+
+if [[ -z "$STAGE_DIR" ]]; then
+  STAGE_DIR="$REPO_ROOT/stage/$DEPLOY_CONFIG_NAME"
+fi
+STAGE_DIR="$(normalize_stage_dir "$STAGE_DIR")"
+
+DEPLOY_BASE_DIR="$(expand_path "$DEPLOY_BASE_DIR")"
+DEPLOY_INSTALL_PREFIX="$(expand_path "$DEPLOY_INSTALL_PREFIX")"
+DEPLOY_BIN_DIR="$(expand_path "$DEPLOY_BIN_DIR")"
+DEPLOY_STATE_FILE="$(expand_path "$DEPLOY_STATE_FILE")"
+if [[ -n "${DEPLOY_VENV_PATH:-}" ]]; then
+  DEPLOY_VENV_PATH="$(expand_path "$DEPLOY_VENV_PATH")"
+fi
+
+ensure_relative_to_base "$DEPLOY_BASE_DIR" "$DEPLOY_INSTALL_PREFIX" >/dev/null
+ensure_relative_to_base "$DEPLOY_BASE_DIR" "$DEPLOY_BIN_DIR" >/dev/null
+ensure_relative_to_base "$DEPLOY_BASE_DIR" "$DEPLOY_STATE_FILE" >/dev/null
+
+STAGE_DIR="$(mkdir -p "$(dirname "$STAGE_DIR")" && cd "$(dirname "$STAGE_DIR")" >/dev/null 2>&1 && pwd)/$(basename "$STAGE_DIR")"
+if [[ -e "$STAGE_DIR" && "$FORCE" -ne 1 ]]; then
+  echo "Stage directory already exists: $STAGE_DIR (use --force to rebuild)" >&2
+  exit 1
+fi
+
+TMP_STAGE="${STAGE_DIR}.tmp.$$"
+STAGE_FS_ROOT="$TMP_STAGE"
+FILES_LIST="$(mktemp)"
+trap 'rm -f "$FILES_LIST"; rm -rf "$TMP_STAGE"' EXIT
+
+rm -rf "$TMP_STAGE"
+mkdir -p "$TMP_STAGE"
+
+git -C "$REPO_ROOT" ls-files -z -- scripts bin | while IFS= read -r -d '' path; do
+  case "$path" in
+    scripts/tests/*|scripts/__pycache__/*|scripts/tests|bin/__pycache__/*)
+      continue
+      ;;
+  esac
+  printf '%s\n' "$path"
+done > "$FILES_LIST"
+append_allowed_untracked_paths >> "$FILES_LIST"
+sort -u -o "$FILES_LIST" "$FILES_LIST"
+
+RUNTIME_CURRENT_DIR="$(stage_path_for_absolute "$DEPLOY_INSTALL_PREFIX")/current"
+mkdir -p "$RUNTIME_CURRENT_DIR"
+copy_runtime_sources "$RUNTIME_CURRENT_DIR"
+
+mkdir -p "$(stage_path_for_absolute "$DEPLOY_BIN_DIR")"
+
+mkdir -p "$(dirname "$(stage_path_for_absolute "$DEPLOY_STATE_FILE")")"
+cat > "$(stage_path_for_absolute "$DEPLOY_STATE_FILE")" <<EOF
+LLMOPS_INSTALL_MODE=staged
+LLMOPS_INSTALL_BASE=$DEPLOY_INSTALL_PREFIX
+LLMOPS_INSTALL_DIR=$DEPLOY_INSTALL_PREFIX/current
+LLMOPS_BIN_DIR=$DEPLOY_BIN_DIR
+LLMOPS_SOURCE_DIR=$REPO_ROOT
+LLMOPS_RUNTIME_VENV_PATH=${DEPLOY_VENV_PATH:-}
+LLMOPS_UPDATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+EOF
+
+write_build_metadata "$TMP_STAGE/metadata"
+
+rm -rf "$STAGE_DIR"
+mv "$TMP_STAGE" "$STAGE_DIR"
+trap 'rm -f "$FILES_LIST"' EXIT
+
+echo "STAGED_RUNTIME_DIR: $STAGE_DIR"
+echo "STAGED_ROOT_DIR: $STAGE_DIR"
+echo "STAGED_CONFIG: ${CONFIG_NAME:-}"

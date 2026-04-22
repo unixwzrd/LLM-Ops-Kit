@@ -1,11 +1,68 @@
 # Agent Ops Changelog
 
 **Created**: 2026-02-20
-**Updated**: 2026-04-13
+**Updated**: 2026-04-18
 
 All notable changes to LLM-Ops-Kit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+### 2026-04-18 — Staged SSH deployment flow, named deploy configs, and launchd cleanup
+
+- **Scope:**
+  - Scripts
+    - `scripts/deploy-runtime`
+    - `scripts/setup-deploy`
+    - `scripts/stage-runtime`
+    - `scripts/push-runtime`
+    - `scripts/install-runtime.sh`
+    - `scripts/lib/common.sh`
+    - `scripts/generate-manifest`
+    - `scripts/runtime-links.manifest`
+    - `scripts/agentctl`
+    - `scripts/tests/test_shell_runtime_helpers.py`
+  - Documents
+    - `README.md`
+    - `docs/CONFIGURATION.md`
+    - `docs/DEPLOYMENT_SYNC_RUNBOOK.md`
+    - `docs/scripts/deploy-runtime.md`
+    - `docs/scripts/setup-deploy.md`
+    - `docs/scripts/stage-runtime.md`
+    - `docs/scripts/push-runtime.md`
+    - `docs/scripts/agentctl.md`
+    - `docs/scripts/sync-ops-scripts.md`
+    - `docs/RELEASE_AUDIT_CHECKLIST.md`
+- **Category:** `deployment`, `runtime`, `launchd`, `documentation`, `testing`
+- **What changed:**
+  - Added `deploy-runtime` as the operator-facing Phase 1 deployment command that configures, stages, previews, confirms, and pushes a runtime payload in one flow.
+  - Switched deployment config storage to named local files under `stage/deploy_config/<name>.env` and added staged deploy logs under `stage/deploy_config/logs/<config-name>/`.
+  - Reworked deploy configuration around one config file per rollout target set, including host-list support and interactive defaults for runtime owner, base dir, install prefix, bin dir, state file, staging path, venv path, and optional Secrets-Kit installation.
+  - Kept `setup-deploy`, `stage-runtime`, and `push-runtime` as internal helper stages, but removed them from the managed `~/bin` link surface so `deploy-runtime` is the primary deploy UX.
+  - Extended the staged/remote install path so runtime installs can create and reuse a dedicated Python venv and optionally install `Secrets-Kit` into that same runtime environment.
+  - Fixed the launchd restart bootout path in `agentctl`, added an explicit `launchd-bootout` command, and aligned the help/docs with the reachable launchd control surface.
+  - Added regression coverage for named deploy configs, staged payload building, push/deploy orchestration, and the new launchd bootout path.
+- **Why:**
+  - Reduce operator command sprawl, make SSH-based rollout predictable for non-developer users, and keep launchd lifecycle control explicit and testable.
+
+### 2026-04-16 — Qwen3.5 optimized template return, template override cleanup, and link healing
+
+- **Scope:**
+  - Scripts
+    - `scripts/modelctl`
+    - `scripts/deploy-runtime-links.sh`
+    - `scripts/models/Qwen3.5.sh`
+    - `scripts/templates/Qwen-3_5-optimized-template.jinja`
+    - `scripts/templates/Qwen3.5-thinking-tool-calling-liposuction.jinja`
+    - `scripts/tests/test_shell_runtime_helpers.py`
+    - `scripts/runtime-links.manifest`
+- **Category:** `runtime`, `templates`, `testing`
+- **What changed:**
+  - Restored and refined the optimized Qwen3.5 Jinja template path.
+  - Tightened `modelctl` template/override precedence so template-style env overrides remain effective while explicit external environment still wins when intentionally supplied.
+  - Added link-healing coverage for managed runtime commands when a regular file matches the expected deployed script content.
+  - Added regression coverage around template-style per-model overrides and external-env precedence.
+- **Why:**
+  - Keep the optimized template path available without regressing operator overrides or leaving managed links brittle during staged installs.
 
 ### 2026-04-13 — Hermes Seckit defaults, model default layering, and recovery tooling
 

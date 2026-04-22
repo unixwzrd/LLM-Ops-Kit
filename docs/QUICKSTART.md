@@ -29,17 +29,17 @@ Minimal Python bootstrap:
 python3 -m pip install jinja2
 ```
 
-## First-Time Install
+## First-Time Stage + Deploy
 
-Clone the repo first, then install the runtime from that checkout:
+Clone the repo first, then configure, stage, and deploy from that checkout:
 
 ```bash
 git clone https://github.com/unixwzrd/LLM-Ops-Kit.git ~/projects/LLM-Ops-Kit
 cd ~/projects/LLM-Ops-Kit
-./scripts/install-runtime --source "$PWD"
+./build-stage -c default
 ```
 
-After that, use the linked commands in `~/bin`.
+This builds a virtual target filesystem under `./stage/default/`, then rsyncs the staged runtime tree to the configured host list and verifies the remote runtime surface.
 
 ## Remote Models, Local Agent Runtime
 
@@ -64,11 +64,14 @@ cd ~/projects/LLM-Ops-Kit
 ~/bin/tts-bridge start
 ```
 
-What `install-runtime` does:
+What Phase 1 staged deploy does:
 
-- copies the runtime payload into `~/.llm-ops/current`
-- writes runtime state to `~/.llm-ops/runtime-state.env`
-- deploys command links into `~/bin`
+- builds a staged runtime tree under `./stage/<config>/`
+- rsyncs the staged install tree into the target install prefix
+- rsyncs the staged bin tree into the target bin dir
+- creates or validates the target runtime venv
+- deploys command links into the target bin dir
+- writes runtime state on the target host
 
 Optional `Secrets Kit` setup:
 
@@ -114,7 +117,7 @@ cd ~/projects/LLM-Ops-Kit
 # ~/bin/tts-bridge start
 ```
 
-The installed runtime still lives under `~/.llm-ops/current`; `~/bin` only contains links to that installed payload.
+The deployed runtime still lives under the configured install prefix, typically `~/.llm-ops/current`; the target `~/bin` only contains links to that installed payload.
 
 ## Remote sync + deploy
 
