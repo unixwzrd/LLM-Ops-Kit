@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import unittest
 from pathlib import Path
+import json
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 import sys
 
 SCRIPTS_DIR = Path(__file__).resolve().parents[1]
@@ -123,6 +126,274 @@ class ModelProxyStatsTests(unittest.TestCase):
 
         self.assertEqual(rendered, "dict:print('hi')")
         self.assertIsNone(error)
+
+    def test_prune_older_image_parts_does_not_mutate_original_payload(self) -> None:
+        payload = {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "first"},
+                        {"type": "image_url", "image_url": {"url": "one"}},
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "second"},
+                        {"type": "image_url", "image_url": {"url": "two"}},
+                    ],
+                },
+            ]
+        }
+
+        normalized = model_proxy_tap.normalize_payload_for_template(payload)
+        changed, removed_count, latest_idx = model_proxy_tap.prune_older_image_parts(normalized)
+
+        self.assertTrue(changed)
+        self.assertEqual(removed_count, 1)
+        self.assertEqual(latest_idx, 1)
+        self.assertEqual(len(payload["messages"][0]["content"]), 2)
+        self.assertEqual(payload["messages"][0]["content"][1]["type"], "image_url")
+
+
+class _CaptureHandler(BaseHTTPRequestHandler):
+    received_bodies: list[bytes] = []
+    response_body: bytes = json.dumps({"ok": True}).encode("utf-8")
+
+    def log_message(self, fmt: str, *args) -> None:
+        return
+
+    def do_POST(self) -> None:
+        length = int(self.headers.get("Content-Length", "0"))
+        body = self.rfile.read(length)
+        type(self).received_bodies.append(body)
+        response_body = type(self).response_body
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(response_body)))
+        self.end_headers()
+        self.wfile.write(response_body)
+
+
+class ProxyTapPassthroughTests(unittest.TestCase):
+    def _start_server(self, handler_class):
+        server = HTTPServer(("127.0.0.1", 0), handler_class)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        return server, thread
+
+    def _make_proxy_handler(self, log_dir: Path, upstream_url: str, renderer):
+        class Handler(model_proxy_tap.ProxyTapHandler):
+            pass
+
+        Handler.upstream_base = upstream_url
+        Handler.log_path = log_dir / "proxy.ndjson"
+        Handler.max_log_bytes = 0
+        Handler.timeout_sec = 5.0
+        Handler.latest_image_only = False
+        Handler.log_fsync = False
+        Handler.log_rotate_seconds = 0
+        Handler.log_rotate_keep = 0
+        Handler._log_writers = {}
+        Handler.stream_chunk_size = 65536
+        Handler.chat_template_path = "fake.jinja"
+        Handler.chat_template_max_chars = 200000
+        Handler.chat_template_renderer = renderer
+        Handler.chat_template_error = None
+        Handler.raw_request_log_path = log_dir / "proxy.raw.log"
+        Handler.rendered_prompt_log_path = log_dir / "proxy.rendered.log"
+        Handler.raw_response_log_path = log_dir / "proxy.raw.log"
+        return Handler
+
+    def test_chat_template_logging_does_not_change_forwarded_request_body(self) -> None:
+        _CaptureHandler.received_bodies = []
+        _CaptureHandler.response_body = json.dumps({"ok": True}).encode("utf-8")
+        upstream, upstream_thread = self._start_server(_CaptureHandler)
+        self.addCleanup(upstream.shutdown)
+        self.addCleanup(upstream.server_close)
+        self.addCleanup(upstream_thread.join, 1)
+        import tempfile
+        from urllib.request import Request, urlopen
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_dir = Path(tmpdir)
+
+            class FakeRenderer:
+                def render(self, **context):
+                    args = context["messages"][0]["tool_calls"][0]["function"]["arguments"]
+                    return f"rendered:{type(args).__name__}:{args['code']}"
+
+            proxy_handler = self._make_proxy_handler(
+                log_dir,
+                f"http://127.0.0.1:{upstream.server_port}",
+                FakeRenderer(),
+            )
+            proxy, proxy_thread = self._start_server(proxy_handler)
+            self.addCleanup(proxy.shutdown)
+            self.addCleanup(proxy.server_close)
+            self.addCleanup(proxy_thread.join, 1)
+
+            payload = {
+                "messages": [
+                    {
+                        "role": "assistant",
+                        "tool_calls": [
+                            {
+                                "type": "function",
+                                "function": {
+                                    "name": "execute_code",
+                                    "arguments": "{\"code\":\"print('hi')\"}",
+                                },
+                            }
+                        ],
+                    }
+                ],
+                "tools": [],
+            }
+            request_body = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+            request = Request(
+                f"http://127.0.0.1:{proxy.server_port}/v1/chat/completions",
+                data=request_body,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urlopen(request, timeout=5) as response:
+                self.assertEqual(response.status, 200)
+                self.assertEqual(json.loads(response.read().decode("utf-8")), {"ok": True})
+
+            self.assertEqual(_CaptureHandler.received_bodies, [request_body])
+
+            ndjson = (log_dir / "proxy.ndjson").read_text(encoding="utf-8").splitlines()
+            request_start = json.loads(ndjson[0])
+            self.assertEqual(request_start["event"], "request_start")
+            self.assertEqual(request_start["request_text"], request_body.decode("utf-8"))
+            self.assertIsNone(request_start["request_rewrite"])
+            self.assertNotIn("rendered_prompt", request_start)
+            self.assertNotIn("rendered_prompt_error", request_start)
+
+            rendered_log = (log_dir / "proxy.rendered.log").read_text(encoding="utf-8")
+            self.assertIn("rendered:dict:print('hi')", rendered_log)
+
+    def test_response_body_passes_through_unchanged_and_jsonl_stays_raw(self) -> None:
+        _CaptureHandler.received_bodies = []
+        upstream_response = json.dumps(
+            {
+                "id": "resp-1",
+                "object": "chat.completion",
+                "choices": [{"message": {"role": "assistant", "content": "plain upstream response"}}],
+            },
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+        _CaptureHandler.response_body = upstream_response
+        upstream, upstream_thread = self._start_server(_CaptureHandler)
+        self.addCleanup(upstream.shutdown)
+        self.addCleanup(upstream.server_close)
+        self.addCleanup(upstream_thread.join, 1)
+        import tempfile
+        from urllib.request import Request, urlopen
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_dir = Path(tmpdir)
+
+            class FakeRenderer:
+                def render(self, **context):
+                    return "rendered only"
+
+            proxy_handler = self._make_proxy_handler(
+                log_dir,
+                f"http://127.0.0.1:{upstream.server_port}",
+                FakeRenderer(),
+            )
+            proxy, proxy_thread = self._start_server(proxy_handler)
+            self.addCleanup(proxy.shutdown)
+            self.addCleanup(proxy.server_close)
+            self.addCleanup(proxy_thread.join, 1)
+
+            request_body = b'{"messages":[{"role":"user","content":"hello"}]}'
+            request = Request(
+                f"http://127.0.0.1:{proxy.server_port}/v1/chat/completions",
+                data=request_body,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urlopen(request, timeout=5) as response:
+                self.assertEqual(response.status, 200)
+                self.assertEqual(response.read(), upstream_response)
+
+            ndjson = [json.loads(line) for line in (log_dir / "proxy.ndjson").read_text(encoding="utf-8").splitlines()]
+            request_end = ndjson[1]
+            self.assertEqual(request_end["event"], "request_end")
+            self.assertEqual(request_end["response_text"], upstream_response.decode("utf-8"))
+            self.assertNotIn("rendered_prompt", request_end)
+            self.assertNotIn("rendered_prompt_error", request_end)
+
+            raw_log = (log_dir / "proxy.raw.log").read_text(encoding="utf-8")
+            self.assertIn(request_body.decode("utf-8"), raw_log)
+            self.assertIn(upstream_response.decode("utf-8"), raw_log)
+
+    def test_no_proxy_added_truncation_markers_in_logs(self) -> None:
+        _CaptureHandler.received_bodies = []
+        upstream_response = json.dumps(
+            {
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": "x" * 5000,
+                        }
+                    }
+                ]
+            },
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+        _CaptureHandler.response_body = upstream_response
+        upstream, upstream_thread = self._start_server(_CaptureHandler)
+        self.addCleanup(upstream.shutdown)
+        self.addCleanup(upstream.server_close)
+        self.addCleanup(upstream_thread.join, 1)
+        import tempfile
+        from urllib.request import Request, urlopen
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_dir = Path(tmpdir)
+
+            class FakeRenderer:
+                def render(self, **context):
+                    return "y" * 5000
+
+            proxy_handler = self._make_proxy_handler(
+                log_dir,
+                f"http://127.0.0.1:{upstream.server_port}",
+                FakeRenderer(),
+            )
+            proxy_handler.max_log_bytes = 10
+            proxy_handler.chat_template_max_chars = 10
+            proxy, proxy_thread = self._start_server(proxy_handler)
+            self.addCleanup(proxy.shutdown)
+            self.addCleanup(proxy.server_close)
+            self.addCleanup(proxy_thread.join, 1)
+
+            request_body = b'{"messages":[{"role":"user","content":"hello"}]}'
+            request = Request(
+                f"http://127.0.0.1:{proxy.server_port}/v1/chat/completions",
+                data=request_body,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urlopen(request, timeout=5) as response:
+                self.assertEqual(response.status, 200)
+                self.assertEqual(response.read(), upstream_response)
+
+            ndjson_text = (log_dir / "proxy.ndjson").read_text(encoding="utf-8")
+            raw_log = (log_dir / "proxy.raw.log").read_text(encoding="utf-8")
+            rendered_log = (log_dir / "proxy.rendered.log").read_text(encoding="utf-8")
+
+            self.assertNotIn("<truncated>", ndjson_text)
+            self.assertNotIn("<truncated>", raw_log)
+            self.assertNotIn("<truncated>", rendered_log)
 
 
 if __name__ == "__main__":

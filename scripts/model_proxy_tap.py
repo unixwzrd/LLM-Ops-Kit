@@ -107,8 +107,8 @@ def render_prompt_from_payload(
                 "model": normalized_payload.get("model"),
             }
             rendered_prompt = chat_template_renderer.render(**context)
-            if len(rendered_prompt) > chat_template_max_chars:
-                rendered_prompt = rendered_prompt[: chat_template_max_chars] + "\n<truncated>"
+            if chat_template_max_chars > 0 and len(rendered_prompt) > chat_template_max_chars:
+                rendered_prompt = rendered_prompt[:chat_template_max_chars]
         except Exception as e:
             rendered_prompt_error = f"TemplateRenderError: {e}"
     elif chat_template_path and chat_template_error:
@@ -232,8 +232,6 @@ def render_input_payloads(args: argparse.Namespace) -> int:
                 "pid": os.getpid(),
                 "request_summary": summarize_request(payload),
                 "request_text": request_text,
-                "rendered_prompt": rendered_prompt,
-                "rendered_prompt_error": rendered_prompt_error,
                 "render_only": True,
                 "input_path": input_path_str,
                 "input_index": idx,
@@ -459,7 +457,7 @@ def extract_response_stats(payload: Any) -> dict[str, Any] | None:
 class ProxyTapHandler(BaseHTTPRequestHandler):
     upstream_base: str = ""
     log_path: Path
-    max_log_bytes: int = 200000
+    max_log_bytes: int = 0
     timeout_sec: float = 120.0
     latest_image_only: bool = False
     log_fsync: bool = True
@@ -532,15 +530,20 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
         started = time.time()
         request_id = f"{int(started * 1000)}-{os.getpid()}-{id(self)}"
 
-        request_body = self._read_body()
-        req_text, req_json = decode_body(request_body)
+        request_body_original = self._read_body()
+        request_body = request_body_original
+        req_text, req_json = decode_body(request_body_original)
 
         request_rewrite: dict[str, Any] | None = None
         if self.latest_image_only and isinstance(req_json, dict):
-            changed, removed_count, latest_idx = prune_older_image_parts(req_json)
+            rewritten_req_json = copy.deepcopy(req_json)
+            changed, removed_count, latest_idx = prune_older_image_parts(rewritten_req_json)
             if changed:
-                request_body = json.dumps(req_json, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+                request_body = json.dumps(
+                    rewritten_req_json, separators=(",", ":"), ensure_ascii=False
+                ).encode("utf-8")
                 req_text = request_body.decode("utf-8", errors="replace")
+                req_json = rewritten_req_json
                 request_rewrite = {
                     "latest_image_only": True,
                     "removed_image_parts": removed_count,
@@ -552,34 +555,15 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
         rendered_prompt: str | None = None
         rendered_prompt_error: str | None = None
 
-        if self.chat_template_renderer and isinstance(req_json, dict):
-            try:
-                normalized_req_json = normalize_payload_for_template(req_json)
-                context = {
-                    "messages": normalized_req_json.get("messages", []),
-                    "tools": normalized_req_json.get("tools", []),
-                    "system_prompt": normalized_req_json.get("system_prompt"),
-                    "add_generation_prompt": normalized_req_json.get("add_generation_prompt", True),
-                    "bos_token": normalized_req_json.get("bos_token", ""),
-                    "eos_token": normalized_req_json.get("eos_token", ""),
-                    "enable_thinking": normalized_req_json.get("enable_thinking"),
-                    "model": normalized_req_json.get("model"),
-                }
-                rendered_prompt = self.chat_template_renderer.render(**context)
-                if len(rendered_prompt) > self.chat_template_max_chars:
-                    rendered_prompt = rendered_prompt[: self.chat_template_max_chars] + "\n<truncated>"
-            except Exception as e:
-                rendered_prompt_error = f"TemplateRenderError: {e}"
-        elif self.chat_template_path and self.chat_template_error:
-            rendered_prompt_error = self.chat_template_error
+        rendered_prompt, rendered_prompt_error = render_prompt_from_payload(
+            req_json,
+            chat_template_renderer=self.chat_template_renderer,
+            chat_template_path=self.chat_template_path,
+            chat_template_error=self.chat_template_error,
+            chat_template_max_chars=self.chat_template_max_chars,
+        )
 
         request_text_log = req_text
-        if (
-            self.max_log_bytes > 0
-            and request_text_log is not None
-            and len(request_text_log.encode("utf-8", errors="ignore")) > self.max_log_bytes
-        ):
-            request_text_log = request_text_log[: self.max_log_bytes] + "\n<truncated>"
 
         # Immediate event so you can see the request while upstream is still processing.
         request_start_ts = utc_now()
@@ -596,8 +580,6 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
                 "request_headers": redact_headers({k: v for k, v in self.headers.items()}),
                 "request_summary": req_summary,
                 "request_text": request_text_log,
-                "rendered_prompt": rendered_prompt,
-                "rendered_prompt_error": rendered_prompt_error,
                 "request_rewrite": request_rewrite,
             }
         )
@@ -645,24 +627,9 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
         error_text: str | None = None
         client_disconnected = False
         resp_capture = bytearray()
-        resp_truncated = False
 
         def _capture_chunk(chunk: bytes) -> None:
-            nonlocal resp_truncated
-            if resp_truncated:
-                return
-            if self.max_log_bytes <= 0:
-                resp_capture.extend(chunk)
-                return
-            budget = self.max_log_bytes - len(resp_capture)
-            if budget <= 0:
-                resp_truncated = True
-                return
-            if len(chunk) <= budget:
-                resp_capture.extend(chunk)
-                return
-            resp_capture.extend(chunk[:budget])
-            resp_truncated = True
+            resp_capture.extend(chunk)
 
         try:
             with self.upstream_opener.open(req, timeout=self.timeout_sec) as resp:
@@ -751,10 +718,6 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
         resp_body = bytes(resp_capture)
         resp_text, resp_json = decode_body(resp_body)
         response_stats = extract_response_stats(resp_json)
-        if resp_truncated and resp_text is not None:
-            resp_text = resp_text + "\n<truncated>"
-            resp_json = None
-            response_stats = None
 
         response_end_ts = utc_now()
         self._write_framed_log(
@@ -848,10 +811,10 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument("--log", default=f"{default_log_dir}/model-proxy.ndjson", help="NDJSON log file path")
     p.add_argument("--timeout", type=float, default=900.0)
-    p.add_argument("--max-log-bytes", type=int, default=0, help="Per-request capture cap in bytes; 0 means unlimited")
+    p.add_argument("--max-log-bytes", type=int, default=0, help="Deprecated compatibility flag; raw and NDJSON payload logs are now unlimited and unmodified.")
     p.add_argument("--stream-chunk-size", type=int, default=65536)
     p.add_argument("--chat-template", help="Optional Jinja chat template path to render/log final prompt text.")
-    p.add_argument("--chat-template-max-chars", type=int, default=200000)
+    p.add_argument("--chat-template-max-chars", type=int, default=0, help="Optional rendered-log character cap; 0 means unlimited.")
     p.add_argument("--raw-log", help="Optional combined plain-text framed log path (request + response in sequence).")
     p.add_argument("--raw-request-log", help="Optional plain-text framed log path for raw request_text per request_start")
     p.add_argument("--rendered-prompt-log", default=f"{default_log_dir}/model-proxy.rendered.log", help="Optional plain-text framed log path for rendered_prompt per request_start")
@@ -874,8 +837,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--latest-image-only",
         action="store_true",
-        default=True,
-        help="Keep image_url parts only on the latest user message that contains one.",
+        default=False,
+        help="Rewrite forwarded payloads to keep image_url parts only on the latest user message that contains one.",
     )
     p.add_argument(
         "--no-latest-image-only",

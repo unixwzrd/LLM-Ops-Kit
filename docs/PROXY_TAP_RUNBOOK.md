@@ -42,8 +42,13 @@ Default wrapper values (`~/bin/model-proxy-tap`):
 - `LOG_PATH=~/.llm-ops/logs/model-proxy.ndjson`
 - `RAW_LOG=~/.llm-ops/logs/model-proxy.raw.log` (combined request + response)
 - `RENDERED_PROMPT_LOG=~/.llm-ops/logs/model-proxy.rendered.log`
-- `LATEST_IMAGE_ONLY=1`
 - `LOG_FSYNC=0`
+
+Traffic-safety note:
+
+- By default the proxy forwards the original request body unchanged.
+- `--chat-template` only produces derived logging artifacts (`model-proxy.ndjson`, raw framed logs, and `model-proxy.rendered.log`); it does not rewrite traffic sent upstream.
+- Request rewriting happens only if you opt in to `--latest-image-only`.
 
 Sample output:
 
