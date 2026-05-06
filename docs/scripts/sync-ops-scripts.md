@@ -3,12 +3,13 @@
 **Created**: 2026-02-28
 **Updated**: 2026-04-17
 
-Sync LLM-Ops-Kit to a remote host over SSH, refresh runtime link manifest, then deploy and verify runtime links on the remote host in one run.
+Sync LLM-Ops-Kit to a remote host over SSH, refresh runtime link manifest, then
+deploy and verify runtime links on the remote host in one run.
 
-Phase 1 note:
+Deployment note:
 
-- `sync-ops-scripts` is now considered a legacy repo-sync helper.
-- The primary deployment workflow is `deploy-runtime`.
+- Operators should use `scripts/llmops-admin` from the administrator workstation.
+- This script is a low-level maintenance/helper path for direct repo syncs.
 
 ```bash
 ~/bin/sync-ops-scripts [--delete] [--dry-run] [--no-links] [--runtime-mode <repo|installed>] [--install-prefix <path>] [--state-file <path>]

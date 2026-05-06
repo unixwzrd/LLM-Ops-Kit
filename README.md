@@ -144,21 +144,30 @@ Bridge compatibility notes:
 git clone https://github.com/unixwzrd/LLM-Ops-Kit.git ~/projects/LLM-Ops-Kit
 cd ~/projects/LLM-Ops-Kit
 
-# 2) Configure, stage, and deploy from the repo checkout
-./build-stage -c default
+# 2) Validate inventory and stage an admin deployment bundle
+scripts/llmops-admin inventory-validate
+scripts/llmops-admin stage --dry-run --bundle-id smoke
 
-# 3) Verify model settings / runtime root on the target
+# 3) Push and apply the bundle to selected hosts
+scripts/llmops-admin push --stage ~/.llm-ops/stage/<bundle_id> --workers 4
+scripts/llmops-admin apply --stage ~/.llm-ops/stage/<bundle_id> --workers 4
+
+# 4) Verify model settings / runtime root on the target
 ~/bin/Qwen3.5 settings
 ~/bin/Qwen3 settings
 
-# 4) Start services
+# 5) Start services
 ~/bin/agentctl start
 ~/bin/Qwen3 start
 ~/bin/BGEm3 start
 ~/bin/model-proxy start
 ```
 
-The admin repo checkout is not the runtime install root. Phase 1 builds a virtual target filesystem under `./stage/<config>/`, mirroring the real destination paths, then rsyncs that staged tree to the remote host over SSH.
+The administrator repo checkout is the control point, not the runtime install root.
+Deployment bundles are built under `~/.llm-ops/stage/<bundle_id>/`, pushed to
+selected hosts from inventory, then applied on each remote host. Remote apply
+installs the scripts/programs under the host `install_root`, updates the
+`current` release pointer, and refreshes runtime command links.
 
 ## Runtime Command Surface
 
@@ -178,7 +187,6 @@ The admin repo checkout is not the runtime install root. Phase 1 builds a virtua
 ~/bin/modelctl status
 ~/bin/modelctl add --model <path> --name <label>
 ~/bin/modelctl <ModelProfile> [start|stop|restart|status|settings|verify|test]
-~/bin/deploy-runtime [-c <name>] [-n|-d] [-y] [--dry-run]
 ~/bin/uninstall-runtime [--prefix <install-base>] [--bin-dir <bin-dir>] [--state-file <path>] [--keep-files]
 ~/bin/openclaw-report
 ~/bin/runtime-maintenance [status|rotate|prune|run]
@@ -193,10 +201,8 @@ Operational notes:
 - In the current direct-run agent wrapper mode, use `~/bin/agentctl logs` instead of relying on `openclaw logs --follow`.
 - `agentctl` owns agent runtime lifecycle across OpenClaw and Hermes.
 - `modelctl` owns model runtime lifecycle; the older bundled stack wrapper is gone.
-- `build-stage` is the repo-root operator entrypoint for Phase 1 staged deployment.
-- `deploy-runtime` is the script-level orchestrator used by `build-stage` and can also be run directly from the repo or an installed runtime.
-- `setup-deploy`, `stage-runtime`, and `push-runtime` remain available under `scripts/` and inside the installed runtime tree as internal building blocks for configuration, staging, and transport.
-- `sync-ops-scripts` remains available as a legacy repo-sync helper, but staged deployment is now the primary operator workflow.
+- `llmops-admin` is the deployment entrypoint for inventory validation, SSH bootstrap, local staging, parallel push, and remote apply from the administrator workstation.
+- Lower-level deployment helpers under `scripts/` are implementation details for packaging, linking, and validation. Operators should drive deployments through `llmops-admin`.
 
 ## Local Precheck
 
@@ -256,7 +262,8 @@ A future optional path is to add `pyproject.toml` and package wrappers for insta
 ## Documentation Map
 
 - [DOCS INDEX](docs/INDEX.md) — primary documentation index
-- [DEPLOYMENT_SYNC_RUNBOOK](docs/DEPLOYMENT_SYNC_RUNBOOK.md) — staged deploy, push, install, and verify workflow
+- [DEPLOYMENT_OVERVIEW](docs/DEPLOYMENT_OVERVIEW.md) — current deployment model and admin workflow
+- [INSTALLATION_REWORK_CHECKLIST](docs/INSTALLATION_REWORK_CHECKLIST.md) — checklist for the deployment and install refactor
 - [RELEASE_AUDIT_CHECKLIST](docs/RELEASE_AUDIT_CHECKLIST.md) — cleanup and audit pass before final release tag
 - [PROXY_TAP_RUNBOOK](docs/PROXY_TAP_RUNBOOK.md) — proxy request/response visibility + jq recipes
 - [CHANGELOG](CHANGELOG.md) — chronological operational changes

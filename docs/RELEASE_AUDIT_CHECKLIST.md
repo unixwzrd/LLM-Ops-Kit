@@ -21,10 +21,10 @@ Use this checklist after end-to-end testing and before the final release commit/
 
 ## Documentation check
 
-- README quick start matches the staged deployment flow
-- deployment runbook matches the shipped command names
-- script mini-guides exist for `deploy-runtime`, `setup-deploy`, `stage-runtime`, and `push-runtime`
-- config guide documents the deploy config file and runtime venv behavior
+- README quick start matches the admin workstation deployment flow
+- deployment overview matches the shipped `llmops-admin` command names
+- script mini-guide exists for `llmops-admin`
+- config guide documents inventory-based deployment config and runtime venv behavior
 - docs explicitly state that `.openclaw` is out of scope
 
 ## Release candidate check

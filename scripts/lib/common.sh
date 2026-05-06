@@ -476,7 +476,8 @@ deploy_load_config() {
   export DEPLOY_CONFIG_FILE="$config_file"
   export DEPLOY_CONFIG_NAME="$config_name"
   export DEPLOY_CONFIG_SLUG="$slug"
-  export DEPLOY_HOSTS="$(deploy_host_list_normalize "${LLMOPS_DEPLOY_HOSTS:-}")"
+  DEPLOY_HOSTS="$(deploy_host_list_normalize "${LLMOPS_DEPLOY_HOSTS:-}")"
+  export DEPLOY_HOSTS
   [[ -n "$DEPLOY_HOSTS" ]] || {
     echo "Deployment config has no hosts: $config_file" >&2
     return 1

@@ -1,18 +1,21 @@
 # deploy-runtime
 
 **Created**: 2026-04-17
-**Updated**: 2026-04-17
+**Updated**: 2026-04-27
 
-`deploy-runtime` is the script-level staged deployment orchestrator for Phase 1.
-Use repo-root `./build-stage` as the normal operator entrypoint.
+`deploy-runtime` is an internal helper retained for the deployment
+implementation.
+
+Operators should use `scripts/llmops-admin` from the administrator workstation.
 
 ```bash
 ./scripts/deploy-runtime [-c <name>] [-n|-d] [-y] [-v] [--dry-run] [--stage-dir <path>]
 ```
 
-This helper is documented centrally in [DEPLOYMENT_SYNC_RUNBOOK](../DEPLOYMENT_SYNC_RUNBOOK.md).
+For the supported deployment model, start with
+[DEPLOYMENT_OVERVIEW](../DEPLOYMENT_OVERVIEW.md).
 
-Keep this page as the quick pointer only:
+This page is a maintainer note only:
 
 - `deploy-runtime` loads or creates `stage/deploy_config/<name>.env`
 - stages the virtual target filesystem under `stage/<config-name>/`

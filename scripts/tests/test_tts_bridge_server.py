@@ -304,7 +304,7 @@ class TTSBridgeServerTests(unittest.TestCase):
             self.assertEqual(output["ref_audio"], str(explicit_sample))
             self.assertEqual(output["ref_text"], str(explicit_transcript))
 
-    def test_missing_alias_sample_fails_loudly(self) -> None:
+    def test_missing_alias_sample_forwards_path_for_upstream_resolution(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             samples_dir = root / "samples"
@@ -326,10 +326,11 @@ class TTSBridgeServerTests(unittest.TestCase):
                 },
                 "samples_dir": str(samples_dir),
             }
-            with self.assertRaises(MODULE.BridgeRequestError) as ctx:
-                MODULE.build_upstream_payload({"input": "hello", "voice": "Faith"}, cfg)
-            self.assertEqual(ctx.exception.domain, "alias_resolution")
-            self.assertIn("resolved sample missing", ctx.exception.message)
+            output, _, _ = MODULE.build_upstream_payload(
+                {"input": "hello", "voice": "Faith"}, cfg
+            )
+            self.assertEqual(output["ref_audio"], str((samples_dir / "missing.wav").resolve()))
+            self.assertEqual(output["ref_text"], str((samples_dir / "missing.txt").resolve()))
 
     def test_health_payload_reports_config_paths_and_counts(self) -> None:
         cfg = {

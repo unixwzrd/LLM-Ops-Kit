@@ -27,7 +27,8 @@ Back: [docs/INDEX.md](./INDEX.md)
 
 ## Runtime and Deployment
 
-- [`DEPLOYMENT_SYNC_RUNBOOK.md`](./DEPLOYMENT_SYNC_RUNBOOK.md) — sync, deploy, and verify workflow
+- [`DEPLOYMENT_OVERVIEW.md`](./DEPLOYMENT_OVERVIEW.md) — current deployment model and admin workflow
+- [`INSTALLATION_REWORK_CHECKLIST.md`](./INSTALLATION_REWORK_CHECKLIST.md) — migration checklist for the installation rework
 - [`SSH_SETUP_RUNBOOK.md`](./SSH_SETUP_RUNBOOK.md) — SSH key setup and deployment auth flow
 - [`PROXY_TAP_RUNBOOK.md`](./PROXY_TAP_RUNBOOK.md) — request/response visibility for model debugging
 - [`scripts/README.md`](./scripts/README.md) — per-command script guides

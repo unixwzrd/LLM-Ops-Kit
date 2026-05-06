@@ -1,0 +1,585 @@
+#!/usr/bin/env python3
+"""Administrator workflow for staging and deploying LLM-Ops-Kit."""
+
+from __future__ import annotations
+
+import argparse
+import concurrent.futures
+import hashlib
+import json
+import os
+import shlex
+import subprocess
+import sys
+import tarfile
+import time
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT / "scripts" / "lib"))
+
+from llmops_paths import resolve_paths
+from llmops_config import ConfigError, default_config, load_config
+
+DEFAULT_INVENTORY = REPO_ROOT / "deploy" / "inventory.yml"
+FALLBACK_INVENTORY = REPO_ROOT / "docs" / "inventory.example.yml"
+ADMIN_INVENTORY = Path("~/.llm-ops/inventory.yml").expanduser()
+DEFAULT_STAGE_ROOT = Path("~/.llm-ops/stage").expanduser()
+SUPPORTED_ROLES = {"admin", "llm", "agent", "hybrid"}
+CONFIG_PRECEDENCE = (
+    "global defaults",
+    "role defaults",
+    "model defaults",
+    "profile config",
+    "host config",
+    "runtime environment",
+    "CLI flags",
+)
+
+
+class AdminError(RuntimeError):
+    pass
+
+
+@dataclass(frozen=True)
+class HostRecord:
+    name: str
+    role: str
+    host: str
+    user: str
+    port: int
+    install_root: str
+    config_profile: str
+    ssh_key: str
+    tags: tuple[str, ...]
+
+    @property
+    def destination(self) -> str:
+        return f"{self.user}@{self.host}"
+
+    @property
+    def ssh_key_path(self) -> Path:
+        return Path(self.ssh_key).expanduser()
+
+    def ssh_base(self) -> list[str]:
+        return [
+            "ssh",
+            "-i",
+            str(self.ssh_key_path),
+            "-p",
+            str(self.port),
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            "StrictHostKeyChecking=accept-new",
+            self.destination,
+        ]
+
+
+def _parse_scalar(raw: str) -> Any:
+    value = raw.strip()
+    if not value:
+        return ""
+    if value.startswith("[") and value.endswith("]"):
+        inner = value[1:-1].strip()
+        if not inner:
+            return []
+        return [item.strip().strip("\"'") for item in inner.split(",")]
+    try:
+        return int(value)
+    except ValueError:
+        return value.strip("\"'")
+
+
+def _load_simple_yaml(path: Path) -> dict[str, Any]:
+    data: dict[str, Any] = {"defaults": {}, "hosts": []}
+    current: str | None = None
+    current_host: dict[str, Any] | None = None
+    for lineno, raw_line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        line = raw_line.split("#", 1)[0].rstrip()
+        if not line.strip():
+            continue
+        if line.startswith("defaults:"):
+            current = "defaults"
+            current_host = None
+            continue
+        if line.startswith("hosts:"):
+            current = "hosts"
+            current_host = None
+            continue
+        stripped = line.strip()
+        if current == "defaults" and line.startswith("  ") and ":" in stripped:
+            key, value = stripped.split(":", 1)
+            data["defaults"][key.strip()] = _parse_scalar(value)
+            continue
+        if current == "hosts" and line.startswith("  - "):
+            current_host = {}
+            data["hosts"].append(current_host)
+            remainder = stripped[2:].strip()
+            if remainder:
+                key, value = remainder.split(":", 1)
+                current_host[key.strip()] = _parse_scalar(value)
+            continue
+        if current == "hosts" and line.startswith("    ") and current_host is not None:
+            key, value = stripped.split(":", 1)
+            current_host[key.strip()] = _parse_scalar(value)
+            continue
+        raise AdminError(f"{path}:{lineno}: unsupported inventory syntax")
+    return data
+
+
+def inventory_path(args: argparse.Namespace) -> Path:
+    if getattr(args, "inventory", None):
+        return Path(args.inventory).expanduser()
+    if ADMIN_INVENTORY.exists():
+        return ADMIN_INVENTORY
+    if DEFAULT_INVENTORY.exists():
+        return DEFAULT_INVENTORY
+    return FALLBACK_INVENTORY
+
+
+def load_inventory(path: Path) -> list[HostRecord]:
+    if not path.exists():
+        raise AdminError(f"inventory not found: {path}")
+    raw = _load_simple_yaml(path)
+    defaults = dict(raw.get("defaults") or {})
+    hosts: list[HostRecord] = []
+    seen: set[str] = set()
+    for item in raw.get("hosts") or []:
+        merged = {**defaults, **item}
+        missing = [
+            key
+            for key in ("name", "role", "host", "user", "port", "install_root", "config_profile", "ssh_key")
+            if merged.get(key) in (None, "")
+        ]
+        if missing:
+            raise AdminError(f"host entry missing required keys: {', '.join(missing)}")
+        role = str(merged["role"])
+        if role not in SUPPORTED_ROLES:
+            raise AdminError(f"host {merged['name']} has unsupported role: {role}")
+        name = str(merged["name"])
+        if name in seen:
+            raise AdminError(f"duplicate host name: {name}")
+        seen.add(name)
+        tags = merged.get("tags") or []
+        if isinstance(tags, str):
+            tags = [tags]
+        hosts.append(
+            HostRecord(
+                name=name,
+                role=role,
+                host=str(merged["host"]),
+                user=str(merged["user"]),
+                port=int(merged["port"]),
+                install_root=str(merged["install_root"]),
+                config_profile=str(merged["config_profile"]),
+                ssh_key=str(merged["ssh_key"]),
+                tags=tuple(str(tag) for tag in tags),
+            )
+        )
+    if not hosts:
+        raise AdminError(f"inventory contains no hosts: {path}")
+    return hosts
+
+
+def select_hosts(hosts: list[HostRecord], args: argparse.Namespace) -> list[HostRecord]:
+    selected = hosts
+    if getattr(args, "role", None):
+        selected = [host for host in selected if host.role == args.role]
+    if getattr(args, "tag", None):
+        wanted = set(args.tag)
+        selected = [host for host in selected if wanted.intersection(host.tags)]
+    if getattr(args, "host_name", None):
+        wanted_names = set(args.host_name)
+        selected = [host for host in selected if host.name in wanted_names]
+    if not selected:
+        raise AdminError("host selection matched no inventory entries")
+    return selected
+
+
+def run_command(command: list[str], *, dry_run: bool = False) -> tuple[int, str]:
+    rendered = " ".join(shlex.quote(part) for part in command)
+    if dry_run:
+        return 0, rendered
+    proc = subprocess.run(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False)
+    return proc.returncode, proc.stdout
+
+
+def parse_env_file(path: Path) -> dict[str, str]:
+    values: dict[str, str] = {}
+    if not path.exists():
+        return values
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip().removeprefix("export ").strip()
+        value = value.strip().strip("\"'")
+        if "${" in value:
+            continue
+        values[key] = os.path.expandvars(os.path.expanduser(value))
+    return values
+
+
+def config_layers_for(host: HostRecord, model: str | None = None) -> list[tuple[str, Path]]:
+    admin_config = Path("~/.llm-ops/config").expanduser()
+    layers: list[tuple[str, Path]] = [
+        ("global defaults", REPO_ROOT / "defaults" / "global.env"),
+        ("role defaults", REPO_ROOT / "defaults" / "roles" / f"{host.role}.env"),
+    ]
+    if model:
+        layers.append(("model defaults", REPO_ROOT / "models" / f"{model}.env"))
+        layers.append(("model defaults", REPO_ROOT / "scripts" / "models" / f"{model}.sh"))
+    layers.extend(
+        [
+            ("profile config", admin_config / "profiles" / f"{host.config_profile}.env"),
+            ("host config", admin_config / "hosts" / f"{host.name}.env"),
+        ]
+    )
+    return layers
+
+
+def effective_config(host: HostRecord, model: str | None, cli_values: dict[str, str] | None = None) -> dict[str, dict[str, str]]:
+    result: dict[str, dict[str, str]] = {}
+    for layer_name, path in config_layers_for(host, model):
+        for key, value in parse_env_file(path).items():
+            result[key] = {"value": value, "source": f"{layer_name}:{path}"}
+    for key in ("MODEL", "PORT", "HOST", "CHAT_TEMPLATE", "USE_CUSTOM_TEMPLATE", "MODEL_PROFILE"):
+        if key in os.environ:
+            result[key] = {"value": os.environ[key], "source": "runtime environment"}
+    for key, value in (cli_values or {}).items():
+        result[key] = {"value": value, "source": "CLI flags"}
+    return result
+
+
+def write_host_config(stage_dir: Path, host: HostRecord, model: str | None) -> Path:
+    config = effective_config(host, model)
+    host_dir = stage_dir / "hosts" / host.name
+    host_dir.mkdir(parents=True, exist_ok=True)
+    config_path = host_dir / "config.env"
+    lines = [
+        "# Generated by llmops-admin stage.",
+        f"LLMOPS_HOST_NAME={host.name}",
+        f"LLMOPS_HOST_ROLE={host.role}",
+        f"LLMOPS_CONFIG_PROFILE={host.config_profile}",
+    ]
+    for key in sorted(config):
+        lines.append(f"{key}={shlex.quote(config[key]['value'])}")
+    config_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    (host_dir / "config-sources.json").write_text(json.dumps(config, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return config_path
+
+
+def build_package(stage_dir: Path) -> Path:
+    package_path = stage_dir / "package" / "llm-ops-kit.tar.gz"
+    package_path.parent.mkdir(parents=True, exist_ok=True)
+    with tarfile.open(package_path, "w:gz") as tar:
+        for path in REPO_ROOT.rglob("*"):
+            rel = path.relative_to(REPO_ROOT)
+            if any(part in {".git", "__pycache__", ".pytest_cache"} for part in rel.parts):
+                continue
+            if stage_dir in path.parents:
+                continue
+            tar.add(path, arcname=Path("LLM-Ops-Kit") / rel)
+    return package_path
+
+
+def write_manifest(stage_dir: Path, package_path: Path, hosts: list[HostRecord], model: str | None) -> Path:
+    manifest = {
+        "bundle_id": stage_dir.name,
+        "created_at": int(time.time()),
+        "repo_root": str(REPO_ROOT),
+        "package": str(package_path),
+        "package_sha256": hashlib.sha256(package_path.read_bytes()).hexdigest(),
+        "model": model,
+        "config_precedence": CONFIG_PRECEDENCE,
+        "hosts": [host.__dict__ for host in hosts],
+    }
+    manifest_path = stage_dir / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return manifest_path
+
+
+def latest_stage(stage_root: Path) -> Path:
+    candidates = sorted(path for path in stage_root.glob("*") if path.is_dir())
+    if not candidates:
+        raise AdminError(f"no staged bundles found under {stage_root}")
+    return candidates[-1]
+
+
+def cmd_inventory_validate(args: argparse.Namespace) -> int:
+    path = inventory_path(args)
+    hosts = select_hosts(load_inventory(path), args)
+    print(f"inventory OK: {path}")
+    for host in hosts:
+        print(f"{host.name}\trole={host.role}\thost={host.destination}\tprofile={host.config_profile}\ttags={','.join(host.tags)}")
+    return 0
+
+
+def cmd_bootstrap_host(args: argparse.Namespace) -> int:
+    failures = 0
+    for host in select_hosts(load_inventory(inventory_path(args)), args):
+        key_path = host.ssh_key_path
+        commands: list[list[str]] = []
+        if not key_path.exists():
+            commands.append(["ssh-keygen", "-t", "ed25519", "-f", str(key_path), "-N", "", "-C", f"llmops:{host.name}"])
+        commands.append(["ssh-copy-id", "-i", f"{key_path}.pub", "-p", str(host.port), host.destination])
+        remote = f"mkdir -p {shlex.quote(host.install_root)}/{{packages,run,logs,config}} && touch {shlex.quote(host.install_root)}/.llmops-ready"
+        commands.append(host.ssh_base() + [remote])
+        for command in commands:
+            code, output = run_command(command, dry_run=args.dry_run)
+            print(f"[{host.name}] {output.strip()}")
+            if code != 0:
+                failures += 1
+                break
+    return 1 if failures else 0
+
+
+def cmd_stage(args: argparse.Namespace) -> int:
+    hosts = select_hosts(load_inventory(inventory_path(args)), args)
+    bundle_id = args.bundle_id or time.strftime("%Y%m%d-%H%M%S")
+    stage_dir = Path(args.stage_root).expanduser() / bundle_id
+    if args.dry_run:
+        print(f"stage dry-run: would create {stage_dir}")
+        for host in hosts:
+            print(f"stage dry-run: would render config for {host.name} ({host.role})")
+        return 0
+    stage_dir.mkdir(parents=True, exist_ok=False)
+    package_path = build_package(stage_dir)
+    for host in hosts:
+        write_host_config(stage_dir, host, args.model)
+    manifest_path = write_manifest(stage_dir, package_path, hosts, args.model)
+    print(f"stage created: {stage_dir}")
+    print(f"package: {package_path}")
+    print(f"manifest: {manifest_path}")
+    return 0
+
+
+def push_one(host: HostRecord, stage_dir: Path, dry_run: bool) -> tuple[str, int, str]:
+    package = stage_dir / "package" / "llm-ops-kit.tar.gz"
+    host_config = stage_dir / "hosts" / host.name / "config.env"
+    remote_package_dir = f"{host.install_root}/packages/{stage_dir.name}"
+    commands = [
+        host.ssh_base() + [f"mkdir -p {shlex.quote(remote_package_dir)} {shlex.quote(host.install_root)}/config"],
+        ["scp", "-i", str(host.ssh_key_path), "-P", str(host.port), str(package), f"{host.destination}:{remote_package_dir}/"],
+        ["scp", "-i", str(host.ssh_key_path), "-P", str(host.port), str(host_config), f"{host.destination}:{host.install_root}/config/{host.name}.env"],
+    ]
+    output: list[str] = []
+    for command in commands:
+        code, text = run_command(command, dry_run=dry_run)
+        output.append(text.strip())
+        if code != 0:
+            return host.name, code, "\n".join(output)
+    return host.name, 0, "\n".join(output)
+
+
+def cmd_push(args: argparse.Namespace) -> int:
+    hosts = select_hosts(load_inventory(inventory_path(args)), args)
+    stage_dir = Path(args.stage).expanduser() if args.stage else latest_stage(Path(args.stage_root).expanduser())
+    failures = 0
+    started = time.time()
+    with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as pool:
+        futures = [pool.submit(push_one, host, stage_dir, args.dry_run) for host in hosts]
+        for future in concurrent.futures.as_completed(futures):
+            name, code, output = future.result()
+            print(f"[{name}] push {'OK' if code == 0 else f'FAILED({code})'}")
+            if output:
+                print(output)
+            if code != 0:
+                failures += 1
+    print(f"push complete: hosts={len(hosts)} failures={failures} elapsed={time.time() - started:.1f}s")
+    return 1 if failures else 0
+
+
+def apply_one(host: HostRecord, stage_dir: Path, dry_run: bool, restart: str | None) -> tuple[str, int, str]:
+    package = f"{host.install_root}/packages/{stage_dir.name}/llm-ops-kit.tar.gz"
+    release = f"{host.install_root}/releases/{stage_dir.name}"
+    current = f"{host.install_root}/current"
+    commands = [
+        f"mkdir -p {shlex.quote(release)}",
+        f"tar -xzf {shlex.quote(package)} -C {shlex.quote(release)} --strip-components=1",
+        f"test ! -e {shlex.quote(current)} || ln -sfn {shlex.quote(current)} {shlex.quote(host.install_root)}/previous",
+        f"ln -sfn {shlex.quote(release)} {shlex.quote(current)}",
+        f"bash {shlex.quote(current)}/scripts/deploy-runtime-links.sh",
+    ]
+    if restart:
+        commands.append(f"bash {shlex.quote(current)}/scripts/{shlex.quote(restart)} restart")
+    if host.role in {"llm", "hybrid"}:
+        commands.append(f"test -x {shlex.quote(current)}/scripts/modelctl")
+    if host.role in {"agent", "hybrid"}:
+        commands.append(f"test -x {shlex.quote(current)}/scripts/agentctl")
+    code, output = run_command(host.ssh_base() + [" && ".join(commands)], dry_run=dry_run)
+    return host.name, code, output
+
+
+def cmd_apply(args: argparse.Namespace) -> int:
+    hosts = select_hosts(load_inventory(inventory_path(args)), args)
+    stage_dir = Path(args.stage).expanduser() if args.stage else latest_stage(Path(args.stage_root).expanduser())
+    failures = 0
+    with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as pool:
+        futures = [pool.submit(apply_one, host, stage_dir, args.dry_run, args.restart) for host in hosts]
+        for future in concurrent.futures.as_completed(futures):
+            name, code, output = future.result()
+            print(f"[{name}] apply {'OK' if code == 0 else f'FAILED({code})'}")
+            if output:
+                print(output.strip())
+            if code != 0:
+                failures += 1
+    return 1 if failures else 0
+
+
+def cmd_config_settings(args: argparse.Namespace) -> int:
+    for host in select_hosts(load_inventory(inventory_path(args)), args):
+        print(f"[{host.name}]")
+        for key, meta in sorted(effective_config(host, args.model).items()):
+            print(f"{key}={meta['value']}\t# {meta['source']}")
+    return 0
+
+
+def print_path_report() -> None:
+    paths = resolve_paths()
+    config = load_config(paths=paths)
+    print("Resolved LLM-Ops-Kit paths:")
+    for key, value in paths.as_dict().items():
+        print(f"{key}={value}")
+    print(f"config_status={'present' if config.exists else 'missing'}")
+    print(f"config_schema_version={config.schema_version}")
+
+
+def cmd_config_doctor(args: argparse.Namespace) -> int:
+    if getattr(args, "dry_run", False):
+        print_path_report()
+        return 0
+    failures = 0
+    for host in select_hosts(load_inventory(inventory_path(args)), args):
+        config = effective_config(host, args.model)
+        print(f"[{host.name}]")
+        port = config.get("PORT", {}).get("value")
+        if port and not str(port).isdigit():
+            print(f"ERROR PORT is not numeric: {port}")
+            failures += 1
+        template = config.get("CHAT_TEMPLATE", {}).get("value")
+        if config.get("USE_CUSTOM_TEMPLATE", {}).get("value") == "1" and template and not Path(template).expanduser().exists():
+            print(f"ERROR CHAT_TEMPLATE does not exist: {template}")
+            failures += 1
+        if failures == 0:
+            print("OK")
+    return 1 if failures else 0
+
+
+def migration_sources(legacy_home: Path) -> list[tuple[str, Path]]:
+    config_dir = legacy_home / "config"
+    sources: list[tuple[str, Path]] = [
+        ("legacy global config", legacy_home / "config.env"),
+        ("repo host defaults", REPO_ROOT / "scripts" / "config" / "hosts.env"),
+    ]
+    for path in sorted(config_dir.glob("*.env")):
+        sources.append(("legacy model override", path))
+    for path in sorted(config_dir.glob("*.sh")):
+        sources.append(("legacy model override", path))
+    for path in sorted((config_dir / "agents").glob("*.env")):
+        sources.append(("legacy agent override", path))
+    for path in sorted((REPO_ROOT / "scripts" / "models").glob("*.sh")):
+        sources.append(("repo model profile", path))
+    for path in sorted((REPO_ROOT / "scripts" / "agents").glob("*.env")):
+        sources.append(("repo agent profile", path))
+    return sources
+
+
+def cmd_migrate_config(args: argparse.Namespace) -> int:
+    paths = resolve_paths()
+    legacy_home = Path(args.legacy_home).expanduser()
+    destination = Path(args.output).expanduser() if args.output else paths.config_file
+    print(f"migration_mode={'dry-run' if args.dry_run else 'write'}")
+    print(f"legacy_home={legacy_home}")
+    print(f"destination_config={destination}")
+    print(f"destination_inventory={paths.inventory_file}")
+    print(f"destination_models_dir={paths.models_dir}")
+    print(f"destination_agents_dir={paths.agents_dir}")
+    print(f"destination_profiles_dir={paths.profiles_dir}")
+    for label, path in migration_sources(legacy_home):
+        status = "present" if path.exists() else "missing"
+        print(f"source\t{status}\t{label}\t{path}")
+    if args.dry_run:
+        print("dry-run: no files written")
+        return 0
+    if destination.exists() and not args.force:
+        raise AdminError(f"destination already exists; use --force to overwrite: {destination}")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(json.dumps(default_config(), indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    print(f"wrote {destination}")
+    return 0
+
+
+def add_host_selectors(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--inventory")
+    parser.add_argument("--role", choices=sorted(SUPPORTED_ROLES))
+    parser.add_argument("--tag", action="append")
+    parser.add_argument("--host-name", action="append")
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="LLM-Ops-Kit administrator deployment workflow")
+    sub = parser.add_subparsers(dest="command", required=True)
+    inv = sub.add_parser("inventory-validate")
+    add_host_selectors(inv)
+    inv.set_defaults(func=cmd_inventory_validate)
+    boot = sub.add_parser("bootstrap-host")
+    add_host_selectors(boot)
+    boot.add_argument("--dry-run", action="store_true")
+    boot.set_defaults(func=cmd_bootstrap_host)
+    stage = sub.add_parser("stage")
+    add_host_selectors(stage)
+    stage.add_argument("--stage-root", default=str(DEFAULT_STAGE_ROOT))
+    stage.add_argument("--bundle-id")
+    stage.add_argument("--model")
+    stage.add_argument("--dry-run", action="store_true")
+    stage.set_defaults(func=cmd_stage)
+    push = sub.add_parser("push")
+    add_host_selectors(push)
+    push.add_argument("--stage-root", default=str(DEFAULT_STAGE_ROOT))
+    push.add_argument("--stage")
+    push.add_argument("--workers", type=int, default=4)
+    push.add_argument("--dry-run", action="store_true")
+    push.set_defaults(func=cmd_push)
+    apply = sub.add_parser("apply")
+    add_host_selectors(apply)
+    apply.add_argument("--stage-root", default=str(DEFAULT_STAGE_ROOT))
+    apply.add_argument("--stage")
+    apply.add_argument("--workers", type=int, default=4)
+    apply.add_argument("--restart")
+    apply.add_argument("--dry-run", action="store_true")
+    apply.set_defaults(func=cmd_apply)
+    settings = sub.add_parser("config-settings")
+    add_host_selectors(settings)
+    settings.add_argument("--model")
+    settings.set_defaults(func=cmd_config_settings)
+    doctor = sub.add_parser("config-doctor")
+    add_host_selectors(doctor)
+    doctor.add_argument("--model")
+    doctor.add_argument("--dry-run", action="store_true")
+    doctor.set_defaults(func=cmd_config_doctor)
+    migrate = sub.add_parser("migrate-config")
+    migrate.add_argument("--legacy-home", default="~/.llm-ops")
+    migrate.add_argument("--output")
+    migrate.add_argument("--dry-run", action="store_true")
+    migrate.add_argument("--force", action="store_true")
+    migrate.set_defaults(func=cmd_migrate_config)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    try:
+        return args.func(args)
+    except (AdminError, ConfigError) as exc:
+        print(f"llmops-admin: {exc}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

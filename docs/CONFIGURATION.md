@@ -3,7 +3,7 @@
 Back: [docs/INDEX.md](./INDEX.md)
 
 **Created**: 2026-02-28  
-**Updated**: 2026-03-27
+**Updated**: 2026-04-27
 
 - [Configuration Guide](#configuration-guide)
   - [What This Doc Is For](#what-this-doc-is-for)
@@ -45,12 +45,34 @@ Use this file when you are:
 
 - Main index: [`README`](../README.md)
 - Quickstart: [`QUICKSTART`](./QUICKSTART.md)
-- Sync/deploy workflow: [`DEPLOYMENT_SYNC_RUNBOOK`](./DEPLOYMENT_SYNC_RUNBOOK.md)
+- Deployment overview: [`DEPLOYMENT_OVERVIEW`](./DEPLOYMENT_OVERVIEW.md)
+- Deployment overview: [`DEPLOYMENT_OVERVIEW`](./DEPLOYMENT_OVERVIEW.md)
 - Release cleanup: [`RELEASE_AUDIT_CHECKLIST`](./RELEASE_AUDIT_CHECKLIST.md)
 - Template env file: [`.env.example`](../.env.example)
 - TTS API setup: [`MLX_AUDIO_TTS_GUIDE`](./MLX_AUDIO_TTS_GUIDE.md)
 
 ## Configuration Precedence
+
+The inventory-based admin deployment flow renders host config with this
+precedence:
+
+1. global defaults
+2. role defaults
+3. model defaults
+4. profile config
+5. host config
+6. runtime environment
+7. CLI flags
+
+Inspect the effective values and their source with:
+
+```bash
+scripts/llmops-admin config-settings --host-name <host-name>
+scripts/llmops-admin config-doctor --role llm --model <ModelProfile>
+```
+
+The older runtime wrappers still use the script-level precedence below until
+the `modelctl` refactor is completed.
 
 Scripts use this precedence (earlier items override later ones):
 
@@ -190,7 +212,7 @@ Notes:
 ### Deployment config
 
 - `LLMOPS_DEPLOY_CONFIG`: optional explicit deployment config file override.
-- `LLMOPS_DEPLOY_CONFIG_NAME`: selected deployment config name, used by `deploy-runtime` and helpers.
+- `LLMOPS_DEPLOY_CONFIG_NAME`: internal deployment helper config name. Admin deployments should select hosts through inventory instead.
 - Default deploy config path: `./stage/deploy_config/default.env`
 - Default local deploy log dir: `./stage/deploy_config/logs/<config-name>`
 - Deployment configs are not pushed to remote hosts.

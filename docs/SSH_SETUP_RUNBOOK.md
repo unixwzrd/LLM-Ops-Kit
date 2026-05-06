@@ -1,7 +1,7 @@
 # SSH Setup Runbook
 
 **Created**: 2026-02-26
-**Updated**: 2026-02-28
+**Updated**: 2026-04-27
 
 - [SSH Setup Runbook](#ssh-setup-runbook)
   - [Goal](#goal)
@@ -20,11 +20,21 @@
 
 Set up secure SSH-based deployment for `LLM-Ops-Kit` using short-lived agent credentials.
 
+For inventory-driven deployments, prefer:
+
+```bash
+scripts/llmops-admin bootstrap-host --dry-run
+scripts/llmops-admin bootstrap-host
+```
+
+The manual steps below remain useful for recovery and for hosts that cannot use
+the bootstrap helper.
+
 ## Related Docs
 
 - Main index: [`../README.md`](../README.md)
 - Configuration: [`CONFIGURATION.md`](./CONFIGURATION.md)
-- Deployment flow: [`DEPLOYMENT_SYNC_RUNBOOK.md`](./DEPLOYMENT_SYNC_RUNBOOK.md)
+- Deployment overview: [`DEPLOYMENT_OVERVIEW.md`](./DEPLOYMENT_OVERVIEW.md)
 
 ## Fast Path Script
 

@@ -1,7 +1,7 @@
 # push-runtime
 
 **Created**: 2026-04-17
-**Updated**: 2026-04-17
+**Updated**: 2026-04-27
 
 Push a staged virtual target filesystem to the configured host list over SSH/rsync, then run remote post-deploy checks as the target user.
 
@@ -9,8 +9,11 @@ Push a staged virtual target filesystem to the configured host list over SSH/rsy
 scripts/push-runtime [--config-name <name>] [--dry-run] [--skip-stage] [--stage-dir <path>] [--config-file <path>] [-v]
 ```
 
-This is an internal helper command. Operators should normally use `./build-stage`.
-See [DEPLOYMENT_SYNC_RUNBOOK](../DEPLOYMENT_SYNC_RUNBOOK.md) for the full deploy flow.
+This is an internal helper command. Operators should use
+`scripts/llmops-admin push` from the administrator workstation.
+
+See [DEPLOYMENT_OVERVIEW](../DEPLOYMENT_OVERVIEW.md) for the supported
+deployment model.
 
 In short, `push-runtime`:
 

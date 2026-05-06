@@ -1,11 +1,12 @@
 # install-runtime
 
 **Created**: 2026-03-03
-**Updated**: 2026-04-17
+**Updated**: 2026-04-27
 
-Legacy helper for installing a durable runtime payload outside your git checkout, then linking commands from `~/bin`.
+Helper for installing a durable runtime payload outside a git checkout, then
+linking commands from `~/bin`.
 
-Legacy first-time install:
+Manual first-time install:
 
 ```bash
 git clone https://github.com/unixwzrd/LLM-Ops-Kit.git ~/projects/LLM-Ops-Kit
@@ -41,10 +42,11 @@ What gets linked:
 
 This is useful when you do not want runtime commands to break if `~/projects/LLM-Ops-Kit` is moved or deleted.
 
-Current Phase 1 staged deploy note:
+Deployment note:
 
-- staged SSH deployment now uses `build-stage` / `deploy-runtime` and `push-runtime` as the primary path
-- `install-runtime.sh` remains for compatibility and local repair workflows
+- administrator workstation deployment uses `scripts/llmops-admin`
+- remote apply installs or refreshes the runtime payload and command links on target hosts
+- `install-runtime.sh` remains useful for local repair workflows
 - `--venv-path` optionally creates or reuses a dedicated runtime Python virtualenv
 - the installer records that venv path in the runtime state file so toolkit wrappers can prepend it to `PATH`
 - `--install-secrets-kit` optionally installs `Secrets-Kit` into that same runtime venv

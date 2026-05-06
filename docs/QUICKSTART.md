@@ -3,13 +3,13 @@
 Back: [docs/INDEX.md](./INDEX.md)
 
 **Created**: 2026-02-26
-**Updated**: 2026-03-13
+**Updated**: 2026-04-27
 
 - [Quickstart (10 Minutes)](#quickstart-10-minutes)
   - [Requirements](#requirements)
   - [Remote Models, Local Agent Runtime](#remote-models-local-agent-runtime)
   - [Fully Local Models and Agent Runtime](#fully-local-models-and-agent-runtime)
-  - [Remote sync + deploy](#remote-sync--deploy)
+- [Admin Deployment](#admin-deployment)
   - [Common checks](#common-checks)
 
 ## Requirements
@@ -29,17 +29,28 @@ Minimal Python bootstrap:
 python3 -m pip install jinja2
 ```
 
-## First-Time Stage + Deploy
+## First-Time Admin Deploy
 
-Clone the repo first, then configure, stage, and deploy from that checkout:
+Clone the repo first, then validate the inventory and stage a deployment bundle
+from the administrator workstation:
 
 ```bash
 git clone https://github.com/unixwzrd/LLM-Ops-Kit.git ~/projects/LLM-Ops-Kit
 cd ~/projects/LLM-Ops-Kit
-./build-stage -c default
+scripts/llmops-admin inventory-validate
+scripts/llmops-admin bootstrap-host --dry-run
+scripts/llmops-admin stage --dry-run --bundle-id smoke
 ```
 
-This builds a virtual target filesystem under `./stage/default/`, then rsyncs the staged runtime tree to the configured host list and verifies the remote runtime surface.
+The admin workflow is inventory based. Edit `~/.llm-ops/inventory.yml` for live
+targets, or start from `deploy/inventory.yml`.
+
+For the full deployment sequence, see
+[Deployment Overview](./DEPLOYMENT_OVERVIEW.md).
+
+Deployment work should use `llmops-admin` from the administrator workstation.
+Lower-level packaging and transport helpers are implementation details, not a
+separate operator workflow.
 
 ## Remote Models, Local Agent Runtime
 
@@ -64,14 +75,13 @@ cd ~/projects/LLM-Ops-Kit
 ~/bin/tts-bridge start
 ```
 
-What Phase 1 staged deploy does:
+What admin deployment does:
 
-- builds a staged runtime tree under `./stage/<config>/`
-- rsyncs the staged install tree into the target install prefix
-- rsyncs the staged bin tree into the target bin dir
-- creates or validates the target runtime venv
-- deploys command links into the target bin dir
-- writes runtime state on the target host
+- builds a local package under `~/.llm-ops/stage/<bundle_id>/`
+- renders per-host config from inventory and layered config
+- pushes the package and config to selected hosts in parallel
+- applies the package on each remote host
+- updates runtime links and verifies the role-specific command surface
 
 Optional `Secrets Kit` setup:
 
@@ -119,11 +129,16 @@ cd ~/projects/LLM-Ops-Kit
 
 The deployed runtime still lives under the configured install prefix, typically `~/.llm-ops/current`; the target `~/bin` only contains links to that installed payload.
 
-## Remote sync + deploy
+## Admin Deployment
 
 ```bash
 cd ~/projects/LLM-Ops-Kit
-~/bin/sync-ops-scripts --delete
+scripts/llmops-admin inventory-validate
+scripts/llmops-admin config-doctor --tag production
+scripts/llmops-admin bootstrap-host --tag production --dry-run
+scripts/llmops-admin stage --tag production --bundle-id <bundle_id>
+scripts/llmops-admin push --tag production --stage ~/.llm-ops/stage/<bundle_id> --workers 4
+scripts/llmops-admin apply --tag production --stage ~/.llm-ops/stage/<bundle_id> --workers 4
 ```
 
 ## Common checks

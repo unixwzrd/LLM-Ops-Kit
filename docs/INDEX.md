@@ -35,7 +35,8 @@ This is the canonical index for operator docs in `LLM-Ops-Kit`.
 
 ## Deployment and Ops
 
-- [Deployment Sync Runbook](./DEPLOYMENT_SYNC_RUNBOOK.md)
+- [Deployment Overview](./DEPLOYMENT_OVERVIEW.md)
+- [Installation Rework Checklist](./INSTALLATION_REWORK_CHECKLIST.md)
 - [SSH Setup Runbook](./SSH_SETUP_RUNBOOK.md)
 - [Release Audit Checklist](./RELEASE_AUDIT_CHECKLIST.md)
 - [scripts/README.md](./scripts/README.md)
