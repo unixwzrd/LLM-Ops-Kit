@@ -619,6 +619,39 @@ def cmd_stage_validate(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_deploy_report(args: argparse.Namespace) -> int:
+    hosts = select_hosts(load_inventory(inventory_path(args)), args)
+    stage_dir = Path(args.stage).expanduser() if args.stage else latest_stage(Path(args.stage_root).expanduser())
+    validate_stage_bundle(stage_dir, hosts, require_package=not args.no_package)
+    manifest = json.loads((stage_dir / "manifest.json").read_text(encoding="utf-8"))
+    print(f"stage={stage_dir}")
+    print(f"bundle_id={manifest.get('bundle_id')}")
+    print(f"package={manifest.get('package')}")
+    print(f"package_sha256={manifest.get('package_sha256')}")
+    print(f"selected_hosts={len(hosts)}")
+    manifest_hosts = {
+        str(item.get("name")): item
+        for item in manifest.get("hosts", [])
+        if isinstance(item, dict) and item.get("name")
+    }
+    for host in hosts:
+        item = manifest_hosts[host.name]
+        release_dir = f"{host.install_root}/releases/{stage_dir.name}"
+        print(
+            "host"
+            f"\tname={host.name}"
+            f"\trole={host.role}"
+            f"\tdestination={host.destination}"
+            f"\tremote_package={host.install_root}/packages/{stage_dir.name}/llm-ops-kit.tar.gz"
+            f"\tremote_manifest={host.install_root}/packages/{stage_dir.name}/manifest.json"
+            f"\trelease_dir={release_dir}"
+            f"\trelease_config_dir={release_dir}/config"
+            f"\tconfig_env_sha256={item.get('config_env_sha256')}"
+            f"\tconfig_json_sha256={item.get('config_json_sha256')}"
+        )
+    return 0
+
+
 def cmd_config_settings(args: argparse.Namespace) -> int:
     for host in select_hosts(load_inventory(inventory_path(args)), args):
         print(f"[{host.name}]")
@@ -1507,6 +1540,7 @@ def cmd_deploy_plan(args: argparse.Namespace) -> int:
     print(f"selected_hosts={len(hosts)}")
     for host in hosts:
         remote_package_dir = f"{host.install_root}/packages/{bundle_id}"
+        release_dir = f"{host.install_root}/releases/{bundle_id}"
         print(
             "host"
             f"\tname={host.name}"
@@ -1516,8 +1550,17 @@ def cmd_deploy_plan(args: argparse.Namespace) -> int:
             f"\tprofile={host.config_profile}"
             f"\tinstall_root={host.install_root}"
             f"\tremote_package_dir={remote_package_dir}"
+            f"\tremote_package={remote_package_dir}/llm-ops-kit.tar.gz"
+            f"\tremote_manifest={remote_package_dir}/manifest.json"
+            f"\trelease_dir={release_dir}"
+            f"\trelease_manifest={release_dir}/manifest.json"
+            f"\trelease_config_dir={release_dir}/config"
+            f"\tremote_config_env={host.install_root}/config/{host.name}.env"
+            f"\tremote_config_json={host.install_root}/config/{host.name}.json"
+            f"\tremote_config_sources={host.install_root}/config/{host.name}.sources.json"
             f"\tconfig_env={stage_dir / 'hosts' / host.name / 'config.env'}"
             f"\tconfig_json={stage_dir / 'hosts' / host.name / 'config.json'}"
+            f"\tconfig_sources={stage_dir / 'hosts' / host.name / 'config-sources.json'}"
         )
     print("dry-run: no package built, no files written, no SSH attempted")
     return 0
@@ -1568,6 +1611,12 @@ def build_parser() -> argparse.ArgumentParser:
     stage_validate.add_argument("--stage")
     stage_validate.add_argument("--no-package", action="store_true")
     stage_validate.set_defaults(func=cmd_stage_validate)
+    deploy_report = sub.add_parser("deploy-report")
+    add_host_selectors(deploy_report)
+    deploy_report.add_argument("--stage-root", default=str(DEFAULT_STAGE_ROOT))
+    deploy_report.add_argument("--stage")
+    deploy_report.add_argument("--no-package", action="store_true")
+    deploy_report.set_defaults(func=cmd_deploy_report)
     settings = sub.add_parser("config-settings")
     add_host_selectors(settings)
     settings.add_argument("--model")

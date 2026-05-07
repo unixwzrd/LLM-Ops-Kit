@@ -107,8 +107,9 @@ For manual SSH details and troubleshooting, see
 
 ## Staging
 
-Preview selected hosts, local stage paths, remote package directories, and
-rendered config destinations without building a package or opening SSH:
+Preview selected hosts, local stage paths, remote package/release directories,
+rendered config destinations, and audit artifacts without building a package or
+opening SSH:
 
 ```bash
 scripts/llmops-admin deploy-plan --dry-run --bundle-id smoke
@@ -147,6 +148,12 @@ Validate an existing staged bundle before push or apply:
 
 ```bash
 scripts/llmops-admin stage-validate --stage ~/.local/share/llm-ops/stage/20260427-prod
+```
+
+Report the staged bundle, host checksum, remote package, and release mapping:
+
+```bash
+scripts/llmops-admin deploy-report --stage ~/.local/share/llm-ops/stage/20260427-prod
 ```
 
 Limit staging to a host subset when needed:

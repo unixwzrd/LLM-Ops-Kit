@@ -333,6 +333,37 @@ class LlmopsAdminTests(unittest.TestCase):
                 self.assertEqual(self.admin.cmd_stage_validate(args), 0)
             self.assertIn(f"stage OK: {stage}", stdout.getvalue())
 
+    def test_deploy_report_reads_stage_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            inventory = self.write_inventory(root)
+            hosts = self.admin.load_inventory(inventory)
+            stage = root / "stage" / "bundle"
+            package = stage / "package" / "llm-ops-kit.tar.gz"
+            package.parent.mkdir(parents=True)
+            package.write_text("package", encoding="utf-8")
+            for host in hosts:
+                self.admin.write_host_config(stage, host, model=None)
+            self.admin.write_manifest(stage, package, hosts, model=None)
+            args = Namespace(
+                inventory=str(inventory),
+                role=None,
+                tag=None,
+                host_name=None,
+                stage_root=str(root / "stage"),
+                stage=str(stage),
+                no_package=False,
+            )
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                self.assertEqual(self.admin.cmd_deploy_report(args), 0)
+            rendered = stdout.getvalue()
+            self.assertIn("bundle_id=bundle", rendered)
+            self.assertIn("host\tname=llm-a", rendered)
+            self.assertIn("remote_manifest=~/llmops/packages/bundle/manifest.json", rendered)
+            self.assertIn("release_config_dir=~/llmops/releases/bundle/config", rendered)
+            self.assertIn("config_env_sha256=", rendered)
+
     def test_migrate_config_dry_run_reports_sources_without_writing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -870,6 +901,10 @@ class LlmopsAdminTests(unittest.TestCase):
             self.assertIn("selected_hosts=2", rendered)
             self.assertIn("host\tname=llm-a", rendered)
             self.assertIn("host\tname=agent-a", rendered)
+            self.assertIn("remote_manifest=~/llmops/packages/smoke/manifest.json", rendered)
+            self.assertIn("release_manifest=~/llmops/releases/smoke/manifest.json", rendered)
+            self.assertIn("remote_config_sources=~/llmops/config/llm-a.sources.json", rendered)
+            self.assertIn(f"config_sources={stage_root / 'smoke' / 'hosts' / 'llm-a' / 'config-sources.json'}", rendered)
             self.assertIn("dry-run: no package built, no files written, no SSH attempted", rendered)
             self.assertFalse(stage_root.exists())
 
