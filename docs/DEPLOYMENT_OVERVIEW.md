@@ -140,6 +140,9 @@ Create a real bundle:
 scripts/llmops-admin stage --bundle-id 20260427-prod
 ```
 
+`stage` validates the bundle after writing it, including package and host config
+checksums.
+
 Validate an existing staged bundle before push or apply:
 
 ```bash
@@ -155,8 +158,9 @@ scripts/llmops-admin stage --tag production --bundle-id 20260427-prod
 
 ## Parallel Push
 
-Push transfers the staged package and each host's rendered config to selected
-hosts. Push runs in parallel and keeps per-host success or failure isolated.
+Push transfers the staged package, manifest, and each host's rendered config
+to selected hosts. Push runs in parallel and keeps per-host success or failure
+isolated.
 Before any transfer, `push` validates that the stage contains the package,
 manifest, each selected host's env/json config artifacts, and matching
 checksums.

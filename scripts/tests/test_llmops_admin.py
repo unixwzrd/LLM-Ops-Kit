@@ -125,6 +125,36 @@ class LlmopsAdminTests(unittest.TestCase):
             )
             self.assertEqual(self.admin.cmd_stage(args), 0)
 
+    def test_stage_write_validates_created_bundle(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            original_build_package = self.admin.build_package
+
+            def fake_build_package(stage_dir: Path) -> Path:
+                package = stage_dir / "package" / "llm-ops-kit.tar.gz"
+                package.parent.mkdir(parents=True)
+                package.write_text("package", encoding="utf-8")
+                return package
+
+            self.admin.build_package = fake_build_package
+            try:
+                args = Namespace(
+                    inventory=str(self.write_inventory(root)),
+                    role=None,
+                    tag=None,
+                    host_name=None,
+                    stage_root=str(root / "stage"),
+                    bundle_id="bundle",
+                    model=None,
+                    dry_run=False,
+                )
+                stdout = io.StringIO()
+                with contextlib.redirect_stdout(stdout):
+                    self.assertEqual(self.admin.cmd_stage(args), 0)
+                self.assertIn("stage validation: OK", stdout.getvalue())
+            finally:
+                self.admin.build_package = original_build_package
+
     def test_write_host_config_writes_env_and_json(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -182,7 +212,13 @@ class LlmopsAdminTests(unittest.TestCase):
                 workers=2,
                 dry_run=True,
             )
-            self.assertEqual(self.admin.cmd_push(args), 0)
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                self.assertEqual(self.admin.cmd_push(args), 0)
+            rendered = stdout.getvalue()
+            self.assertIn("manifest.json", rendered)
+            self.assertIn("llm-a.sources.json", rendered)
+            self.assertIn("agent-a.sources.json", rendered)
 
     def test_push_dry_run_fails_for_incomplete_stage(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

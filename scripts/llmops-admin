@@ -495,22 +495,36 @@ def cmd_stage(args: argparse.Namespace) -> int:
     for host in hosts:
         write_host_config(stage_dir, host, args.model)
     manifest_path = write_manifest(stage_dir, package_path, hosts, args.model)
+    validate_stage_bundle(stage_dir, hosts, require_package=True)
     print(f"stage created: {stage_dir}")
     print(f"package: {package_path}")
     print(f"manifest: {manifest_path}")
+    print("stage validation: OK")
     return 0
 
 
 def push_one(host: HostRecord, stage_dir: Path, dry_run: bool) -> tuple[str, int, str]:
     package = stage_dir / "package" / "llm-ops-kit.tar.gz"
+    manifest = stage_dir / "manifest.json"
     host_config = stage_dir / "hosts" / host.name / "config.env"
     host_config_json = stage_dir / "hosts" / host.name / "config.json"
+    host_config_sources = stage_dir / "hosts" / host.name / "config-sources.json"
     remote_package_dir = f"{host.install_root}/packages/{stage_dir.name}"
     commands = [
         host.ssh_base() + [f"mkdir -p {shlex.quote(remote_package_dir)} {shlex.quote(host.install_root)}/config"],
         ["scp", "-i", str(host.ssh_key_path), "-P", str(host.port), str(package), f"{host.destination}:{remote_package_dir}/"],
+        ["scp", "-i", str(host.ssh_key_path), "-P", str(host.port), str(manifest), f"{host.destination}:{remote_package_dir}/manifest.json"],
         ["scp", "-i", str(host.ssh_key_path), "-P", str(host.port), str(host_config), f"{host.destination}:{host.install_root}/config/{host.name}.env"],
         ["scp", "-i", str(host.ssh_key_path), "-P", str(host.port), str(host_config_json), f"{host.destination}:{host.install_root}/config/{host.name}.json"],
+        [
+            "scp",
+            "-i",
+            str(host.ssh_key_path),
+            "-P",
+            str(host.port),
+            str(host_config_sources),
+            f"{host.destination}:{host.install_root}/config/{host.name}.sources.json",
+        ],
     ]
     output: list[str] = []
     for command in commands:
