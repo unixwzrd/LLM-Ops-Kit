@@ -142,9 +142,24 @@ agent_config_dir() {
   printf '%s/agents\n' "$LLMOPS_CONFIG_DIR"
 }
 
+llmops_config_home() {
+  if [[ -n "${LLMOPS_CONFIG_HOME:-}" ]]; then
+    printf '%s\n' "$LLMOPS_CONFIG_HOME"
+  elif [[ -n "${XDG_CONFIG_HOME:-}" ]]; then
+    printf '%s/llm-ops\n' "$XDG_CONFIG_HOME"
+  else
+    printf '%s/.config/llm-ops\n' "$HOME"
+  fi
+}
+
 agent_profile_path() {
   local backend="$1"
   printf '%s/agents/%s.env\n' "$SCRIPT_DIR" "$backend"
+}
+
+agent_json_profile_path() {
+  local backend="$1"
+  printf '%s/agents/%s.json\n' "$(llmops_config_home)" "$backend"
 }
 
 agent_override_path() {
@@ -184,17 +199,31 @@ clear_agent_backend_vars() {
   unset LLMOPS_AGENT_SHELL_INIT_FILE || true
 }
 
+source_json_agent_profile_defaults() {
+  local backend="$1"
+  local json_file="$2"
+  local line key
+  while IFS= read -r line; do
+    [[ -n "$line" && "$line" == *=* ]] || continue
+    key="${line%%=*}"
+    if [[ -z "${!key-}" ]]; then
+      eval "export $line"
+    fi
+  done < <("$SCRIPT_DIR/llmops-admin" agent-render-env "$backend" --profile-path "$json_file")
+}
+
 load_agent_backend_config() {
   local backend="$1"
   local seed_override="${2:-1}"
-  local profile_file override_file legacy_file
+  local profile_file json_profile_file override_file legacy_file
   profile_file="$(agent_profile_path "$backend")"
+  json_profile_file="$(agent_json_profile_path "$backend")"
   override_file="$(agent_override_path "$backend")"
   legacy_file="$(agent_legacy_override_path "$backend")"
 
-  [[ -f "$profile_file" ]] || return 0
+  [[ -f "$profile_file" || -f "$json_profile_file" ]] || return 0
   clear_agent_backend_vars
-  if [[ "$seed_override" == "1" ]]; then
+  if [[ "$seed_override" == "1" && ! -f "$json_profile_file" ]]; then
     ensure_agent_override_template "$backend"
   fi
 
@@ -208,8 +237,14 @@ load_agent_backend_config() {
     . "$legacy_file"
   fi
 
-  # shellcheck disable=SC1090,SC1091
-  . "$profile_file"
+  if [[ -f "$json_profile_file" ]]; then
+    source_json_agent_profile_defaults "$backend" "$json_profile_file"
+  fi
+
+  if [[ -f "$profile_file" ]]; then
+    # shellcheck disable=SC1090,SC1091
+    . "$profile_file"
+  fi
 }
 
 source_agent_native_env_file() {

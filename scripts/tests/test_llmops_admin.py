@@ -527,6 +527,93 @@ class LlmopsAdminTests(unittest.TestCase):
             self.assertIn("backend=hermes", rendered)
             self.assertIn("would_launch=/bin/hermes gateway --replace --debug", rendered)
 
+    def test_agent_render_env_outputs_json_profile_env(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profile_path = Path(tmp) / "openclaw.json"
+            profile_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "name": "openclaw",
+                        "env": {
+                            "OPENCLAW_GATEWAY_CMD": "/bin/openclaw",
+                            "LLMOPS_GATEWAY_PORT": "18888",
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            args = Namespace(name="openclaw", profile_path=str(profile_path), json=False)
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                self.assertEqual(self.admin.cmd_agent_render_env(args), 0)
+            rendered = stdout.getvalue()
+            self.assertIn("OPENCLAW_GATEWAY_CMD=/bin/openclaw", rendered)
+            self.assertIn("LLMOPS_GATEWAY_PORT=18888", rendered)
+
+    def test_service_render_env_outputs_model_proxy_profile_env(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profile_path = Path(tmp) / "model-proxy.json"
+            profile_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "name": "model-proxy",
+                        "runtime": {
+                            "upstream_host": "127.0.0.1",
+                            "upstream_port": 11434,
+                            "listen_host": "127.0.0.1",
+                            "listen_port": 11435,
+                        },
+                        "template": {"path": "/tmp/template.jinja"},
+                        "logging": {"rotate_seconds": 60, "rotate_keep": 2},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            args = Namespace(name="model-proxy", profile_path=str(profile_path), json=False)
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                self.assertEqual(self.admin.cmd_service_render_env(args), 0)
+            rendered = stdout.getvalue()
+            self.assertIn("LLMOPS_UPSTREAM_HOST=127.0.0.1", rendered)
+            self.assertIn("LLMOPS_UPSTREAM_PORT=11434", rendered)
+            self.assertIn("MODEL_PROXY_LISTEN_PORT=11435", rendered)
+            self.assertIn("MODEL_PROXY_CHAT_TEMPLATE=/tmp/template.jinja", rendered)
+
+    def test_service_render_env_outputs_tts_bridge_profile_env(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profile_path = Path(tmp) / "tts-bridge.json"
+            profile_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "name": "tts-bridge",
+                        "runtime": {
+                            "host": "127.0.0.1",
+                            "port": 11440,
+                            "upstream_base": "http://127.0.0.1:11434/v1",
+                            "python_bin": "/usr/bin/python3",
+                        },
+                        "paths": {
+                            "model": "/models/tts",
+                            "config_dir": "/config/tts",
+                            "samples_dir": "/samples",
+                        },
+                        "defaults": {"ref_audio": "/samples/ref.wav", "ref_text": "/samples/ref.txt"},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            args = Namespace(name="tts-bridge", profile_path=str(profile_path), json=False)
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                self.assertEqual(self.admin.cmd_service_render_env(args), 0)
+            rendered = stdout.getvalue()
+            self.assertIn("TTS_BRIDGE_UPSTREAM_BASE=http://127.0.0.1:11434/v1", rendered)
+            self.assertIn("TTS_BRIDGE_MODEL=/models/tts", rendered)
+            self.assertIn("TTS_BRIDGE_REF_AUDIO=/samples/ref.wav", rendered)
+
     def test_deploy_plan_dry_run_reports_hosts_without_writing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

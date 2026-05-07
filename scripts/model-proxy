@@ -15,6 +15,9 @@ action="${1:-status}"
 LLMOPS_REQUIRED_SECRETS="${LLMOPS_REQUIRED_SECRETS:-}"
 shift || true
 
+load_shell_env
+source_json_service_profile_defaults model-proxy
+
 PROXY_TAP_BIN="${MODEL_PROXY_TAP_BIN:-$LLMOPS_ROOT/bin/model-proxy-tap}"
 MODEL_PROXY_LOG_ROTATE_SECONDS="${MODEL_PROXY_LOG_ROTATE_SECONDS:-86400}"
 MODEL_PROXY_LOG_ROTATE_KEEP="${MODEL_PROXY_LOG_ROTATE_KEEP:-5}"
@@ -225,7 +228,6 @@ kill_port_listener() {
 }
 
 start_proxy() {
-  load_shell_env
   ensure_runtime_dirs
   prune_runtime_artifacts
 
@@ -406,7 +408,6 @@ status_proxy() {
 }
 
 render_proxy() {
-  load_shell_env
   ensure_runtime_dirs
 
   local render_input=""

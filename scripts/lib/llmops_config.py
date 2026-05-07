@@ -15,7 +15,7 @@ except ModuleNotFoundError:  # pragma: no cover - used when imported as scripts.
 
 
 SUPPORTED_SCHEMA_VERSION = 1
-OBJECT_SECTIONS = {"runtime", "models", "agents", "profiles", "deployment", "secrets"}
+OBJECT_SECTIONS = {"runtime", "models", "agents", "profiles", "services", "deployment", "secrets"}
 
 
 class ConfigError(ValueError):
@@ -45,6 +45,7 @@ def default_config() -> dict[str, Any]:
         "models": {},
         "agents": {},
         "profiles": {},
+        "services": {},
         "deployment": {},
         "secrets": {
             "provider": "env",

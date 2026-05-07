@@ -64,6 +64,10 @@ class LlmOpsPaths:
         return self.config_home / "profiles"
 
     @property
+    def services_dir(self) -> Path:
+        return self.config_home / "services"
+
+    @property
     def bundles_dir(self) -> Path:
         return self.data_home / "bundles"
 
@@ -109,6 +113,7 @@ class LlmOpsPaths:
             "models_dir": str(self.models_dir),
             "agents_dir": str(self.agents_dir),
             "profiles_dir": str(self.profiles_dir),
+            "services_dir": str(self.services_dir),
             "data_home": str(self.data_home),
             "bundles_dir": str(self.bundles_dir),
             "stage_dir": str(self.stage_dir),

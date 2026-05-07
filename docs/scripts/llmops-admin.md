@@ -1,7 +1,7 @@
 # llmops-admin
 
 **Created**: 2026-04-27
-**Updated**: 2026-05-06
+**Updated**: 2026-05-07
 
 Back: [Script Guides](./README.md)
 
@@ -21,7 +21,9 @@ scripts/llmops-admin model-add <name> --gguf <model.gguf> [--output <path>] [--d
 scripts/llmops-admin model-render-env <name> [--profile-path <path>] [--json]
 scripts/llmops-admin model-simulate <name> [--profile-path <path>] [--action start|status|stop]
 scripts/llmops-admin model-profile-doctor <name> [--profile-path <path>] [--remote]
+scripts/llmops-admin agent-render-env openclaw|hermes [--profile-path <path>] [--json]
 scripts/llmops-admin agent-simulate openclaw|hermes [--profile-path <path>] [--action start|status|stop]
+scripts/llmops-admin service-render-env model-proxy|tts-bridge [--profile-path <path>] [--json]
 scripts/llmops-admin deploy-plan [--role <role>] [--tag <tag>] [--host-name <name>] [--bundle-id <id>] [--dry-run]
 ```
 
@@ -40,7 +42,9 @@ Use this command from the administrator workstation to:
 - generate a JSON model profile from GGUF metadata
 - render a JSON model profile into shell-compatible environment values
 - validate and simulate model runner actions without launching a model
+- render a JSON agent profile into shell-compatible environment values
 - validate and simulate agent runner actions without launching a backend
+- render JSON service profiles for model proxy and TTS bridge wrappers
 - inspect selected deployment hosts and target paths without staging or SSH
 
 Start with [Deployment Overview](../DEPLOYMENT_OVERVIEW.md) for the full
@@ -138,6 +142,20 @@ Simulate agent runner behavior without starting OpenClaw or Hermes:
 ```bash
 scripts/llmops-admin agent-simulate openclaw --action start
 scripts/llmops-admin agent-simulate hermes --action status
+```
+
+Render a JSON agent profile into the current `agentctl` env shape:
+
+```bash
+scripts/llmops-admin agent-render-env openclaw
+scripts/llmops-admin agent-render-env openclaw --profile-path ./openclaw.json
+```
+
+Render a JSON service profile into the current wrapper env shape:
+
+```bash
+scripts/llmops-admin service-render-env model-proxy
+scripts/llmops-admin service-render-env tts-bridge --profile-path ./tts-bridge.json
 ```
 
 Plan deployment host selection and target paths without building a package,

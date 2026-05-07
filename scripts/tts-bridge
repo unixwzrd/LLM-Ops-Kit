@@ -16,6 +16,7 @@ LLMOPS_REQUIRED_SECRETS="${LLMOPS_REQUIRED_SECRETS:-}"
 shift || true
 
 load_shell_env
+source_json_service_profile_defaults tts-bridge
 
 LISTEN_HOST="${TTS_BRIDGE_HOST:-127.0.0.1}"
 LISTEN_PORT="${TTS_BRIDGE_PORT:-11440}"

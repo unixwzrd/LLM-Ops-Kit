@@ -3,7 +3,7 @@
 Back: [docs/INDEX.md](./INDEX.md)
 
 **Created**: 2026-02-28  
-**Updated**: 2026-05-06
+**Updated**: 2026-05-07
 
 - [Configuration Guide](#configuration-guide)
   - [What This Doc Is For](#what-this-doc-is-for)
@@ -111,6 +111,16 @@ fields for them.
 runner environment. This is a transition bridge; the long-term direction is for
 runtime commands to use the shared resolver directly.
 
+`agentctl` can consume JSON agent profiles from
+`~/.config/llm-ops/agents/<backend>.json` the same way. If a JSON profile exists,
+`agentctl` does not auto-seed a legacy per-backend override template; existing
+legacy override files still win over JSON values.
+
+`model-proxy` and `tts-bridge` can consume JSON service profiles from
+`~/.config/llm-ops/services/model-proxy.json` and
+`~/.config/llm-ops/services/tts-bridge.json`. These profiles render into the
+same environment variables the wrappers already use.
+
 ## Configuration Precedence
 
 The inventory-based admin deployment flow renders host config with this
@@ -159,9 +169,9 @@ Not every wrapper uses the same kind of config input. The most useful mental
 model is:
 
 - `modelctl`: global env + per-model override file + shipped model profile
-- `model-proxy`: CLI flags + environment only
-- `agentctl`: CLI flags + environment + per-backend override templates, with backend-native config owned by OpenClaw or Hermes
-- `tts-bridge`: CLI flags + environment + bridge JSON config files
+- `model-proxy`: CLI flags + environment + JSON service profile
+- `agentctl`: CLI flags + environment + JSON agent profiles + per-backend override templates, with backend-native config owned by OpenClaw or Hermes
+- `tts-bridge`: CLI flags + environment + JSON service profile + bridge JSON config files
 
 ### `modelctl`
 
@@ -189,11 +199,12 @@ Effective precedence:
 1. CLI flags passed to `model-proxy` / `model-proxy-tap`
 2. exported environment variables
 3. `~/.llm-ops/config.env`
-4. built-in wrapper defaults
+4. JSON service profile under `~/.config/llm-ops/services/model-proxy.json`
+5. built-in wrapper defaults
 
 Notes:
 
-- `model-proxy` does not have its own dedicated config file.
+- `model-proxy` can load a JSON service profile, but still renders that profile into the existing wrapper environment.
 - It does persist live runtime metadata under `~/.llm-ops/run/model-proxy-live-*`,
   but those files are for status/reporting, not configuration input.
 - `model-proxy render` is a render-only debugging path that reuses the normal
@@ -212,12 +223,16 @@ Effective precedence:
 1. CLI action
 2. exported environment variables
 3. `~/.llm-ops/config.env`
-4. built-in wrapper defaults
-5. backend-native config owned by the selected agent runtime
+4. existing per-backend override files under `~/.llm-ops/config/agents/`
+5. JSON agent profiles under `~/.config/llm-ops/agents/`
+6. built-in wrapper defaults
+7. backend-native config owned by the selected agent runtime
 
 Notes:
 
 - `agentctl` now seeds optional per-backend override files under `~/.llm-ops/config/agents/`.
+- JSON profiles are loaded from `~/.config/llm-ops/agents/openclaw.json` and `~/.config/llm-ops/agents/hermes.json`.
+- When a JSON profile exists and no legacy override exists, `agentctl` does not create a legacy override template for that backend.
 - Select the default target with `LLMOPS_GATEWAY_BACKEND`:
   - `openclaw` (default)
   - `hermes`
@@ -240,8 +255,9 @@ Effective precedence:
 1. CLI flags
 2. exported environment variables
 3. `~/.llm-ops/config.env`
-4. files derived from `TTS_BRIDGE_CONFIG_DIR`
-5. built-in wrapper defaults
+4. JSON service profile under `~/.config/llm-ops/services/tts-bridge.json`
+5. files derived from `TTS_BRIDGE_CONFIG_DIR`
+6. built-in wrapper defaults
 
 Notes:
 

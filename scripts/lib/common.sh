@@ -106,6 +106,36 @@ load_shell_env() {
   fi
 }
 
+llmops_config_home() {
+  if [[ -n "${LLMOPS_CONFIG_HOME:-}" ]]; then
+    printf '%s\n' "$LLMOPS_CONFIG_HOME"
+  elif [[ -n "${XDG_CONFIG_HOME:-}" ]]; then
+    printf '%s/llm-ops\n' "$XDG_CONFIG_HOME"
+  else
+    printf '%s/.config/llm-ops\n' "$HOME"
+  fi
+}
+
+llmops_service_profile_path() {
+  local service="$1"
+  printf '%s/services/%s.json\n' "$(llmops_config_home)" "$service"
+}
+
+source_json_service_profile_defaults() {
+  local service="$1"
+  local json_file="${2:-}"
+  local line key
+  json_file="${json_file:-$(llmops_service_profile_path "$service")}"
+  [[ -f "$json_file" ]] || return 0
+  while IFS= read -r line; do
+    [[ -n "$line" && "$line" == *=* ]] || continue
+    key="${line%%=*}"
+    if [[ -z "${!key-}" ]]; then
+      eval "export $line"
+    fi
+  done < <("$LLMOPS_ROOT/scripts/llmops-admin" service-render-env "$service" --profile-path "$json_file")
+}
+
 strip_self_placeholder_env_values() {
   local name value
   while IFS='=' read -r name _; do

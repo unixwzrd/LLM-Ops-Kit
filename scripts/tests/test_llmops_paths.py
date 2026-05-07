@@ -15,6 +15,7 @@ class LlmOpsPathTests(unittest.TestCase):
         self.assertEqual(paths.state_home, Path("/home/example/.local/state/llm-ops"))
         self.assertEqual(paths.cache_home, Path("/home/example/.cache/llm-ops"))
         self.assertEqual(paths.logs_dir, Path("/home/example/.local/state/llm-ops/logs"))
+        self.assertEqual(paths.services_dir, Path("/home/example/.config/llm-ops/services"))
         self.assertEqual(paths.gguf_metadata_cache_dir, Path("/home/example/.cache/llm-ops/gguf-metadata"))
 
     def test_xdg_paths_are_honored(self) -> None:

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import tempfile
@@ -12,6 +13,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 COMMON_SH = REPO_ROOT / "scripts/lib/common.sh"
 MODELCTL = REPO_ROOT / "scripts/modelctl"
 AGENTCTL = REPO_ROOT / "scripts/agentctl"
+MODEL_PROXY = REPO_ROOT / "scripts/model-proxy"
+TTS_BRIDGE = REPO_ROOT / "scripts/tts-bridge"
 DEPLOY_RUNTIME_LINKS = REPO_ROOT / "scripts/deploy-runtime-links.sh"
 SETUP_DEPLOY = REPO_ROOT / "scripts/setup-deploy"
 STAGE_RUNTIME = REPO_ROOT / "scripts/stage-runtime"
@@ -869,6 +872,129 @@ class ShellRuntimeHelperTests(unittest.TestCase):
             self.assertEqual(args_log.read_text(encoding="utf-8").strip(), "status --json")
             self.assertEqual(token_log.read_text(encoding="utf-8").strip(), "sec-openclaw")
             self.assertEqual(telegram_log.read_text(encoding="utf-8").strip(), "sec-telegram")
+
+    def test_agentctl_exec_can_load_json_agent_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            home = root / "home"
+            llmops_home = home / ".llm-ops"
+            config_home = home / ".config" / "llm-ops"
+            agents_dir = config_home / "agents"
+            agents_dir.mkdir(parents=True)
+            fake_cmd = root / "fake-openclaw"
+            args_log = root / "args.log"
+            fake_cmd.write_text(
+                "#!/usr/bin/env bash\n"
+                f"printf '%s\\n' \"$*\" > \"{args_log}\"\n"
+                "printf 'ok\\n'\n",
+                encoding="utf-8",
+            )
+            fake_cmd.chmod(0o755)
+            (agents_dir / "openclaw.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "name": "openclaw",
+                        "env": {
+                            "OPENCLAW_GATEWAY_CMD": str(fake_cmd),
+                            "LLMOPS_GATEWAY_PORT": "18888",
+                            "LLMOPS_AGENT_SECKIT_NAMES": "",
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            proc = self.run_bash(
+                f'"{AGENTCTL}" exec openclaw status',
+                env={
+                    "HOME": str(home),
+                    "LLMOPS_HOME": str(llmops_home),
+                    "LLMOPS_CONFIG_HOME": str(config_home),
+                    "LLMOPS_SKIP_SECKIT_LOAD": "1",
+                },
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertEqual(proc.stdout.strip(), "ok")
+            self.assertEqual(args_log.read_text(encoding="utf-8").strip(), "status")
+
+    def test_model_proxy_status_can_load_json_service_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            home = root / "home"
+            llmops_home = home / ".llm-ops"
+            config_home = home / ".config" / "llm-ops"
+            services_dir = config_home / "services"
+            services_dir.mkdir(parents=True)
+            (services_dir / "model-proxy.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "name": "model-proxy",
+                        "runtime": {
+                            "upstream_host": "10.0.0.5",
+                            "upstream_port": 11434,
+                            "listen_host": "127.0.0.1",
+                            "listen_port": 11999,
+                        },
+                        "logging": {"rotate_seconds": 123, "rotate_keep": 4},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            proc = self.run_bash(
+                f'"{MODEL_PROXY}" status',
+                env={
+                    "HOME": str(home),
+                    "LLMOPS_HOME": str(llmops_home),
+                    "LLMOPS_CONFIG_HOME": str(config_home),
+                    "LLMOPS_SKIP_SECKIT_LOAD": "1",
+                },
+            )
+            self.assertEqual(proc.returncode, 1, proc.stderr)
+            self.assertIn("log_rotate_seconds=123", proc.stdout)
+            self.assertIn("log_rotate_keep=4", proc.stdout)
+
+    def test_tts_bridge_status_can_load_json_service_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            home = root / "home"
+            llmops_home = home / ".llm-ops"
+            config_home = home / ".config" / "llm-ops"
+            services_dir = config_home / "services"
+            services_dir.mkdir(parents=True)
+            (services_dir / "tts-bridge.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "name": "tts-bridge",
+                        "runtime": {
+                            "host": "127.0.0.1",
+                            "port": 11998,
+                            "upstream_base": "http://10.0.0.5:11434/v1",
+                        },
+                        "paths": {
+                            "model": "/models/tts",
+                            "config_dir": "/config/tts",
+                            "samples_dir": "/samples",
+                        },
+                        "logging": {"rotate_seconds": 456, "rotate_keep": 3},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            proc = self.run_bash(
+                f'"{TTS_BRIDGE}" status',
+                env={
+                    "HOME": str(home),
+                    "LLMOPS_HOME": str(llmops_home),
+                    "LLMOPS_CONFIG_HOME": str(config_home),
+                    "LLMOPS_SKIP_SECKIT_LOAD": "1",
+                },
+            )
+            self.assertEqual(proc.returncode, 1, proc.stderr)
+            self.assertIn("listen=http://127.0.0.1:11998/health", proc.stdout)
+            self.assertIn("upstream=http://10.0.0.5:11434/v1", proc.stdout)
+            self.assertIn("log_rotate_seconds=456", proc.stdout)
 
     def _write_fake_gateway_cmd(self, root: Path) -> Path:
         script = root / "fake-gateway"

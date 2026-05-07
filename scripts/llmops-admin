@@ -1112,6 +1112,76 @@ def render_agent_env(profile: dict[str, Any]) -> dict[str, str]:
     return rendered
 
 
+def load_service_profile(name: str, profile_path: str | None = None) -> tuple[Path, dict[str, Any]]:
+    path = Path(profile_path).expanduser() if profile_path else resolve_paths().services_dir / f"{name}.json"
+    if not path.exists():
+        raise AdminError(f"service profile not found: {path}")
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise AdminError(f"service profile must be a JSON object: {path}")
+    return path, raw
+
+
+def render_model_proxy_env(profile: dict[str, Any]) -> dict[str, str]:
+    runtime = profile.get("runtime") or {}
+    logging = profile.get("logging") or {}
+    template = profile.get("template") or {}
+    rendered = {
+        "LLMOPS_UPSTREAM_HOST": runtime.get("upstream_host"),
+        "LLMOPS_UPSTREAM_PORT": runtime.get("upstream_port"),
+        "MODEL_PROXY_LISTEN_HOST": runtime.get("listen_host"),
+        "MODEL_PROXY_LISTEN_PORT": runtime.get("listen_port"),
+        "MODEL_PROXY_CHAT_TEMPLATE": template.get("path"),
+        "MODEL_PROXY_LOG_ROTATE_SECONDS": logging.get("rotate_seconds"),
+        "MODEL_PROXY_LOG_ROTATE_KEEP": logging.get("rotate_keep"),
+    }
+    return {key: str(value) for key, value in rendered.items() if value not in (None, "")}
+
+
+def render_tts_bridge_env(profile: dict[str, Any]) -> dict[str, str]:
+    runtime = profile.get("runtime") or {}
+    paths = profile.get("paths") or {}
+    logging = profile.get("logging") or {}
+    defaults = profile.get("defaults") or {}
+    rendered = {
+        "TTS_BRIDGE_HOST": runtime.get("host"),
+        "TTS_BRIDGE_PORT": runtime.get("port"),
+        "TTS_BRIDGE_UPSTREAM_BASE": runtime.get("upstream_base"),
+        "TTS_BRIDGE_MODEL": paths.get("model"),
+        "TTS_BRIDGE_CONFIG_DIR": paths.get("config_dir"),
+        "TTS_BRIDGE_PRONOUNCE_CONFIG": paths.get("pronounce_config"),
+        "TTS_BRIDGE_VOICE_MAP_CONFIG": paths.get("voice_map_config"),
+        "TTS_BRIDGE_SAMPLES_DIR": paths.get("samples_dir"),
+        "TTS_BRIDGE_LOG_ROTATE_SECONDS": logging.get("rotate_seconds"),
+        "TTS_BRIDGE_LOG_ROTATE_KEEP": logging.get("rotate_keep"),
+        "TTS_BRIDGE_REF_AUDIO": defaults.get("ref_audio"),
+        "TTS_BRIDGE_REF_TEXT": defaults.get("ref_text"),
+        "TTS_BRIDGE_PYTHON_BIN": runtime.get("python_bin"),
+    }
+    return {key: str(value) for key, value in rendered.items() if value not in (None, "")}
+
+
+def render_service_env(name: str, profile: dict[str, Any]) -> dict[str, str]:
+    if isinstance(profile.get("env"), dict):
+        return {str(key): str(value) for key, value in profile["env"].items()}
+    if name == "model-proxy":
+        return render_model_proxy_env(profile)
+    if name == "tts-bridge":
+        return render_tts_bridge_env(profile)
+    raise AdminError(f"unsupported service profile: {name}")
+
+
+def cmd_service_render_env(args: argparse.Namespace) -> int:
+    profile_path, profile = load_service_profile(args.name, args.profile_path)
+    rendered = render_service_env(args.name, profile)
+    if args.json:
+        print(json.dumps({"profile": str(profile_path), "env": rendered}, indent=2, sort_keys=True))
+        return 0
+    for key in sorted(rendered):
+        print(f"{key}={shlex.quote(rendered[key])}")
+    return 0
+
+
 def agent_launch_command(name: str, env: dict[str, str]) -> list[str]:
     if name == "openclaw":
         cmd = env.get("OPENCLAW_GATEWAY_CMD", "openclaw")
@@ -1140,6 +1210,17 @@ def cmd_agent_simulate(args: argparse.Namespace) -> int:
             print(f"would_probe=http://127.0.0.1:{env.get('LLMOPS_GATEWAY_PORT', '18789')}/health")
     elif args.action == "stop":
         print(f"would_stop_pid=agentctl-{args.name}")
+    return 0
+
+
+def cmd_agent_render_env(args: argparse.Namespace) -> int:
+    profile_path, profile = load_agent_profile(args.name, args.profile_path)
+    rendered = render_agent_env(profile)
+    if args.json:
+        print(json.dumps({"profile": str(profile_path), "env": rendered}, indent=2, sort_keys=True))
+        return 0
+    for key in sorted(rendered):
+        print(f"{key}={shlex.quote(rendered[key])}")
     return 0
 
 
@@ -1272,6 +1353,16 @@ def build_parser() -> argparse.ArgumentParser:
     agent_sim.add_argument("--profile-path")
     agent_sim.add_argument("--action", choices=("start", "status", "stop"), default="start")
     agent_sim.set_defaults(func=cmd_agent_simulate)
+    agent_env = sub.add_parser("agent-render-env")
+    agent_env.add_argument("name", choices=("openclaw", "hermes"))
+    agent_env.add_argument("--profile-path")
+    agent_env.add_argument("--json", action="store_true")
+    agent_env.set_defaults(func=cmd_agent_render_env)
+    service_env = sub.add_parser("service-render-env")
+    service_env.add_argument("name", choices=("model-proxy", "tts-bridge"))
+    service_env.add_argument("--profile-path")
+    service_env.add_argument("--json", action="store_true")
+    service_env.set_defaults(func=cmd_service_render_env)
     deploy_plan = sub.add_parser("deploy-plan")
     add_host_selectors(deploy_plan)
     deploy_plan.add_argument("--stage-root", default=str(DEFAULT_STAGE_ROOT))
