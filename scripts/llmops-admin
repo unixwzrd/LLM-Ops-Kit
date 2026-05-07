@@ -556,11 +556,15 @@ def cmd_push(args: argparse.Namespace) -> int:
 
 def apply_one(host: HostRecord, stage_dir: Path, dry_run: bool, restart: str | None) -> tuple[str, int, str]:
     package = f"{host.install_root}/packages/{stage_dir.name}/llm-ops-kit.tar.gz"
+    manifest = f"{host.install_root}/packages/{stage_dir.name}/manifest.json"
     release = f"{host.install_root}/releases/{stage_dir.name}"
     current = f"{host.install_root}/current"
     commands = [
+        f"test -f {shlex.quote(package)}",
+        f"test -f {shlex.quote(manifest)}",
         f"mkdir -p {shlex.quote(release)}",
         f"tar -xzf {shlex.quote(package)} -C {shlex.quote(release)} --strip-components=1",
+        f"cp {shlex.quote(manifest)} {shlex.quote(release)}/manifest.json",
         f"test ! -e {shlex.quote(current)} || ln -sfn {shlex.quote(current)} {shlex.quote(host.install_root)}/previous",
         f"ln -sfn {shlex.quote(release)} {shlex.quote(current)}",
         f"bash {shlex.quote(current)}/scripts/deploy-runtime-links.sh",

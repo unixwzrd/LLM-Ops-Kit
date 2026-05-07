@@ -263,7 +263,14 @@ class LlmopsAdminTests(unittest.TestCase):
                 restart=None,
                 dry_run=True,
             )
-            self.assertEqual(self.admin.cmd_apply(args), 0)
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                self.assertEqual(self.admin.cmd_apply(args), 0)
+            rendered = stdout.getvalue()
+            self.assertIn("test -f", rendered)
+            self.assertIn("~/llmops/packages/bundle/manifest.json", rendered)
+            self.assertIn("cp", rendered)
+            self.assertIn("~/llmops/releases/bundle", rendered)
 
     def test_push_dry_run_fails_for_config_checksum_mismatch(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
