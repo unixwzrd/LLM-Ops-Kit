@@ -68,6 +68,37 @@ class LlmopsAdminTests(unittest.TestCase):
             selected = self.admin.select_hosts(hosts, Namespace(role="llm", tag=None, host_name=None))
             self.assertEqual([host.name for host in selected], ["llm-a"])
 
+    def test_inventory_json_parsing_and_selection(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            inventory = root / "inventory.json"
+            inventory.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "defaults": {
+                            "user": "deploy",
+                            "port": 22,
+                            "install_root": "~/llmops",
+                            "ssh_key": "~/.ssh/llmops_test",
+                            "config_profile": "default",
+                        },
+                        "hosts": [
+                            {
+                                "name": "llm-json",
+                                "role": "llm",
+                                "host": "llm-json.local",
+                                "tags": ["prod", "model"],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            hosts = self.admin.load_inventory(inventory)
+            self.assertEqual([host.name for host in hosts], ["llm-json"])
+            self.assertEqual(hosts[0].destination, "deploy@llm-json.local")
+
     def test_config_precedence_reports_cli_source(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             host = self.admin.load_inventory(self.write_inventory(Path(tmp)))[0]
@@ -94,6 +125,21 @@ class LlmopsAdminTests(unittest.TestCase):
             )
             self.assertEqual(self.admin.cmd_stage(args), 0)
 
+    def test_write_host_config_writes_env_and_json(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            host = self.admin.load_inventory(self.write_inventory(root))[0]
+            stage_dir = root / "stage" / "bundle"
+            config_env = self.admin.write_host_config(stage_dir, host, model="qwen3.6")
+            config_json = config_env.parent / "config.json"
+            self.assertTrue(config_env.exists())
+            self.assertTrue(config_json.exists())
+            payload = json.loads(config_json.read_text(encoding="utf-8"))
+            self.assertEqual(payload["schema_version"], 1)
+            self.assertEqual(payload["host"]["name"], "llm-a")
+            self.assertEqual(payload["host"]["role"], "llm")
+            self.assertEqual(payload["model"], "qwen3.6")
+
     def test_push_dry_run_aggregates_parallel_results(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -105,6 +151,7 @@ class LlmopsAdminTests(unittest.TestCase):
                 host_dir = stage / "hosts" / name
                 host_dir.mkdir(parents=True)
                 (host_dir / "config.env").write_text("PORT=1\n", encoding="utf-8")
+                (host_dir / "config.json").write_text('{"schema_version": 1}\n', encoding="utf-8")
             args = Namespace(
                 inventory=str(inventory),
                 role=None,

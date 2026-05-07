@@ -1,7 +1,7 @@
 # Deployment Overview
 
 **Created**: 2026-04-27
-**Updated**: 2026-04-27
+**Updated**: 2026-05-07
 
 Back: [Documentation Index](./INDEX.md)
 
@@ -40,12 +40,14 @@ separate operator deployment flow.
 The admin workflow is inventory driven. The preferred live inventory path is:
 
 ```text
-~/.llm-ops/inventory.yml
+~/.config/llm-ops/inventory.json
 ```
 
-If that file is missing, `llmops-admin` falls back to the checked-in example:
+If that file is missing, `llmops-admin` falls back to the legacy admin
+inventory and then the checked-in example:
 
 ```text
+~/.llm-ops/inventory.yml
 deploy/inventory.yml
 ```
 
@@ -115,7 +117,7 @@ scripts/llmops-admin deploy-plan --dry-run --bundle-id smoke
 Staging creates a local bundle under:
 
 ```text
-~/.llm-ops/stage/<bundle_id>/
+~/.local/share/llm-ops/stage/<bundle_id>/
 ```
 
 The stage contains:
@@ -123,6 +125,7 @@ The stage contains:
 - `package/llm-ops-kit.tar.gz`: packaged runtime payload
 - `manifest.json`: bundle metadata, target hosts, and package checksum
 - `hosts/<host>/config.env`: rendered host config
+- `hosts/<host>/config.json`: host-specific JSON config and source metadata
 - `hosts/<host>/config-sources.json`: effective config with source reporting
 
 Dry run:
@@ -152,16 +155,17 @@ hosts. Push runs in parallel and keeps per-host success or failure isolated.
 Dry run:
 
 ```bash
-scripts/llmops-admin push --stage ~/.llm-ops/stage/20260427-prod --dry-run
+scripts/llmops-admin push --stage ~/.local/share/llm-ops/stage/20260427-prod --dry-run
 ```
 
 Push with a worker limit:
 
 ```bash
-scripts/llmops-admin push --stage ~/.llm-ops/stage/20260427-prod --workers 4
+scripts/llmops-admin push --stage ~/.local/share/llm-ops/stage/20260427-prod --workers 4
 ```
 
-If `--stage` is omitted, the newest directory under `~/.llm-ops/stage/` is used.
+If `--stage` is omitted, the newest directory under
+`~/.local/share/llm-ops/stage/` is used.
 
 ## Remote Apply
 
@@ -179,19 +183,19 @@ Apply runs remote installation commands after a package has been pushed. It:
 Dry run:
 
 ```bash
-scripts/llmops-admin apply --stage ~/.llm-ops/stage/20260427-prod --dry-run
+scripts/llmops-admin apply --stage ~/.local/share/llm-ops/stage/20260427-prod --dry-run
 ```
 
 Apply in parallel:
 
 ```bash
-scripts/llmops-admin apply --stage ~/.llm-ops/stage/20260427-prod --workers 4
+scripts/llmops-admin apply --stage ~/.local/share/llm-ops/stage/20260427-prod --workers 4
 ```
 
 Optionally restart one deployed script:
 
 ```bash
-scripts/llmops-admin apply --stage ~/.llm-ops/stage/20260427-prod --restart modelctl
+scripts/llmops-admin apply --stage ~/.local/share/llm-ops/stage/20260427-prod --restart modelctl
 ```
 
 ## Configuration Layers
@@ -235,8 +239,8 @@ scripts/llmops-admin config-doctor --tag production
 scripts/llmops-admin bootstrap-host --tag production --dry-run
 scripts/llmops-admin bootstrap-host --tag production
 scripts/llmops-admin stage --tag production --bundle-id <bundle_id>
-scripts/llmops-admin push --tag production --stage ~/.llm-ops/stage/<bundle_id> --workers 4
-scripts/llmops-admin apply --tag production --stage ~/.llm-ops/stage/<bundle_id> --workers 4
+scripts/llmops-admin push --tag production --stage ~/.local/share/llm-ops/stage/<bundle_id> --workers 4
+scripts/llmops-admin apply --tag production --stage ~/.local/share/llm-ops/stage/<bundle_id> --workers 4
 ```
 
 Use `--dry-run` before any bootstrap, push, or apply that affects real hosts.

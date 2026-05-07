@@ -54,6 +54,12 @@ The target hosts can be cloud instances, local servers, virtual machines, or
 hybrid nodes. The inventory decides where the bundle goes; the admin workstation
 does the staging and fan-out.
 
+Default admin paths use the platform-neutral layout:
+
+- inventory: `~/.config/llm-ops/inventory.json`
+- stage root: `~/.local/share/llm-ops/stage`
+- staged host config: `hosts/<host>/config.env` and `hosts/<host>/config.json`
+
 ## Config Rework Helpers
 
 The current config rework keeps JSON as the new canonical format and treats

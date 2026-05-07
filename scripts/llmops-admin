@@ -28,8 +28,9 @@ from gguf_metadata import GgufError, read_gguf_metadata, write_metadata_cache
 
 DEFAULT_INVENTORY = REPO_ROOT / "deploy" / "inventory.yml"
 FALLBACK_INVENTORY = REPO_ROOT / "docs" / "inventory.example.yml"
-ADMIN_INVENTORY = Path("~/.llm-ops/inventory.yml").expanduser()
-DEFAULT_STAGE_ROOT = Path("~/.llm-ops/stage").expanduser()
+ADMIN_INVENTORY = resolve_paths().inventory_file
+LEGACY_ADMIN_INVENTORY = Path("~/.llm-ops/inventory.yml").expanduser()
+DEFAULT_STAGE_ROOT = resolve_paths().stage_dir
 SUPPORTED_ROLES = {"admin", "llm", "agent", "hybrid"}
 CONFIG_PRECEDENCE = (
     "global defaults",
@@ -138,15 +139,24 @@ def inventory_path(args: argparse.Namespace) -> Path:
         return Path(args.inventory).expanduser()
     if ADMIN_INVENTORY.exists():
         return ADMIN_INVENTORY
+    if LEGACY_ADMIN_INVENTORY.exists():
+        return LEGACY_ADMIN_INVENTORY
     if DEFAULT_INVENTORY.exists():
         return DEFAULT_INVENTORY
     return FALLBACK_INVENTORY
 
 
+def _load_inventory_json(path: Path) -> dict[str, Any]:
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise AdminError(f"inventory JSON must be an object: {path}")
+    return raw
+
+
 def load_inventory(path: Path) -> list[HostRecord]:
     if not path.exists():
         raise AdminError(f"inventory not found: {path}")
-    raw = _load_simple_yaml(path)
+    raw = _load_inventory_json(path) if path.suffix == ".json" else _load_simple_yaml(path)
     defaults = dict(raw.get("defaults") or {})
     hosts: list[HostRecord] = []
     seen: set[str] = set()
@@ -303,6 +313,25 @@ def write_host_config(stage_dir: Path, host: HostRecord, model: str | None) -> P
         lines.append(f"{key}={shlex.quote(config[key]['value'])}")
     config_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     (host_dir / "config-sources.json").write_text(json.dumps(config, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    host_config = {
+        "schema_version": 1,
+        "host": {
+            "name": host.name,
+            "role": host.role,
+            "address": host.host,
+            "user": host.user,
+            "port": host.port,
+            "install_root": host.install_root,
+            "config_profile": host.config_profile,
+            "tags": list(host.tags),
+        },
+        "model": model,
+        "config": {
+            key: {"value": meta["value"], "source": meta["source"]}
+            for key, meta in sorted(config.items())
+        },
+    }
+    (host_dir / "config.json").write_text(json.dumps(host_config, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return config_path
 
 
@@ -378,7 +407,10 @@ def cmd_stage(args: argparse.Namespace) -> int:
     if args.dry_run:
         print(f"stage dry-run: would create {stage_dir}")
         for host in hosts:
+            host_dir = stage_dir / "hosts" / host.name
             print(f"stage dry-run: would render config for {host.name} ({host.role})")
+            print(f"stage dry-run: would write {host_dir / 'config.env'}")
+            print(f"stage dry-run: would write {host_dir / 'config.json'}")
         return 0
     stage_dir.mkdir(parents=True, exist_ok=False)
     package_path = build_package(stage_dir)
@@ -394,11 +426,13 @@ def cmd_stage(args: argparse.Namespace) -> int:
 def push_one(host: HostRecord, stage_dir: Path, dry_run: bool) -> tuple[str, int, str]:
     package = stage_dir / "package" / "llm-ops-kit.tar.gz"
     host_config = stage_dir / "hosts" / host.name / "config.env"
+    host_config_json = stage_dir / "hosts" / host.name / "config.json"
     remote_package_dir = f"{host.install_root}/packages/{stage_dir.name}"
     commands = [
         host.ssh_base() + [f"mkdir -p {shlex.quote(remote_package_dir)} {shlex.quote(host.install_root)}/config"],
         ["scp", "-i", str(host.ssh_key_path), "-P", str(host.port), str(package), f"{host.destination}:{remote_package_dir}/"],
         ["scp", "-i", str(host.ssh_key_path), "-P", str(host.port), str(host_config), f"{host.destination}:{host.install_root}/config/{host.name}.env"],
+        ["scp", "-i", str(host.ssh_key_path), "-P", str(host.port), str(host_config_json), f"{host.destination}:{host.install_root}/config/{host.name}.json"],
     ]
     output: list[str] = []
     for command in commands:
@@ -1361,7 +1395,8 @@ def cmd_deploy_plan(args: argparse.Namespace) -> int:
             f"\tprofile={host.config_profile}"
             f"\tinstall_root={host.install_root}"
             f"\tremote_package_dir={remote_package_dir}"
-            f"\tconfig={stage_dir / 'hosts' / host.name / 'config.env'}"
+            f"\tconfig_env={stage_dir / 'hosts' / host.name / 'config.env'}"
+            f"\tconfig_json={stage_dir / 'hosts' / host.name / 'config.json'}"
         )
     print("dry-run: no package built, no files written, no SSH attempted")
     return 0
