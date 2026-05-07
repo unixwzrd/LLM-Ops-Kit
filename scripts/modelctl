@@ -40,6 +40,34 @@ model_add_main() {
   /usr/bin/env python3 "$helper" "$@"
 }
 
+llmops_config_home() {
+  if [[ -n "${LLMOPS_CONFIG_HOME:-}" ]]; then
+    printf '%s\n' "$LLMOPS_CONFIG_HOME"
+  elif [[ -n "${XDG_CONFIG_HOME:-}" ]]; then
+    printf '%s/llm-ops\n' "$XDG_CONFIG_HOME"
+  else
+    printf '%s/.config/llm-ops\n' "$HOME"
+  fi
+}
+
+json_model_profile_path() {
+  local m="$1"
+  printf '%s/models/%s.json\n' "$(llmops_config_home)" "$m"
+}
+
+source_json_model_profile_defaults() {
+  local m="$1"
+  local json_file="$2"
+  local line key
+  while IFS= read -r line; do
+    [[ -n "$line" && "$line" == *=* ]] || continue
+    key="${line%%=*}"
+    if [[ -z "${!key-}" ]]; then
+      eval "export $line"
+    fi
+  done < <("$SCRIPT_DIR/llmops-admin" model-render-env "$m" --profile-path "$json_file")
+}
+
 resolve_model_from_invocation() {
   local bn
   bn="$(basename "$0")"
@@ -88,9 +116,14 @@ resolve_args() {
 load_model_defaults() {
   local m="$1"
   local model_file="$SCRIPT_DIR/models/${m}.sh"
+  local json_model_file
   local model_override_file="$LLMOPS_CONFIG_DIR/${m}.env"
   local legacy_override_file="$LLMOPS_CONFIG_DIR/${m}.sh"
-  [[ -f "$model_file" ]] || { echo "Model defaults not found: $model_file" >&2; exit 2; }
+  json_model_file="$(json_model_profile_path "$m")"
+  [[ -f "$model_file" || -f "$json_model_file" ]] || {
+    echo "Model defaults not found: $model_file or $json_model_file" >&2
+    exit 2
+  }
 
   # Precedence (highest -> lowest):
   # 1) external environment
@@ -118,18 +151,24 @@ load_model_defaults() {
   if [[ -f "$model_override_file" ]]; then
     # shellcheck disable=SC1090
     . "$model_override_file"
-    warn_override_drift "$model_file" "$model_override_file"
+    [[ -f "$model_file" ]] && warn_override_drift "$model_file" "$model_override_file"
   elif [[ -f "$legacy_override_file" ]]; then
     echo "modelctl: legacy per-model override detected at $legacy_override_file" >&2
     echo "modelctl: prefer renaming it to $model_override_file" >&2
     # shellcheck disable=SC1090
     . "$legacy_override_file"
-    warn_override_drift "$model_file" "$legacy_override_file"
+    [[ -f "$model_file" ]] && warn_override_drift "$model_file" "$legacy_override_file"
+  fi
+
+  if [[ -f "$json_model_file" ]]; then
+    source_json_model_profile_defaults "$m" "$json_model_file"
   fi
 
   # 4a) model profile discovery pass
-  # shellcheck disable=SC1090,SC1091
-  . "$model_file"
+  if [[ -f "$model_file" ]]; then
+    # shellcheck disable=SC1090,SC1091
+    . "$model_file"
+  fi
 
   # 5) model-type defaults
   case "${MODEL_TYPE:-}" in
@@ -157,8 +196,10 @@ load_model_defaults() {
   esac
 
   # 4b) model profile precedence pass
-  # shellcheck disable=SC1090,SC1091
-  . "$model_file"
+  if [[ -f "$model_file" ]]; then
+    # shellcheck disable=SC1090,SC1091
+    . "$model_file"
+  fi
 }
 
 warn_override_drift() {
@@ -306,9 +347,12 @@ fi
 ensure_runtime_dirs
 
 list_profiles() {
-  find "$SCRIPT_DIR/models" -maxdepth 1 -type f -name '*.sh' -print \
-    | sed -e 's#^.*/##' -e 's#\.sh$##' \
-    | sort
+  {
+    find "$SCRIPT_DIR/models" -maxdepth 1 -type f -name '*.sh' -print 2>/dev/null \
+      | sed -e 's#^.*/##' -e 's#\.sh$##'
+    find "$(llmops_config_home)/models" -maxdepth 1 -type f -name '*.json' -print 2>/dev/null \
+      | sed -e 's#^.*/##' -e 's#\.json$##'
+  } | sort -u
 }
 
 ensure_model_override_template() {

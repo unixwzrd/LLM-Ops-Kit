@@ -1064,6 +1064,113 @@ def cmd_model_profile_doctor(args: argparse.Namespace) -> int:
     return 0
 
 
+def agent_profile_candidates(name: str, profile_path: str | None = None) -> list[Path]:
+    if profile_path:
+        return [Path(profile_path).expanduser()]
+    return [
+        resolve_paths().agents_dir / f"{name}.json",
+        REPO_ROOT / "scripts" / "agents" / f"{name}.env",
+    ]
+
+
+def load_agent_profile(name: str, profile_path: str | None = None) -> tuple[Path, dict[str, Any]]:
+    candidates = agent_profile_candidates(name, profile_path)
+    for path in candidates:
+        if not path.exists():
+            continue
+        if path.suffix == ".json":
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(raw, dict):
+                raise AdminError(f"agent profile must be a JSON object: {path}")
+            return path, {str(key): value for key, value in raw.items()}
+        return path, {
+            "schema_version": 1,
+            "name": name,
+            "env": parse_legacy_assignment_file(path),
+            "sources": [source_record("repo agent profile", path)],
+        }
+    raise AdminError(f"agent profile not found: {candidates[0]}")
+
+
+def render_agent_env(profile: dict[str, Any]) -> dict[str, str]:
+    if isinstance(profile.get("env"), dict):
+        return {str(key): str(value) for key, value in profile["env"].items()}
+    runtime = profile.get("runtime") or {}
+    secrets = profile.get("secrets") or {}
+    rendered: dict[str, str] = {}
+    for key, value in runtime.items():
+        rendered[str(key).upper()] = str(value)
+    if secrets:
+        rendered["LLMOPS_USE_SECKIT"] = bool_env(secrets.get("provider") == "seckit")
+        if secrets.get("service"):
+            rendered["LLMOPS_SECKIT_SERVICE"] = str(secrets["service"])
+        if secrets.get("account"):
+            rendered["LLMOPS_SECKIT_ACCOUNT"] = str(secrets["account"])
+        names = secrets.get("names") or []
+        if names:
+            rendered["LLMOPS_AGENT_SECKIT_NAMES"] = ",".join(str(name) for name in names)
+    return rendered
+
+
+def agent_launch_command(name: str, env: dict[str, str]) -> list[str]:
+    if name == "openclaw":
+        cmd = env.get("OPENCLAW_GATEWAY_CMD", "openclaw")
+        port = env.get("LLMOPS_GATEWAY_PORT", "18789")
+        return [cmd, "gateway", "run", "--port", port]
+    if name == "hermes":
+        cmd = env.get("HERMES_GATEWAY_CMD", "hermes")
+        args = shlex.split(env.get("HERMES_GATEWAY_ARGS", ""))
+        return [cmd, "gateway", *args]
+    return [name]
+
+
+def cmd_agent_simulate(args: argparse.Namespace) -> int:
+    profile_path, profile = load_agent_profile(args.name, args.profile_path)
+    env = render_agent_env(profile)
+    print("simulation=agent")
+    print(f"profile={profile_path}")
+    print(f"backend={args.name}")
+    print(f"action={args.action}")
+    print("status=ok")
+    if args.action == "start":
+        print("would_launch=" + " ".join(shlex.quote(part) for part in agent_launch_command(args.name, env)))
+    elif args.action == "status":
+        print(f"would_check_pid=agentctl-{args.name}")
+        if args.name == "openclaw":
+            print(f"would_probe=http://127.0.0.1:{env.get('LLMOPS_GATEWAY_PORT', '18789')}/health")
+    elif args.action == "stop":
+        print(f"would_stop_pid=agentctl-{args.name}")
+    return 0
+
+
+def cmd_deploy_plan(args: argparse.Namespace) -> int:
+    hosts = select_hosts(load_inventory(inventory_path(args)), args)
+    bundle_id = args.bundle_id or "<generated-timestamp>"
+    stage_root = Path(args.stage_root).expanduser()
+    stage_dir = stage_root / bundle_id
+    print("simulation=deploy")
+    print(f"mode={'dry-run' if args.dry_run else 'plan'}")
+    print(f"inventory={inventory_path(args)}")
+    print(f"stage_dir={stage_dir}")
+    print(f"package={stage_dir / 'package' / 'llm-ops-kit.tar.gz'}")
+    print(f"selected_hosts={len(hosts)}")
+    for host in hosts:
+        remote_package_dir = f"{host.install_root}/packages/{bundle_id}"
+        print(
+            "host"
+            f"\tname={host.name}"
+            f"\trole={host.role}"
+            f"\tdestination={host.destination}"
+            f"\tssh_port={host.port}"
+            f"\tprofile={host.config_profile}"
+            f"\tinstall_root={host.install_root}"
+            f"\tremote_package_dir={remote_package_dir}"
+            f"\tconfig={stage_dir / 'hosts' / host.name / 'config.env'}"
+        )
+    print("dry-run: no package built, no files written, no SSH attempted")
+    return 0
+
+
 def add_host_selectors(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--inventory")
     parser.add_argument("--role", choices=sorted(SUPPORTED_ROLES))
@@ -1160,6 +1267,17 @@ def build_parser() -> argparse.ArgumentParser:
     profile_doctor.add_argument("--profile-path")
     profile_doctor.add_argument("--remote", action="store_true")
     profile_doctor.set_defaults(func=cmd_model_profile_doctor)
+    agent_sim = sub.add_parser("agent-simulate")
+    agent_sim.add_argument("name", choices=("openclaw", "hermes"))
+    agent_sim.add_argument("--profile-path")
+    agent_sim.add_argument("--action", choices=("start", "status", "stop"), default="start")
+    agent_sim.set_defaults(func=cmd_agent_simulate)
+    deploy_plan = sub.add_parser("deploy-plan")
+    add_host_selectors(deploy_plan)
+    deploy_plan.add_argument("--stage-root", default=str(DEFAULT_STAGE_ROOT))
+    deploy_plan.add_argument("--bundle-id")
+    deploy_plan.add_argument("--dry-run", action="store_true")
+    deploy_plan.set_defaults(func=cmd_deploy_plan)
     return parser
 
 

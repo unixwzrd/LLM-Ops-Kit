@@ -21,6 +21,8 @@ scripts/llmops-admin model-add <name> --gguf <model.gguf> [--output <path>] [--d
 scripts/llmops-admin model-render-env <name> [--profile-path <path>] [--json]
 scripts/llmops-admin model-simulate <name> [--profile-path <path>] [--action start|status|stop]
 scripts/llmops-admin model-profile-doctor <name> [--profile-path <path>] [--remote]
+scripts/llmops-admin agent-simulate openclaw|hermes [--profile-path <path>] [--action start|status|stop]
+scripts/llmops-admin deploy-plan [--role <role>] [--tag <tag>] [--host-name <name>] [--bundle-id <id>] [--dry-run]
 ```
 
 Use this command from the administrator workstation to:
@@ -38,6 +40,8 @@ Use this command from the administrator workstation to:
 - generate a JSON model profile from GGUF metadata
 - render a JSON model profile into shell-compatible environment values
 - validate and simulate model runner actions without launching a model
+- validate and simulate agent runner actions without launching a backend
+- inspect selected deployment hosts and target paths without staging or SSH
 
 Start with [Deployment Overview](../DEPLOYMENT_OVERVIEW.md) for the full
 operator workflow.
@@ -127,6 +131,21 @@ Simulate runner behavior without starting `llama-server`:
 ```bash
 scripts/llmops-admin model-simulate qwen3.6 --profile-path ./qwen3.6.json --action start
 scripts/llmops-admin model-simulate qwen3.6 --profile-path ./qwen3.6.json --action status
+```
+
+Simulate agent runner behavior without starting OpenClaw or Hermes:
+
+```bash
+scripts/llmops-admin agent-simulate openclaw --action start
+scripts/llmops-admin agent-simulate hermes --action status
+```
+
+Plan deployment host selection and target paths without building a package,
+writing staged files, or opening SSH connections:
+
+```bash
+scripts/llmops-admin deploy-plan --dry-run --bundle-id smoke
+scripts/llmops-admin deploy-plan --role agent --dry-run --bundle-id smoke-agent
 ```
 
 Flag local or remote profile JSON that is missing fields added by newer

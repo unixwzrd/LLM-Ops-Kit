@@ -480,6 +480,78 @@ class LlmopsAdminTests(unittest.TestCase):
                 self.assertEqual(self.admin.cmd_model_profile_doctor(args), 0)
             self.assertIn("status=ok", stdout.getvalue())
 
+    def test_agent_simulate_openclaw_uses_profile_env_without_running(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profile_path = Path(tmp) / "openclaw.env"
+            profile_path.write_text(
+                "\n".join(
+                    [
+                        "OPENCLAW_GATEWAY_CMD=/bin/openclaw",
+                        "LLMOPS_GATEWAY_PORT=18888",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            args = Namespace(name="openclaw", profile_path=str(profile_path), action="start")
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                self.assertEqual(self.admin.cmd_agent_simulate(args), 0)
+            rendered = stdout.getvalue()
+            self.assertIn("simulation=agent", rendered)
+            self.assertIn("backend=openclaw", rendered)
+            self.assertIn("would_launch=/bin/openclaw gateway run --port 18888", rendered)
+
+    def test_agent_simulate_hermes_uses_json_profile_without_running(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profile_path = Path(tmp) / "hermes.json"
+            profile_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "name": "hermes",
+                        "env": {
+                            "HERMES_GATEWAY_CMD": "/bin/hermes",
+                            "HERMES_GATEWAY_ARGS": "--replace --debug",
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            args = Namespace(name="hermes", profile_path=str(profile_path), action="start")
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                self.assertEqual(self.admin.cmd_agent_simulate(args), 0)
+            rendered = stdout.getvalue()
+            self.assertIn("simulation=agent", rendered)
+            self.assertIn("backend=hermes", rendered)
+            self.assertIn("would_launch=/bin/hermes gateway --replace --debug", rendered)
+
+    def test_deploy_plan_dry_run_reports_hosts_without_writing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            inventory = self.write_inventory(root)
+            stage_root = root / "stage"
+            args = Namespace(
+                inventory=str(inventory),
+                role=None,
+                tag=None,
+                host_name=None,
+                stage_root=str(stage_root),
+                bundle_id="smoke",
+                dry_run=True,
+            )
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                self.assertEqual(self.admin.cmd_deploy_plan(args), 0)
+            rendered = stdout.getvalue()
+            self.assertIn("simulation=deploy", rendered)
+            self.assertIn("selected_hosts=2", rendered)
+            self.assertIn("host\tname=llm-a", rendered)
+            self.assertIn("host\tname=agent-a", rendered)
+            self.assertIn("dry-run: no package built, no files written, no SSH attempted", rendered)
+            self.assertFalse(stage_root.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

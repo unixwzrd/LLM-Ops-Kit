@@ -211,6 +211,83 @@ class ShellRuntimeHelperTests(unittest.TestCase):
             self.assertIn("NO_HOST=1", proc.stdout)
             self.assertIn("EXTRA_FLAGS=--custom-flag value", proc.stdout)
 
+    def test_modelctl_settings_can_load_json_model_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            config_home = home / ".config" / "llm-ops"
+            models_dir = config_home / "models"
+            models_dir.mkdir(parents=True)
+            (models_dir / "Qwen3.6.json").write_text(
+                """
+{
+  "schema_version": 1,
+  "name": "Qwen3.6",
+  "type": "llm",
+  "model_path": "/models/qwen3.6.gguf",
+  "runtime": {
+    "host": "127.0.0.1",
+    "port": 11999,
+    "threads": "10",
+    "threads_batch": "10"
+  },
+  "llama": {
+    "ctx_size": 262144,
+    "gpu_layers": "all",
+    "batch_size": 1024,
+    "ubatch_size": 1024,
+    "use_mlock": false,
+    "use_no_mmap": false,
+    "direct_io": false
+  },
+  "sampling": {
+    "temp": 0.7,
+    "top_p": 0.95,
+    "top_k": 20,
+    "min_p": 0.0,
+    "presence_penalty": 1.5,
+    "repeat_penalty": 1.0
+  },
+  "template": {
+    "enabled": false,
+    "path": null
+  },
+  "server": {
+    "cache_prompt": true,
+    "cache_reuse": 512,
+    "slot_save_path": "/state/slots",
+    "spec_type": "ngram-map",
+    "spec_ngram_size_n": 12,
+    "spec_ngram_size_m": 48,
+    "perf": true,
+    "flash_attention": true,
+    "no_cpu_moe": true,
+    "no_host": true,
+    "extra_flags": []
+  },
+  "secrets": {
+    "required": []
+  }
+}
+""",
+                encoding="utf-8",
+            )
+            proc = self.run_bash(
+                f'"{MODELCTL}" Qwen3.6 settings',
+                env={
+                    "HOME": str(home),
+                    "LLMOPS_HOME": str(home / ".llm-ops"),
+                },
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertIn("MODEL_PROFILE=qwen3.6", proc.stdout)
+            self.assertIn("MODEL=/models/qwen3.6.gguf", proc.stdout)
+            self.assertIn("HOST=127.0.0.1", proc.stdout)
+            self.assertIn("PORT=11999", proc.stdout)
+            self.assertIn("CTX_SIZE=262144", proc.stdout)
+            self.assertIn("GPU_LAYERS=all", proc.stdout)
+            self.assertIn("CACHE_PROMPT=1", proc.stdout)
+            self.assertIn("SPEC_TYPE=ngram-map", proc.stdout)
+
     def test_deploy_runtime_links_heals_identical_regular_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp) / "home"

@@ -69,6 +69,17 @@ scripts/llmops-admin model-add qwen3.6 --gguf /path/to/Qwen3.6.gguf --dry-run
 scripts/llmops-admin model-render-env qwen3.6 --profile-path ~/.config/llm-ops/models/qwen3.6.json
 ```
 
+`modelctl` can load JSON model profiles from:
+
+```text
+~/.config/llm-ops/models/<profile>.json
+```
+
+The JSON profile is rendered through `scripts/llmops-admin model-render-env`
+into the same environment shape the current runner already understands. During
+the transition, exported environment variables and legacy per-model override
+files still win, and model-kind defaults fill any values omitted from JSON.
+
 New JSON profiles have first-class `server` fields for common llama-server
 switches such as `--cache-prompt`, `--cache-reuse`, `--slot-save-path`,
 `--spec-type`, `--spec-ngram-size-n`, `--spec-ngram-size-m`, `--perf`, `--fa`,

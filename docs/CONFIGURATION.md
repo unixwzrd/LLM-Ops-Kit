@@ -106,6 +106,11 @@ cache prompt/reuse, slot save path, speculative ngram settings, `--perf`,
 escape hatch for new llama-server switches before LLM-Ops-Kit has first-class
 fields for them.
 
+`modelctl` can already consume JSON model profiles from
+`~/.config/llm-ops/models/<profile>.json` by rendering them into the existing
+runner environment. This is a transition bridge; the long-term direction is for
+runtime commands to use the shared resolver directly.
+
 ## Configuration Precedence
 
 The inventory-based admin deployment flow renders host config with this

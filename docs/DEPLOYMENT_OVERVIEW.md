@@ -25,6 +25,7 @@ Use `llmops-admin` for deployment work:
 ```bash
 scripts/llmops-admin inventory-validate
 scripts/llmops-admin bootstrap-host --role llm --dry-run
+scripts/llmops-admin deploy-plan --dry-run --bundle-id smoke
 scripts/llmops-admin stage --dry-run --bundle-id smoke
 scripts/llmops-admin push --dry-run --workers 4
 scripts/llmops-admin apply --dry-run --workers 4
@@ -103,6 +104,13 @@ For manual SSH details and troubleshooting, see
 [SSH Setup Runbook](./SSH_SETUP_RUNBOOK.md).
 
 ## Staging
+
+Preview selected hosts, local stage paths, remote package directories, and
+rendered config destinations without building a package or opening SSH:
+
+```bash
+scripts/llmops-admin deploy-plan --dry-run --bundle-id smoke
+```
 
 Staging creates a local bundle under:
 
