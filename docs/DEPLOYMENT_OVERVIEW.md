@@ -123,7 +123,7 @@ Staging creates a local bundle under:
 The stage contains:
 
 - `package/llm-ops-kit.tar.gz`: packaged runtime payload
-- `manifest.json`: bundle metadata, target hosts, and package checksum
+- `manifest.json`: bundle metadata, target hosts, package checksum, and host config checksums
 - `hosts/<host>/config.env`: rendered host config
 - `hosts/<host>/config.json`: host-specific JSON config and source metadata
 - `hosts/<host>/config-sources.json`: effective config with source reporting
@@ -151,6 +151,8 @@ scripts/llmops-admin stage --tag production --bundle-id 20260427-prod
 
 Push transfers the staged package and each host's rendered config to selected
 hosts. Push runs in parallel and keeps per-host success or failure isolated.
+Before any transfer, `push` validates that the stage contains the package,
+manifest, and each selected host's env/json config artifacts.
 
 Dry run:
 
@@ -179,6 +181,9 @@ Apply runs remote installation commands after a package has been pushed. It:
 - optionally restarts a selected script
 - verifies `modelctl` on `llm` and `hybrid` hosts
 - verifies `agentctl` on `agent` and `hybrid` hosts
+
+Before any remote command, `apply` validates that the local stage still has the
+manifest and selected host config artifacts used to plan the deployment.
 
 Dry run:
 

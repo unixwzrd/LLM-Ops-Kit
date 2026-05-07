@@ -140,6 +140,26 @@ class LlmopsAdminTests(unittest.TestCase):
             self.assertEqual(payload["host"]["role"], "llm")
             self.assertEqual(payload["model"], "qwen3.6")
 
+    def test_write_manifest_records_host_config_checksums(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            hosts = self.admin.load_inventory(self.write_inventory(root))
+            stage = root / "stage" / "bundle"
+            package = stage / "package" / "llm-ops-kit.tar.gz"
+            package.parent.mkdir(parents=True)
+            package.write_text("package", encoding="utf-8")
+            for host in hosts:
+                self.admin.write_host_config(stage, host, model=None)
+            manifest_path = self.admin.write_manifest(stage, package, hosts, model=None)
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            self.assertEqual(manifest["package_sha256"], self.admin.file_sha256(package))
+            self.assertEqual([host["name"] for host in manifest["hosts"]], ["llm-a", "agent-a"])
+            for host in manifest["hosts"]:
+                self.assertTrue(Path(host["config_env"]).exists())
+                self.assertTrue(Path(host["config_json"]).exists())
+                self.assertEqual(host["config_env_sha256"], self.admin.file_sha256(Path(host["config_env"])))
+                self.assertEqual(host["config_json_sha256"], self.admin.file_sha256(Path(host["config_json"])))
+
     def test_push_dry_run_aggregates_parallel_results(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -152,6 +172,8 @@ class LlmopsAdminTests(unittest.TestCase):
                 host_dir.mkdir(parents=True)
                 (host_dir / "config.env").write_text("PORT=1\n", encoding="utf-8")
                 (host_dir / "config.json").write_text('{"schema_version": 1}\n', encoding="utf-8")
+                (host_dir / "config-sources.json").write_text("{}\n", encoding="utf-8")
+            (stage / "manifest.json").write_text('{"bundle_id": "bundle"}\n', encoding="utf-8")
             args = Namespace(
                 inventory=str(inventory),
                 role=None,
@@ -163,6 +185,47 @@ class LlmopsAdminTests(unittest.TestCase):
                 dry_run=True,
             )
             self.assertEqual(self.admin.cmd_push(args), 0)
+
+    def test_push_dry_run_fails_for_incomplete_stage(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            inventory = self.write_inventory(root)
+            stage = root / "stage" / "bundle"
+            stage.mkdir(parents=True)
+            args = Namespace(
+                inventory=str(inventory),
+                role=None,
+                tag=None,
+                host_name=None,
+                stage_root=str(root / "stage"),
+                stage=str(stage),
+                workers=2,
+                dry_run=True,
+            )
+            with self.assertRaisesRegex(self.admin.AdminError, "incomplete stage bundle"):
+                self.admin.cmd_push(args)
+
+    def test_apply_dry_run_validates_stage_without_requiring_local_package(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            inventory = self.write_inventory(root)
+            hosts = self.admin.load_inventory(inventory)
+            stage = root / "stage" / "bundle"
+            for host in hosts:
+                self.admin.write_host_config(stage, host, model=None)
+            (stage / "manifest.json").write_text('{"bundle_id": "bundle"}\n', encoding="utf-8")
+            args = Namespace(
+                inventory=str(inventory),
+                role=None,
+                tag=None,
+                host_name=None,
+                stage_root=str(root / "stage"),
+                stage=str(stage),
+                workers=2,
+                restart=None,
+                dry_run=True,
+            )
+            self.assertEqual(self.admin.cmd_apply(args), 0)
 
     def test_migrate_config_dry_run_reports_sources_without_writing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

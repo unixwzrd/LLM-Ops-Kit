@@ -349,20 +349,70 @@ def build_package(stage_dir: Path) -> Path:
     return package_path
 
 
+def file_sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 def write_manifest(stage_dir: Path, package_path: Path, hosts: list[HostRecord], model: str | None) -> Path:
+    host_entries: list[dict[str, Any]] = []
+    for host in hosts:
+        host_dir = stage_dir / "hosts" / host.name
+        config_env = host_dir / "config.env"
+        config_json = host_dir / "config.json"
+        host_entries.append(
+            {
+                "name": host.name,
+                "role": host.role,
+                "host": host.host,
+                "user": host.user,
+                "port": host.port,
+                "install_root": host.install_root,
+                "config_profile": host.config_profile,
+                "ssh_key": host.ssh_key,
+                "tags": list(host.tags),
+                "config_env": str(config_env),
+                "config_env_sha256": file_sha256(config_env),
+                "config_json": str(config_json),
+                "config_json_sha256": file_sha256(config_json),
+            }
+        )
     manifest = {
         "bundle_id": stage_dir.name,
         "created_at": int(time.time()),
         "repo_root": str(REPO_ROOT),
         "package": str(package_path),
-        "package_sha256": hashlib.sha256(package_path.read_bytes()).hexdigest(),
+        "package_sha256": file_sha256(package_path),
         "model": model,
         "config_precedence": CONFIG_PRECEDENCE,
-        "hosts": [host.__dict__ for host in hosts],
+        "hosts": host_entries,
     }
     manifest_path = stage_dir / "manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return manifest_path
+
+
+def validate_stage_bundle(stage_dir: Path, hosts: list[HostRecord], *, require_package: bool) -> None:
+    missing: list[Path] = []
+    if not stage_dir.is_dir():
+        raise AdminError(f"stage directory not found: {stage_dir}")
+    required = [stage_dir / "manifest.json"]
+    if require_package:
+        required.append(stage_dir / "package" / "llm-ops-kit.tar.gz")
+    for host in hosts:
+        host_dir = stage_dir / "hosts" / host.name
+        required.extend(
+            [
+                host_dir / "config.env",
+                host_dir / "config.json",
+                host_dir / "config-sources.json",
+            ]
+        )
+    for path in required:
+        if not path.exists():
+            missing.append(path)
+    if missing:
+        rendered = "\n".join(f"missing stage artifact: {path}" for path in missing)
+        raise AdminError(f"incomplete stage bundle: {stage_dir}\n{rendered}")
 
 
 def latest_stage(stage_root: Path) -> Path:
@@ -446,6 +496,7 @@ def push_one(host: HostRecord, stage_dir: Path, dry_run: bool) -> tuple[str, int
 def cmd_push(args: argparse.Namespace) -> int:
     hosts = select_hosts(load_inventory(inventory_path(args)), args)
     stage_dir = Path(args.stage).expanduser() if args.stage else latest_stage(Path(args.stage_root).expanduser())
+    validate_stage_bundle(stage_dir, hosts, require_package=True)
     failures = 0
     started = time.time()
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as pool:
@@ -485,6 +536,7 @@ def apply_one(host: HostRecord, stage_dir: Path, dry_run: bool, restart: str | N
 def cmd_apply(args: argparse.Namespace) -> int:
     hosts = select_hosts(load_inventory(inventory_path(args)), args)
     stage_dir = Path(args.stage).expanduser() if args.stage else latest_stage(Path(args.stage_root).expanduser())
+    validate_stage_bundle(stage_dir, hosts, require_package=False)
     failures = 0
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as pool:
         futures = [pool.submit(apply_one, host, stage_dir, args.dry_run, args.restart) for host in hosts]
