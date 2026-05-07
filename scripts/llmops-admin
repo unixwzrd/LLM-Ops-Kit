@@ -557,14 +557,27 @@ def cmd_push(args: argparse.Namespace) -> int:
 def apply_one(host: HostRecord, stage_dir: Path, dry_run: bool, restart: str | None) -> tuple[str, int, str]:
     package = f"{host.install_root}/packages/{stage_dir.name}/llm-ops-kit.tar.gz"
     manifest = f"{host.install_root}/packages/{stage_dir.name}/manifest.json"
+    remote_config_env = f"{host.install_root}/config/{host.name}.env"
+    remote_config_json = f"{host.install_root}/config/{host.name}.json"
+    remote_config_sources = f"{host.install_root}/config/{host.name}.sources.json"
     release = f"{host.install_root}/releases/{stage_dir.name}"
+    release_config = f"{release}/config"
     current = f"{host.install_root}/current"
     commands = [
         f"test -f {shlex.quote(package)}",
         f"test -f {shlex.quote(manifest)}",
+        f"test -f {shlex.quote(remote_config_env)}",
+        f"test -f {shlex.quote(remote_config_json)}",
+        f"test -f {shlex.quote(remote_config_sources)}",
         f"mkdir -p {shlex.quote(release)}",
         f"tar -xzf {shlex.quote(package)} -C {shlex.quote(release)} --strip-components=1",
         f"cp {shlex.quote(manifest)} {shlex.quote(release)}/manifest.json",
+        f"mkdir -p {shlex.quote(release_config)}",
+        f"cp {shlex.quote(remote_config_env)} {shlex.quote(release_config)}/{host.name}.env",
+        f"cp {shlex.quote(remote_config_json)} {shlex.quote(release_config)}/{host.name}.json",
+        f"cp {shlex.quote(remote_config_sources)} {shlex.quote(release_config)}/{host.name}.sources.json",
+        f"printf '%s\\n' {shlex.quote(stage_dir.name)} > {shlex.quote(release)}/BUNDLE_ID",
+        f"printf '%s\\n' {shlex.quote(host.name)} > {shlex.quote(release)}/HOST_NAME",
         f"test ! -e {shlex.quote(current)} || ln -sfn {shlex.quote(current)} {shlex.quote(host.install_root)}/previous",
         f"ln -sfn {shlex.quote(release)} {shlex.quote(current)}",
         f"bash {shlex.quote(current)}/scripts/deploy-runtime-links.sh",

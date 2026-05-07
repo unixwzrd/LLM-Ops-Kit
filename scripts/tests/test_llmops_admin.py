@@ -271,6 +271,15 @@ class LlmopsAdminTests(unittest.TestCase):
             self.assertIn("~/llmops/packages/bundle/manifest.json", rendered)
             self.assertIn("cp", rendered)
             self.assertIn("~/llmops/releases/bundle", rendered)
+            self.assertIn("~/llmops/config/llm-a.env", rendered)
+            self.assertIn("~/llmops/config/llm-a.json", rendered)
+            self.assertIn("~/llmops/config/llm-a.sources.json", rendered)
+            self.assertIn("~/llmops/releases/bundle/config", rendered)
+            self.assertIn("/llm-a.env", rendered)
+            self.assertIn("/llm-a.json", rendered)
+            self.assertIn("/llm-a.sources.json", rendered)
+            self.assertIn("BUNDLE_ID", rendered)
+            self.assertIn("HOST_NAME", rendered)
 
     def test_push_dry_run_fails_for_config_checksum_mismatch(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

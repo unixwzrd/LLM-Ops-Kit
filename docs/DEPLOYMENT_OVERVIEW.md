@@ -186,8 +186,11 @@ Apply runs remote installation commands after a package has been pushed. It:
 
 - creates a release directory under the remote install root
 - verifies the pushed package and manifest are present
+- verifies pushed host config artifacts are present
 - unpacks the pushed package
 - copies the pushed manifest into the release directory
+- copies host-specific config artifacts into the release directory
+- writes `BUNDLE_ID` and `HOST_NAME` marker files into the release directory
 - updates the `current` symlink
 - preserves the previous install pointer
 - installs or refreshes runtime command links
