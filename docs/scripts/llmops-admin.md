@@ -11,6 +11,7 @@ Administrator workstation deployment command.
 scripts/llmops-admin inventory-validate
 scripts/llmops-admin bootstrap-host [--role <role>] [--tag <tag>] [--host-name <name>] [--dry-run]
 scripts/llmops-admin stage [--bundle-id <id>] [--role <role>] [--tag <tag>] [--dry-run]
+scripts/llmops-admin stage-validate [--stage <path>] [--role <role>] [--tag <tag>] [--no-package]
 scripts/llmops-admin push [--stage <path>] [--workers <n>] [--dry-run]
 scripts/llmops-admin apply [--stage <path>] [--workers <n>] [--restart <script>] [--dry-run]
 scripts/llmops-admin config-settings [--host-name <name>] [--model <profile>]
@@ -32,6 +33,7 @@ Use this command from the administrator workstation to:
 - validate host inventory
 - bootstrap SSH access
 - build local deployment bundles
+- validate staged deployment bundles and host config checksums
 - push packages and host config in parallel
 - apply a pushed bundle on remote hosts
 - install or refresh deployed runtime scripts and command links

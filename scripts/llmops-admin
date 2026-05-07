@@ -395,7 +395,8 @@ def validate_stage_bundle(stage_dir: Path, hosts: list[HostRecord], *, require_p
     missing: list[Path] = []
     if not stage_dir.is_dir():
         raise AdminError(f"stage directory not found: {stage_dir}")
-    required = [stage_dir / "manifest.json"]
+    manifest_path = stage_dir / "manifest.json"
+    required = [manifest_path]
     if require_package:
         required.append(stage_dir / "package" / "llm-ops-kit.tar.gz")
     for host in hosts:
@@ -413,6 +414,33 @@ def validate_stage_bundle(stage_dir: Path, hosts: list[HostRecord], *, require_p
     if missing:
         rendered = "\n".join(f"missing stage artifact: {path}" for path in missing)
         raise AdminError(f"incomplete stage bundle: {stage_dir}\n{rendered}")
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise AdminError(f"invalid stage manifest JSON: {manifest_path}: {exc}") from exc
+    if not isinstance(manifest, dict):
+        raise AdminError(f"invalid stage manifest: {manifest_path}: top-level value must be an object")
+    if manifest.get("bundle_id") != stage_dir.name:
+        raise AdminError(f"stage manifest bundle_id does not match stage directory: {manifest_path}")
+    package_path = stage_dir / "package" / "llm-ops-kit.tar.gz"
+    if require_package and manifest.get("package_sha256") != file_sha256(package_path):
+        raise AdminError(f"stage package checksum mismatch: {package_path}")
+    manifest_hosts = {
+        str(item.get("name")): item
+        for item in manifest.get("hosts", [])
+        if isinstance(item, dict) and item.get("name")
+    }
+    for host in hosts:
+        item = manifest_hosts.get(host.name)
+        if item is None:
+            raise AdminError(f"stage manifest missing selected host: {host.name}")
+        host_dir = stage_dir / "hosts" / host.name
+        config_env = host_dir / "config.env"
+        config_json = host_dir / "config.json"
+        if item.get("config_env_sha256") != file_sha256(config_env):
+            raise AdminError(f"stage config.env checksum mismatch: {config_env}")
+        if item.get("config_json_sha256") != file_sha256(config_json):
+            raise AdminError(f"stage config.json checksum mismatch: {config_json}")
 
 
 def latest_stage(stage_root: Path) -> Path:
@@ -548,6 +576,16 @@ def cmd_apply(args: argparse.Namespace) -> int:
             if code != 0:
                 failures += 1
     return 1 if failures else 0
+
+
+def cmd_stage_validate(args: argparse.Namespace) -> int:
+    hosts = select_hosts(load_inventory(inventory_path(args)), args)
+    stage_dir = Path(args.stage).expanduser() if args.stage else latest_stage(Path(args.stage_root).expanduser())
+    validate_stage_bundle(stage_dir, hosts, require_package=not args.no_package)
+    print(f"stage OK: {stage_dir}")
+    print(f"selected_hosts={len(hosts)}")
+    print(f"package_required={0 if args.no_package else 1}")
+    return 0
 
 
 def cmd_config_settings(args: argparse.Namespace) -> int:
@@ -1493,6 +1531,12 @@ def build_parser() -> argparse.ArgumentParser:
     apply.add_argument("--restart")
     apply.add_argument("--dry-run", action="store_true")
     apply.set_defaults(func=cmd_apply)
+    stage_validate = sub.add_parser("stage-validate")
+    add_host_selectors(stage_validate)
+    stage_validate.add_argument("--stage-root", default=str(DEFAULT_STAGE_ROOT))
+    stage_validate.add_argument("--stage")
+    stage_validate.add_argument("--no-package", action="store_true")
+    stage_validate.set_defaults(func=cmd_stage_validate)
     settings = sub.add_parser("config-settings")
     add_host_selectors(settings)
     settings.add_argument("--model")

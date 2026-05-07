@@ -164,16 +164,14 @@ class LlmopsAdminTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             inventory = self.write_inventory(root)
+            hosts = self.admin.load_inventory(inventory)
             stage = root / "stage" / "bundle"
-            (stage / "package").mkdir(parents=True)
-            (stage / "package" / "llm-ops-kit.tar.gz").write_text("package", encoding="utf-8")
-            for name in ("llm-a", "agent-a"):
-                host_dir = stage / "hosts" / name
-                host_dir.mkdir(parents=True)
-                (host_dir / "config.env").write_text("PORT=1\n", encoding="utf-8")
-                (host_dir / "config.json").write_text('{"schema_version": 1}\n', encoding="utf-8")
-                (host_dir / "config-sources.json").write_text("{}\n", encoding="utf-8")
-            (stage / "manifest.json").write_text('{"bundle_id": "bundle"}\n', encoding="utf-8")
+            package = stage / "package" / "llm-ops-kit.tar.gz"
+            package.parent.mkdir(parents=True)
+            package.write_text("package", encoding="utf-8")
+            for host in hosts:
+                self.admin.write_host_config(stage, host, model=None)
+            self.admin.write_manifest(stage, package, hosts, model=None)
             args = Namespace(
                 inventory=str(inventory),
                 role=None,
@@ -211,9 +209,13 @@ class LlmopsAdminTests(unittest.TestCase):
             inventory = self.write_inventory(root)
             hosts = self.admin.load_inventory(inventory)
             stage = root / "stage" / "bundle"
+            package = stage / "package" / "llm-ops-kit.tar.gz"
+            package.parent.mkdir(parents=True)
+            package.write_text("package", encoding="utf-8")
             for host in hosts:
                 self.admin.write_host_config(stage, host, model=None)
-            (stage / "manifest.json").write_text('{"bundle_id": "bundle"}\n', encoding="utf-8")
+            self.admin.write_manifest(stage, package, hosts, model=None)
+            package.unlink()
             args = Namespace(
                 inventory=str(inventory),
                 role=None,
@@ -226,6 +228,58 @@ class LlmopsAdminTests(unittest.TestCase):
                 dry_run=True,
             )
             self.assertEqual(self.admin.cmd_apply(args), 0)
+
+    def test_push_dry_run_fails_for_config_checksum_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            inventory = self.write_inventory(root)
+            hosts = self.admin.load_inventory(inventory)
+            stage = root / "stage" / "bundle"
+            package = stage / "package" / "llm-ops-kit.tar.gz"
+            package.parent.mkdir(parents=True)
+            package.write_text("package", encoding="utf-8")
+            for host in hosts:
+                self.admin.write_host_config(stage, host, model=None)
+            self.admin.write_manifest(stage, package, hosts, model=None)
+            (stage / "hosts" / "llm-a" / "config.json").write_text('{"schema_version": 1, "changed": true}\n', encoding="utf-8")
+            args = Namespace(
+                inventory=str(inventory),
+                role=None,
+                tag=None,
+                host_name=None,
+                stage_root=str(root / "stage"),
+                stage=str(stage),
+                workers=2,
+                dry_run=True,
+            )
+            with self.assertRaisesRegex(self.admin.AdminError, "checksum mismatch"):
+                self.admin.cmd_push(args)
+
+    def test_stage_validate_reports_valid_stage(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            inventory = self.write_inventory(root)
+            hosts = self.admin.load_inventory(inventory)
+            stage = root / "stage" / "bundle"
+            package = stage / "package" / "llm-ops-kit.tar.gz"
+            package.parent.mkdir(parents=True)
+            package.write_text("package", encoding="utf-8")
+            for host in hosts:
+                self.admin.write_host_config(stage, host, model=None)
+            self.admin.write_manifest(stage, package, hosts, model=None)
+            args = Namespace(
+                inventory=str(inventory),
+                role=None,
+                tag=None,
+                host_name=None,
+                stage_root=str(root / "stage"),
+                stage=str(stage),
+                no_package=False,
+            )
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                self.assertEqual(self.admin.cmd_stage_validate(args), 0)
+            self.assertIn(f"stage OK: {stage}", stdout.getvalue())
 
     def test_migrate_config_dry_run_reports_sources_without_writing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
