@@ -3,20 +3,40 @@
 Back: [docs/INDEX.md](./INDEX.md)
 
 **Created**: 2026-02-28  
-**Updated**: 2026-04-27
+**Updated**: 2026-05-06
 
 - [Configuration Guide](#configuration-guide)
   - [What This Doc Is For](#what-this-doc-is-for)
   - [When to Use This Guide](#when-to-use-this-guide)
   - [Related Docs](#related-docs)
+  - [Configuration Rework](#configuration-rework)
   - [Configuration Precedence](#configuration-precedence)
+  - [Service-Specific Config Sources](#service-specific-config-sources)
+    - [`modelctl`](#modelctl)
+    - [`model-proxy`](#model-proxy)
+    - [`agentctl`](#agentctl)
+    - [`tts-bridge`](#tts-bridge)
   - [Core Environment Variables](#core-environment-variables)
+    - [Files and override sources](#files-and-override-sources)
+    - [Toolkit roots and paths](#toolkit-roots-and-paths)
+    - [Deployment config](#deployment-config)
+    - [Hosts and ports](#hosts-and-ports)
+    - [Agent runtime](#agent-runtime)
+    - [LLM templates and sampling](#llm-templates-and-sampling)
+    - [Proxy and tap](#proxy-and-tap)
+    - [TTS bridge](#tts-bridge-1)
+    - [Secrets](#secrets)
+    - [Logs and backups](#logs-and-backups)
+  - [Log Marktime](#log-marktime)
   - [Sync Variables](#sync-variables)
   - [Example `.env.local`](#example-envlocal)
-  - [Local Example (Current Operator Setup)](#local-example-current-operator-setup)
-  - [Remote/Portable Example](#remoteportable-example)
+  - [Local Example (Examples Only)](#local-example-examples-only)
+  - [Remote/Portable Example (Examples Only)](#remoteportable-example-examples-only)
   - [Optional: Secrets Kit Integration](#optional-secrets-kit-integration)
   - [Bootstrapping](#bootstrapping)
+  - [Direct-Run Agent Runtime Notes](#direct-run-agent-runtime-notes)
+  - [Secrets Kit Fallback Behavior](#secrets-kit-fallback-behavior)
+  - [See Also](#see-also)
 
 ## What This Doc Is For
 
@@ -50,6 +70,41 @@ Use this file when you are:
 - Release cleanup: [`RELEASE_AUDIT_CHECKLIST`](./RELEASE_AUDIT_CHECKLIST.md)
 - Template env file: [`.env.example`](../.env.example)
 - TTS API setup: [`MLX_AUDIO_TTS_GUIDE`](./MLX_AUDIO_TTS_GUIDE.md)
+
+## Configuration Rework
+
+The next configuration system uses JSON as the canonical machine-readable
+format and the same platform-neutral directory layout on every OS:
+
+```text
+~/.config/llm-ops/        config, inventory, models, agents, profiles
+~/.local/share/llm-ops/   bundles, stage data, shared runtime data
+~/.local/state/llm-ops/   run state, logs, health, local plan tracking
+~/.cache/llm-ops/         GGUF metadata cache and probes
+```
+
+Inspect the resolved paths with:
+
+```bash
+scripts/llmops-admin config-doctor --dry-run
+```
+
+Plan a migration from legacy `~/.llm-ops` env/profile files without writing:
+
+```bash
+scripts/llmops-admin migrate-config --dry-run
+```
+
+The migration command writes only when run without `--dry-run`, refuses to
+overwrite existing JSON unless `--force` is supplied, and treats Secrets Kit as
+optional by defaulting the new config to the `env` secrets provider.
+
+For llama.cpp/llama-server profiles, the new JSON model profile has a `server`
+section for switches that used to be stuffed into raw `EXTRA_FLAGS`, including
+cache prompt/reuse, slot save path, speculative ngram settings, `--perf`,
+`--fa`, `--no-cpu-moe`, and `--no-host`. The `extra_flags` array remains as an
+escape hatch for new llama-server switches before LLM-Ops-Kit has first-class
+fields for them.
 
 ## Configuration Precedence
 

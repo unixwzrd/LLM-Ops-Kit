@@ -1,7 +1,7 @@
 # llmops-admin
 
 **Created**: 2026-04-27
-**Updated**: 2026-04-27
+**Updated**: 2026-05-06
 
 Back: [Script Guides](./README.md)
 
@@ -14,7 +14,13 @@ scripts/llmops-admin stage [--bundle-id <id>] [--role <role>] [--tag <tag>] [--d
 scripts/llmops-admin push [--stage <path>] [--workers <n>] [--dry-run]
 scripts/llmops-admin apply [--stage <path>] [--workers <n>] [--restart <script>] [--dry-run]
 scripts/llmops-admin config-settings [--host-name <name>] [--model <profile>]
-scripts/llmops-admin config-doctor [--role <role>] [--model <profile>]
+scripts/llmops-admin config-doctor [--role <role>] [--model <profile>] [--dry-run]
+scripts/llmops-admin migrate-config [--legacy-home <path>] [--output <path>] [--dry-run] [--force]
+scripts/llmops-admin model-inspect <model.gguf> [--json] [--no-cache]
+scripts/llmops-admin model-add <name> --gguf <model.gguf> [--output <path>] [--dry-run] [--force]
+scripts/llmops-admin model-render-env <name> [--profile-path <path>] [--json]
+scripts/llmops-admin model-simulate <name> [--profile-path <path>] [--action start|status|stop]
+scripts/llmops-admin model-profile-doctor <name> [--profile-path <path>] [--remote]
 ```
 
 Use this command from the administrator workstation to:
@@ -26,6 +32,12 @@ Use this command from the administrator workstation to:
 - apply a pushed bundle on remote hosts
 - install or refresh deployed runtime scripts and command links
 - inspect rendered config and source layers
+- inspect the platform-neutral config/state/cache/log path layout
+- plan or write JSON config migration outputs from legacy env/profile files
+- inspect GGUF metadata before generating a model profile
+- generate a JSON model profile from GGUF metadata
+- render a JSON model profile into shell-compatible environment values
+- validate and simulate model runner actions without launching a model
 
 Start with [Deployment Overview](../DEPLOYMENT_OVERVIEW.md) for the full
 operator workflow.
@@ -33,3 +45,94 @@ operator workflow.
 The target hosts can be cloud instances, local servers, virtual machines, or
 hybrid nodes. The inventory decides where the bundle goes; the admin workstation
 does the staging and fan-out.
+
+## Config Rework Helpers
+
+The current config rework keeps JSON as the new canonical format and treats
+legacy env and shell profile files as migration inputs.
+
+Inspect the resolved platform-neutral path layout without writing files:
+
+```bash
+scripts/llmops-admin config-doctor --dry-run
+```
+
+Plan migration from the current legacy layout without writing files:
+
+```bash
+scripts/llmops-admin migrate-config --dry-run
+```
+
+The dry run reports each source and destination. A real migration writes:
+
+- `config.json`
+- `models/<profile>.json`
+- `agents/<backend>.json`
+
+User model overrides are merged with shipped model profiles case-insensitively;
+the shipped profile seeds defaults and the user override wins for duplicate
+variables. Existing JSON outputs are not overwritten unless `--force` is used.
+
+Inspect a GGUF model without starting it:
+
+```bash
+scripts/llmops-admin model-inspect /path/to/Qwen3.6.gguf
+```
+
+The command reads only the GGUF header and metadata table. It reports the model
+id, display name, architecture, context length when present, and metadata key
+count. By default it caches metadata under `~/.cache/llm-ops/gguf-metadata/`;
+use `--no-cache` for read-only inspection.
+
+Generate a first-pass JSON profile from GGUF metadata:
+
+```bash
+scripts/llmops-admin model-add qwen3.6 --gguf /path/to/Qwen3.6.gguf --dry-run
+scripts/llmops-admin model-add qwen3.6 --gguf /path/to/Qwen3.6.gguf
+```
+
+The default destination is `~/.config/llm-ops/models/<name>.json`. Use
+`--output <file-or-directory>` to write elsewhere. Existing profile files are
+not overwritten unless `--force` is supplied.
+
+`model-add` also accepts llama-server performance and feature switches:
+
+```bash
+scripts/llmops-admin model-add qwen3.6 \
+  --gguf /path/to/Qwen3.6.gguf \
+  --cache-prompt \
+  --cache-reuse 512 \
+  --slot-save-path ~/.local/state/llm-ops/slots \
+  --spec-type ngram-map \
+  --spec-ngram-size-n 12 \
+  --spec-ngram-size-m 48 \
+  --perf \
+  --fa \
+  --no-cpu-moe \
+  --no-host
+```
+
+Use `--extra-flag <flag-or-value>` for newly added llama-server switches before
+they have first-class profile fields.
+
+Render a JSON profile into the current runner-facing env shape:
+
+```bash
+scripts/llmops-admin model-render-env qwen3.6
+scripts/llmops-admin model-render-env qwen3.6 --profile-path ./qwen3.6.json
+```
+
+Simulate runner behavior without starting `llama-server`:
+
+```bash
+scripts/llmops-admin model-simulate qwen3.6 --profile-path ./qwen3.6.json --action start
+scripts/llmops-admin model-simulate qwen3.6 --profile-path ./qwen3.6.json --action status
+```
+
+Flag local or remote profile JSON that is missing fields added by newer
+LLM-Ops-Kit versions:
+
+```bash
+scripts/llmops-admin model-profile-doctor qwen3.6 --profile-path ./qwen3.6.json
+scripts/llmops-admin model-profile-doctor qwen3.6 --profile-path ./remote-qwen3.6.json --remote
+```

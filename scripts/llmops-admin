@@ -8,6 +8,7 @@ import concurrent.futures
 import hashlib
 import json
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -23,6 +24,7 @@ sys.path.insert(0, str(REPO_ROOT / "scripts" / "lib"))
 
 from llmops_paths import resolve_paths
 from llmops_config import ConfigError, default_config, load_config
+from gguf_metadata import GgufError, read_gguf_metadata, write_metadata_cache
 
 DEFAULT_INVENTORY = REPO_ROOT / "deploy" / "inventory.yml"
 FALLBACK_INVENTORY = REPO_ROOT / "docs" / "inventory.example.yml"
@@ -222,6 +224,36 @@ def parse_env_file(path: Path) -> dict[str, str]:
         if "${" in value:
             continue
         values[key] = os.path.expandvars(os.path.expanduser(value))
+    return values
+
+
+VAR_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+DEFAULT_EXPR_RE = re.compile(r'^\$\{[A-Za-z_][A-Za-z0-9_]*:-(.*)\}$')
+
+
+def parse_legacy_assignment_file(path: Path) -> dict[str, str]:
+    """Parse simple shell/env assignment files for migration reporting.
+
+    The migration path is intentionally conservative: it records static values
+    and common `${VAR:-default}` defaults without executing the shell file.
+    """
+
+    values: dict[str, str] = {}
+    if not path.exists():
+        return values
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, raw_value = line.split("=", 1)
+        key = key.strip().removeprefix("export ").strip()
+        if not VAR_NAME_RE.match(key):
+            continue
+        value = raw_value.strip().strip("\"'")
+        match = DEFAULT_EXPR_RE.match(value)
+        if match:
+            value = match.group(1)
+        values[key] = value
     return values
 
 
@@ -490,28 +522,545 @@ def migration_sources(legacy_home: Path) -> list[tuple[str, Path]]:
     return sources
 
 
-def cmd_migrate_config(args: argparse.Namespace) -> int:
+@dataclass(frozen=True)
+class MigrationDestinations:
+    config_file: Path
+    inventory_file: Path
+    models_dir: Path
+    agents_dir: Path
+    profiles_dir: Path
+
+
+def migration_destinations(output: str | None) -> MigrationDestinations:
     paths = resolve_paths()
+    config_file = Path(output).expanduser() if output else paths.config_file
+    config_home = config_file.parent
+    return MigrationDestinations(
+        config_file=config_file,
+        inventory_file=config_home / "inventory.json",
+        models_dir=config_home / "models",
+        agents_dir=config_home / "agents",
+        profiles_dir=config_home / "profiles",
+    )
+
+
+def migration_inventory_source(legacy_home: Path) -> Path | None:
+    legacy_inventory = legacy_home / "inventory.yml"
+    if legacy_inventory.exists():
+        return legacy_inventory
+    if ADMIN_INVENTORY.exists():
+        return ADMIN_INVENTORY
+    if DEFAULT_INVENTORY.exists():
+        return DEFAULT_INVENTORY
+    if FALLBACK_INVENTORY.exists():
+        return FALLBACK_INVENTORY
+    return None
+
+
+def source_record(label: str, path: Path) -> dict[str, str]:
+    return {
+        "label": label,
+        "path": str(path),
+        "status": "present" if path.exists() else "missing",
+    }
+
+
+def migration_processing_order(sources: list[tuple[str, Path]]) -> list[tuple[str, Path]]:
+    precedence = {
+        "repo host defaults": 10,
+        "repo model profile": 20,
+        "repo agent profile": 20,
+        "legacy global config": 30,
+        "legacy model override": 40,
+        "legacy agent override": 40,
+    }
+    return sorted(sources, key=lambda item: precedence.get(item[0], 100))
+
+
+def migration_documents(legacy_home: Path) -> dict[Path, dict[str, Any]]:
+    destinations = migration_destinations(None)
+    documents: dict[Path, dict[str, Any]] = {}
+    sources = migration_sources(legacy_home)
+    config_env: dict[str, str] = {}
+    host_defaults: dict[str, str] = {}
+    models: dict[str, dict[str, Any]] = {}
+    agents: dict[str, dict[str, Any]] = {}
+
+    for label, path in migration_processing_order(sources):
+        values = parse_legacy_assignment_file(path)
+        if label == "legacy global config":
+            config_env.update(values)
+        elif label == "repo host defaults":
+            host_defaults.update(values)
+        elif "model" in label and path.exists():
+            stem = path.stem
+            key = stem.lower()
+            model = models.setdefault(
+                key,
+                {
+                    "schema_version": 1,
+                    "name": stem,
+                    "type": None,
+                    "env": {},
+                    "sources": [],
+                },
+            )
+            if label == "repo model profile":
+                model["name"] = stem
+            model["sources"].append(source_record(label, path))
+            model["env"].update(values)
+            if values.get("MODEL_TYPE"):
+                model["type"] = values["MODEL_TYPE"]
+        elif "agent" in label and path.exists():
+            stem = path.stem
+            agent = agents.setdefault(
+                stem,
+                {
+                    "schema_version": 1,
+                    "name": stem,
+                    "env": {},
+                    "sources": [],
+                },
+            )
+            agent["sources"].append(source_record(label, path))
+            agent["env"].update(values)
+
+    config = default_config()
+    config["runtime"] = {
+        "env": config_env,
+        "host_defaults": host_defaults,
+    }
+    config["migration"] = {
+        "legacy_home": str(legacy_home),
+        "sources": [source_record(label, path) for label, path in sources],
+    }
+    documents[destinations.config_file] = config
+    inventory_source = migration_inventory_source(legacy_home)
+    if inventory_source is not None:
+        hosts = load_inventory(inventory_source)
+        documents[destinations.inventory_file] = {
+            "schema_version": 1,
+            "source": source_record("inventory", inventory_source),
+            "hosts": [
+                {
+                    "name": host.name,
+                    "role": host.role,
+                    "host": host.host,
+                    "user": host.user,
+                    "port": host.port,
+                    "install_root": host.install_root,
+                    "config_profile": host.config_profile,
+                    "ssh_key": host.ssh_key,
+                    "tags": list(host.tags),
+                }
+                for host in hosts
+            ],
+        }
+    for _, model in sorted(models.items()):
+        documents[destinations.models_dir / f"{model['name']}.json"] = model
+    for name, agent in sorted(agents.items()):
+        documents[destinations.agents_dir / f"{name}.json"] = agent
+    return documents
+
+
+def remap_documents(documents: dict[Path, dict[str, Any]], destinations: MigrationDestinations) -> dict[Path, dict[str, Any]]:
+    default_destinations = migration_destinations(None)
+    remapped: dict[Path, dict[str, Any]] = {}
+    for path, document in documents.items():
+        if path == default_destinations.config_file:
+            remapped[destinations.config_file] = document
+        elif path == default_destinations.inventory_file:
+            remapped[destinations.inventory_file] = document
+        elif path.parent == default_destinations.models_dir:
+            remapped[destinations.models_dir / path.name] = document
+        elif path.parent == default_destinations.agents_dir:
+            remapped[destinations.agents_dir / path.name] = document
+        else:
+            remapped[path] = document
+    return remapped
+
+
+def write_json_document(path: Path, document: dict[str, Any], *, force: bool) -> None:
+    if path.exists() and not force:
+        raise AdminError(f"destination already exists; use --force to overwrite: {path}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def cmd_migrate_config(args: argparse.Namespace) -> int:
     legacy_home = Path(args.legacy_home).expanduser()
-    destination = Path(args.output).expanduser() if args.output else paths.config_file
+    destinations = migration_destinations(args.output)
+    documents = remap_documents(migration_documents(legacy_home), destinations)
     print(f"migration_mode={'dry-run' if args.dry_run else 'write'}")
     print(f"legacy_home={legacy_home}")
-    print(f"destination_config={destination}")
-    print(f"destination_inventory={paths.inventory_file}")
-    print(f"destination_models_dir={paths.models_dir}")
-    print(f"destination_agents_dir={paths.agents_dir}")
-    print(f"destination_profiles_dir={paths.profiles_dir}")
+    print(f"destination_config={destinations.config_file}")
+    print(f"destination_inventory={destinations.inventory_file}")
+    print(f"destination_models_dir={destinations.models_dir}")
+    print(f"destination_agents_dir={destinations.agents_dir}")
+    print(f"destination_profiles_dir={destinations.profiles_dir}")
     for label, path in migration_sources(legacy_home):
         status = "present" if path.exists() else "missing"
         print(f"source\t{status}\t{label}\t{path}")
+    inventory_source = migration_inventory_source(legacy_home)
+    if inventory_source is not None:
+        print(f"source\tpresent\tinventory\t{inventory_source}")
+    for path in sorted(documents):
+        print(f"destination\t{path}")
     if args.dry_run:
         print("dry-run: no files written")
         return 0
-    if destination.exists() and not args.force:
-        raise AdminError(f"destination already exists; use --force to overwrite: {destination}")
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(json.dumps(default_config(), indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    for path, document in sorted(documents.items()):
+        write_json_document(path, document, force=args.force)
+        print(f"wrote {path}")
+    return 0
+
+
+def cmd_model_inspect(args: argparse.Namespace) -> int:
+    result = read_gguf_metadata(Path(args.gguf))
+    cache_path = None if args.no_cache else write_metadata_cache(result, resolve_paths().gguf_metadata_cache_dir)
+    if args.json:
+        payload = {
+            "path": str(result.path),
+            "version": result.version,
+            "tensor_count": result.tensor_count,
+            "metadata": result.metadata,
+            "profile_defaults": result.profile_defaults(),
+            "cache_path": str(cache_path) if cache_path else None,
+        }
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return 0
+    print(f"model_path={result.path}")
+    print(f"model_id={result.model_id}")
+    print(f"name={result.name}")
+    print(f"architecture={result.architecture}")
+    print(f"context_length={result.context_length or ''}")
+    print(f"gguf_version={result.version}")
+    print(f"tensor_count={result.tensor_count}")
+    print(f"metadata_keys={len(result.metadata)}")
+    if cache_path:
+        print(f"cache_path={cache_path}")
+    return 0
+
+
+def build_model_profile(
+    result: Any,
+    *,
+    profile_name: str,
+    host: str,
+    port: int,
+    gpu_layers: str,
+    template: str,
+    cache_prompt: bool = False,
+    cache_reuse: int | None = None,
+    slot_save_path: str | None = None,
+    spec_type: str | None = None,
+    spec_ngram_size_n: int | None = None,
+    spec_ngram_size_m: int | None = None,
+    perf: bool = False,
+    flash_attention: bool = False,
+    no_cpu_moe: bool = False,
+    no_host: bool = False,
+    extra_flags: list[str] | None = None,
+) -> dict[str, Any]:
+    profile = result.profile_defaults()
+    profile["name"] = profile_name
+    profile["runtime"] = {
+        "host": host,
+        "port": port,
+        "threads": "auto",
+        "threads_batch": "auto",
+    }
+    profile["llama"] = {
+        **profile.get("llama", {}),
+        "gpu_layers": gpu_layers,
+        "batch_size": 1024,
+        "ubatch_size": 512,
+        "use_mlock": True,
+        "use_no_mmap": True,
+        "direct_io": True,
+    }
+    profile["sampling"] = {
+        "temp": 0.9,
+        "top_p": 0.95,
+        "top_k": 20,
+        "min_p": 0.0,
+        "presence_penalty": 1.5,
+        "repeat_penalty": 1.0,
+    }
+    profile["template"] = {
+        "enabled": bool(template),
+        "path": template or None,
+    }
+    profile["server"] = {
+        "cache_prompt": cache_prompt,
+        "cache_reuse": cache_reuse,
+        "slot_save_path": slot_save_path,
+        "spec_type": spec_type,
+        "spec_ngram_size_n": spec_ngram_size_n,
+        "spec_ngram_size_m": spec_ngram_size_m,
+        "perf": perf,
+        "flash_attention": flash_attention,
+        "no_cpu_moe": no_cpu_moe,
+        "no_host": no_host,
+        "extra_flags": extra_flags or [],
+    }
+    profile["secrets"] = {
+        "required": [],
+    }
+    return profile
+
+
+def model_profile_path(profile_name: str, output: str | None) -> Path:
+    if output:
+        path = Path(output).expanduser()
+        if path.suffix:
+            return path
+        return path / f"{profile_name}.json"
+    return resolve_paths().models_dir / f"{profile_name}.json"
+
+
+def bool_env(value: Any) -> str:
+    return "1" if bool(value) else "0"
+
+
+def render_model_env(profile: dict[str, Any]) -> dict[str, str]:
+    if isinstance(profile.get("env"), dict):
+        return {str(key): str(value) for key, value in profile["env"].items()}
+    runtime = profile.get("runtime") or {}
+    llama = profile.get("llama") or {}
+    sampling = profile.get("sampling") or {}
+    template = profile.get("template") or {}
+    server = profile.get("server") or {}
+    rendered = {
+        "MODEL_TYPE": str(profile.get("type", "llm")),
+        "MODEL": str(profile.get("model_path", "")),
+        "PORT": str(runtime.get("port", "")),
+        "HOST": str(runtime.get("host", "")),
+        "THREADS": str(runtime.get("threads", "auto")),
+        "THREADS_BATCH": str(runtime.get("threads_batch", runtime.get("threads", "auto"))),
+        "CTX_SIZE": str(llama.get("ctx_size") or ""),
+        "GPU_LAYERS": str(llama.get("gpu_layers", "")),
+        "BATCH_SIZE": str(llama.get("batch_size", "")),
+        "UBATCH_SIZE": str(llama.get("ubatch_size", "")),
+        "USE_MLOCK": bool_env(llama.get("use_mlock", False)),
+        "USE_NO_MMAP": bool_env(llama.get("use_no_mmap", False)),
+        "DIRECT_IO": bool_env(llama.get("direct_io", False)),
+        "USE_CUSTOM_TEMPLATE": bool_env(template.get("enabled", False)),
+        "CHAT_TEMPLATE": str(template.get("path") or ""),
+        "CACHE_PROMPT": bool_env(server.get("cache_prompt", False)),
+        "CACHE_REUSE": str(server.get("cache_reuse") or ""),
+        "SLOT_SAVE_PATH": str(server.get("slot_save_path") or ""),
+        "SPEC_TYPE": str(server.get("spec_type") or ""),
+        "SPEC_NGRAM_SIZE_N": str(server.get("spec_ngram_size_n") or ""),
+        "SPEC_NGRAM_SIZE_M": str(server.get("spec_ngram_size_m") or ""),
+        "PERF": bool_env(server.get("perf", False)),
+        "FLASH_ATTENTION": bool_env(server.get("flash_attention", False)),
+        "NO_CPU_MOE": bool_env(server.get("no_cpu_moe", False)),
+        "NO_HOST": bool_env(server.get("no_host", False)),
+        "EXTRA_FLAGS": " ".join(str(flag) for flag in server.get("extra_flags", [])),
+        "TEMP": str(sampling.get("temp", "")),
+        "TOP_P": str(sampling.get("top_p", "")),
+        "TOP_K": str(sampling.get("top_k", "")),
+        "MIN_P": str(sampling.get("min_p", "")),
+        "PRESENCE_PENALTY": str(sampling.get("presence_penalty", "")),
+        "REPEAT_PENALTY": str(sampling.get("repeat_penalty", "")),
+    }
+    return {key: value for key, value in rendered.items() if value != ""}
+
+
+def load_model_profile(profile_name: str, profile_path: str | None = None) -> tuple[Path, dict[str, Any]]:
+    path = Path(profile_path).expanduser() if profile_path else resolve_paths().models_dir / f"{profile_name}.json"
+    if not path.exists():
+        raise AdminError(f"model profile not found: {path}")
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise AdminError(f"model profile must be a JSON object: {path}")
+    return path, raw
+
+
+def cmd_model_add(args: argparse.Namespace) -> int:
+    result = read_gguf_metadata(Path(args.gguf))
+    profile = build_model_profile(
+        result,
+        profile_name=args.name,
+        host=args.host,
+        port=args.port,
+        gpu_layers=args.gpu_layers,
+        template=args.template,
+        cache_prompt=getattr(args, "cache_prompt", False),
+        cache_reuse=getattr(args, "cache_reuse", None),
+        slot_save_path=getattr(args, "slot_save_path", None),
+        spec_type=getattr(args, "spec_type", None),
+        spec_ngram_size_n=getattr(args, "spec_ngram_size_n", None),
+        spec_ngram_size_m=getattr(args, "spec_ngram_size_m", None),
+        perf=getattr(args, "perf", False),
+        flash_attention=getattr(args, "flash_attention", False),
+        no_cpu_moe=getattr(args, "no_cpu_moe", False),
+        no_host=getattr(args, "no_host", False),
+        extra_flags=getattr(args, "extra_flag", []),
+    )
+    destination = model_profile_path(args.name, args.output)
+    print(f"model_profile={args.name}")
+    print(f"model_path={result.path}")
+    print(f"destination={destination}")
+    print(f"mode={'dry-run' if args.dry_run else 'write'}")
+    if args.dry_run:
+        print(json.dumps(profile, indent=2, sort_keys=True))
+        print("dry-run: no files written")
+        return 0
+    write_json_document(destination, profile, force=args.force)
     print(f"wrote {destination}")
+    return 0
+
+
+def cmd_model_render_env(args: argparse.Namespace) -> int:
+    profile_path, profile = load_model_profile(args.name, args.profile_path)
+    rendered = render_model_env(profile)
+    if args.json:
+        print(json.dumps({"profile": str(profile_path), "env": rendered}, indent=2, sort_keys=True))
+        return 0
+    for key in sorted(rendered):
+        print(f"{key}={shlex.quote(rendered[key])}")
+    return 0
+
+
+REQUIRED_MODEL_ENV = (
+    "MODEL_TYPE",
+    "MODEL",
+    "PORT",
+    "HOST",
+    "THREADS",
+    "THREADS_BATCH",
+    "CTX_SIZE",
+    "GPU_LAYERS",
+    "BATCH_SIZE",
+    "UBATCH_SIZE",
+)
+
+
+def model_launch_command(env: dict[str, str]) -> list[str]:
+    model_type = env.get("MODEL_TYPE", "")
+    if model_type in {"llm", "embedding"}:
+        command = [
+            "llama-server",
+            "--model",
+            env.get("MODEL", ""),
+            "--host",
+            env.get("HOST", ""),
+            "--port",
+            env.get("PORT", ""),
+            "--ctx-size",
+            env.get("CTX_SIZE", ""),
+        ]
+        if model_type == "embedding":
+            command.append("--embedding")
+        if env.get("CACHE_PROMPT") == "1":
+            command.append("--cache-prompt")
+        if env.get("CACHE_REUSE"):
+            command.extend(["--cache-reuse", env["CACHE_REUSE"]])
+        if env.get("SLOT_SAVE_PATH"):
+            command.extend(["--slot-save-path", env["SLOT_SAVE_PATH"]])
+        if env.get("SPEC_TYPE"):
+            command.extend(["--spec-type", env["SPEC_TYPE"]])
+        if env.get("SPEC_NGRAM_SIZE_N"):
+            command.extend(["--spec-ngram-size-n", env["SPEC_NGRAM_SIZE_N"]])
+        if env.get("SPEC_NGRAM_SIZE_M"):
+            command.extend(["--spec-ngram-size-m", env["SPEC_NGRAM_SIZE_M"]])
+        if env.get("PERF") == "1":
+            command.append("--perf")
+        if env.get("FLASH_ATTENTION") == "1":
+            command.append("--fa")
+        if env.get("NO_CPU_MOE") == "1":
+            command.append("--no-cpu-moe")
+        if env.get("NO_HOST") == "1":
+            command.append("--no-host")
+        if env.get("EXTRA_FLAGS"):
+            command.extend(shlex.split(env["EXTRA_FLAGS"]))
+        return command
+    if model_type == "tts":
+        return ["python", "-m", "mlx_audio.server", "--model", env.get("MODEL", "")]
+    return []
+
+
+def cmd_model_simulate(args: argparse.Namespace) -> int:
+    profile_path, profile = load_model_profile(args.name, args.profile_path)
+    env = render_model_env(profile)
+    missing = [key for key in REQUIRED_MODEL_ENV if not env.get(key)]
+    print(f"simulation=model")
+    print(f"profile={profile_path}")
+    print(f"action={args.action}")
+    if missing:
+        print(f"status=invalid")
+        print(f"missing={','.join(missing)}")
+        return 2
+    print("status=ok")
+    if args.action == "start":
+        print("would_launch=" + " ".join(shlex.quote(part) for part in model_launch_command(env)))
+    elif args.action == "status":
+        print(f"would_check_pid=modelctl-{args.name}")
+        print(f"would_probe=http://{env['HOST']}:{env['PORT']}/v1/models")
+    elif args.action == "stop":
+        print(f"would_stop_pid=modelctl-{args.name}")
+    return 0
+
+
+REQUIRED_STRUCTURED_MODEL_KEYS = {
+    "root": ("schema_version", "name", "type", "model_path", "runtime", "llama", "sampling", "template", "server", "secrets"),
+    "runtime": ("host", "port", "threads", "threads_batch"),
+    "llama": (
+        "ctx_size",
+        "gpu_layers",
+        "batch_size",
+        "ubatch_size",
+        "use_mlock",
+        "use_no_mmap",
+        "direct_io",
+    ),
+    "server": (
+        "cache_prompt",
+        "cache_reuse",
+        "slot_save_path",
+        "spec_type",
+        "spec_ngram_size_n",
+        "spec_ngram_size_m",
+        "perf",
+        "flash_attention",
+        "no_cpu_moe",
+        "no_host",
+        "extra_flags",
+    ),
+}
+
+
+def missing_profile_keys(profile: dict[str, Any]) -> list[str]:
+    if isinstance(profile.get("env"), dict):
+        return []
+    missing: list[str] = []
+    for key in REQUIRED_STRUCTURED_MODEL_KEYS["root"]:
+        if key not in profile:
+            missing.append(key)
+    for section in ("runtime", "llama", "server"):
+        value = profile.get(section)
+        if not isinstance(value, dict):
+            continue
+        for key in REQUIRED_STRUCTURED_MODEL_KEYS[section]:
+            if key not in value:
+                missing.append(f"{section}.{key}")
+    return missing
+
+
+def cmd_model_profile_doctor(args: argparse.Namespace) -> int:
+    profile_path, profile = load_model_profile(args.name, args.profile_path)
+    missing = missing_profile_keys(profile)
+    print(f"profile={profile_path}")
+    if missing:
+        location = "remote" if args.remote else "local"
+        print(f"status=missing-parameters")
+        print(f"location={location}")
+        for key in missing:
+            print(f"missing={key}")
+        return 1
+    print("status=ok")
     return 0
 
 
@@ -569,6 +1118,48 @@ def build_parser() -> argparse.ArgumentParser:
     migrate.add_argument("--dry-run", action="store_true")
     migrate.add_argument("--force", action="store_true")
     migrate.set_defaults(func=cmd_migrate_config)
+    inspect = sub.add_parser("model-inspect")
+    inspect.add_argument("gguf")
+    inspect.add_argument("--json", action="store_true")
+    inspect.add_argument("--no-cache", action="store_true")
+    inspect.set_defaults(func=cmd_model_inspect)
+    model_add = sub.add_parser("model-add")
+    model_add.add_argument("name")
+    model_add.add_argument("--gguf", required=True)
+    model_add.add_argument("--output")
+    model_add.add_argument("--host", default="0.0.0.0")
+    model_add.add_argument("--port", type=int, default=11434)
+    model_add.add_argument("--gpu-layers", default="auto")
+    model_add.add_argument("--template", default="")
+    model_add.add_argument("--cache-prompt", action="store_true")
+    model_add.add_argument("--cache-reuse", type=int)
+    model_add.add_argument("--slot-save-path")
+    model_add.add_argument("--spec-type")
+    model_add.add_argument("--spec-ngram-size-n", type=int)
+    model_add.add_argument("--spec-ngram-size-m", type=int)
+    model_add.add_argument("--perf", action="store_true")
+    model_add.add_argument("--fa", dest="flash_attention", action="store_true")
+    model_add.add_argument("--no-cpu-moe", action="store_true")
+    model_add.add_argument("--no-host", action="store_true")
+    model_add.add_argument("--extra-flag", action="append", default=[])
+    model_add.add_argument("--dry-run", action="store_true")
+    model_add.add_argument("--force", action="store_true")
+    model_add.set_defaults(func=cmd_model_add)
+    render_env = sub.add_parser("model-render-env")
+    render_env.add_argument("name")
+    render_env.add_argument("--profile-path")
+    render_env.add_argument("--json", action="store_true")
+    render_env.set_defaults(func=cmd_model_render_env)
+    model_sim = sub.add_parser("model-simulate")
+    model_sim.add_argument("name")
+    model_sim.add_argument("--profile-path")
+    model_sim.add_argument("--action", choices=("start", "status", "stop"), default="start")
+    model_sim.set_defaults(func=cmd_model_simulate)
+    profile_doctor = sub.add_parser("model-profile-doctor")
+    profile_doctor.add_argument("name")
+    profile_doctor.add_argument("--profile-path")
+    profile_doctor.add_argument("--remote", action="store_true")
+    profile_doctor.set_defaults(func=cmd_model_profile_doctor)
     return parser
 
 
@@ -576,7 +1167,7 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         return args.func(args)
-    except (AdminError, ConfigError) as exc:
+    except (AdminError, ConfigError, GgufError) as exc:
         print(f"llmops-admin: {exc}", file=sys.stderr)
         return 2
 

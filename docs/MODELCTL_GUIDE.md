@@ -3,11 +3,13 @@
 Back: [docs/INDEX.md](./INDEX.md)
 
 **Created**: 2026-02-26
-**Updated**: 2026-03-06
+**Updated**: 2026-05-06
 
 - [modelctl Guide](#modelctl-guide)
   - [Purpose](#purpose)
   - [Commands](#commands)
+  - [modelctl add (what it does)](#modelctl-add-what-it-does)
+  - [verify and test (what they do)](#verify-and-test-what-they-do)
   - [Precedence Order (highest -\> lowest)](#precedence-order-highest---lowest)
   - [How model type is selected](#how-model-type-is-selected)
   - [Template behavior](#template-behavior)
@@ -15,6 +17,7 @@ Back: [docs/INDEX.md](./INDEX.md)
   - [Validation rules](#validation-rules)
   - [Status behavior](#status-behavior)
   - [Where logs/pids live](#where-logspids-live)
+  - [See Also](#see-also)
 
 ## Purpose
 
@@ -47,8 +50,8 @@ Any launcher name is supported as long as `scripts/models/<Launcher>.sh` exists.
 What it tries, in order:
 
 1. Use `--model` to infer the model id from the filename.
-2. If a GGUF tool is available (`gguf_dump` or `llama-gguf`), extract context length.
-3. If no GGUF tool is present, warn and fall back to safe defaults.
+2. Use built-in GGUF metadata inspection where available to extract context length.
+3. If metadata is unavailable, warn and fall back to safe defaults.
 4. If no `--id` or `--model` was provided, query `/v1/models` and pick the first id.
 
 Output:
@@ -56,7 +59,24 @@ Output:
 - Writes an entry into `~/.openclaw/agents/main/agent/models.json`.
 - Prints the exact `agentctl exec openclaw models set ...` command to switch OpenClaw to the model.
 
-Tip: you can always override with `--ctx` and `--max-tokens` if you want exact values.
+Tip: inspect a GGUF directly with `scripts/llmops-admin model-inspect /path/to/model.gguf`.
+You can still override with `--ctx` and `--max-tokens` if you want exact values.
+
+During the config rework, generate and inspect the new JSON model profile with:
+
+```bash
+scripts/llmops-admin model-add qwen3.6 --gguf /path/to/Qwen3.6.gguf --dry-run
+scripts/llmops-admin model-render-env qwen3.6 --profile-path ~/.config/llm-ops/models/qwen3.6.json
+```
+
+New JSON profiles have first-class `server` fields for common llama-server
+switches such as `--cache-prompt`, `--cache-reuse`, `--slot-save-path`,
+`--spec-type`, `--spec-ngram-size-n`, `--spec-ngram-size-m`, `--perf`, `--fa`,
+`--no-cpu-moe`, and `--no-host`. For older shell profiles, the matching env
+variables are `CACHE_PROMPT`, `CACHE_REUSE`, `SLOT_SAVE_PATH`, `SPEC_TYPE`,
+`SPEC_NGRAM_SIZE_N`, `SPEC_NGRAM_SIZE_M`, `PERF`, `FLASH_ATTENTION`,
+`NO_CPU_MOE`, and `NO_HOST`. `EXTRA_FLAGS` is still available as a temporary
+escape hatch for switches that do not have first-class fields yet.
 
 ## verify and test (what they do)
 

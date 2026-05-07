@@ -165,6 +165,52 @@ class ShellRuntimeHelperTests(unittest.TestCase):
             self.assertIn("CTX_SIZE=777", proc.stdout)
             self.assertIn(f"CHAT_TEMPLATE={external_template}", proc.stdout)
 
+    def test_modelctl_settings_reports_llama_server_extension_flags(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            llmops_home = home / ".llm-ops"
+            config_dir = llmops_home / "config"
+            config_dir.mkdir(parents=True)
+            (config_dir / "Qwen3.5.env").write_text(
+                "\n".join(
+                    [
+                        "CACHE_PROMPT=1",
+                        "CACHE_REUSE=512",
+                        f"SLOT_SAVE_PATH={llmops_home}/cache/slots",
+                        "SPEC_TYPE=ngram-map",
+                        "SPEC_NGRAM_SIZE_N=12",
+                        "SPEC_NGRAM_SIZE_M=48",
+                        "PERF=1",
+                        "FLASH_ATTENTION=1",
+                        "NO_CPU_MOE=1",
+                        "NO_HOST=1",
+                        "USE_CUSTOM_TEMPLATE=0",
+                        'EXTRA_FLAGS="--custom-flag value"',
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            proc = self.run_bash(
+                f'"{MODELCTL}" Qwen3.5 settings',
+                env={
+                    "HOME": str(home),
+                    "LLMOPS_HOME": str(llmops_home),
+                },
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertIn("CACHE_PROMPT=1", proc.stdout)
+            self.assertIn("CACHE_REUSE=512", proc.stdout)
+            self.assertIn(f"SLOT_SAVE_PATH={llmops_home}/cache/slots", proc.stdout)
+            self.assertIn("SPEC_TYPE=ngram-map", proc.stdout)
+            self.assertIn("SPEC_NGRAM_SIZE_N=12", proc.stdout)
+            self.assertIn("SPEC_NGRAM_SIZE_M=48", proc.stdout)
+            self.assertIn("PERF=1", proc.stdout)
+            self.assertIn("FLASH_ATTENTION=1", proc.stdout)
+            self.assertIn("NO_CPU_MOE=1", proc.stdout)
+            self.assertIn("NO_HOST=1", proc.stdout)
+            self.assertIn("EXTRA_FLAGS=--custom-flag value", proc.stdout)
+
     def test_deploy_runtime_links_heals_identical_regular_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp) / "home"

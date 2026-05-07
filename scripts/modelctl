@@ -248,6 +248,17 @@ print_model_settings() {
     echo "  USE_NO_MMAP=${USE_NO_MMAP:-}"
     echo "  USE_MLOCK=${USE_MLOCK:-}"
     echo "  DIRECT_IO=${DIRECT_IO:-}"
+    echo "  CACHE_PROMPT=${CACHE_PROMPT:-}"
+    echo "  CACHE_REUSE=${CACHE_REUSE:-}"
+    echo "  SLOT_SAVE_PATH=${SLOT_SAVE_PATH:-}"
+    echo "  SPEC_TYPE=${SPEC_TYPE:-}"
+    echo "  SPEC_NGRAM_SIZE_N=${SPEC_NGRAM_SIZE_N:-}"
+    echo "  SPEC_NGRAM_SIZE_M=${SPEC_NGRAM_SIZE_M:-}"
+    echo "  PERF=${PERF:-}"
+    echo "  FLASH_ATTENTION=${FLASH_ATTENTION:-${FA:-}}"
+    echo "  NO_CPU_MOE=${NO_CPU_MOE:-}"
+    echo "  NO_HOST=${NO_HOST:-}"
+    echo "  EXTRA_FLAGS=${EXTRA_FLAGS:-}"
     echo "  VERBOSE_PROMPT=${VERBOSE_PROMPT:-}"
   fi
   if [[ "$MODEL_TYPE" == "embedding" ]]; then
@@ -545,6 +556,36 @@ start_model() {
     if [[ -n "${CACHE_TYPE_V:-}" ]]; then
       RUNTIME_FLAGS+=(--cache-type-v "$CACHE_TYPE_V")
     fi
+    if [[ "${CACHE_PROMPT:-0}" == "1" ]]; then
+      RUNTIME_FLAGS+=(--cache-prompt)
+    fi
+    if [[ -n "${CACHE_REUSE:-}" ]]; then
+      RUNTIME_FLAGS+=(--cache-reuse "$CACHE_REUSE")
+    fi
+    if [[ -n "${SLOT_SAVE_PATH:-}" ]]; then
+      RUNTIME_FLAGS+=(--slot-save-path "$SLOT_SAVE_PATH")
+    fi
+    if [[ -n "${SPEC_TYPE:-}" ]]; then
+      RUNTIME_FLAGS+=(--spec-type "$SPEC_TYPE")
+    fi
+    if [[ -n "${SPEC_NGRAM_SIZE_N:-}" ]]; then
+      RUNTIME_FLAGS+=(--spec-ngram-size-n "$SPEC_NGRAM_SIZE_N")
+    fi
+    if [[ -n "${SPEC_NGRAM_SIZE_M:-}" ]]; then
+      RUNTIME_FLAGS+=(--spec-ngram-size-m "$SPEC_NGRAM_SIZE_M")
+    fi
+    if [[ "${PERF:-0}" == "1" ]]; then
+      RUNTIME_FLAGS+=(--perf)
+    fi
+    if [[ "${FLASH_ATTENTION:-0}" == "1" || "${FA:-0}" == "1" ]]; then
+      RUNTIME_FLAGS+=(--fa)
+    fi
+    if [[ "${NO_CPU_MOE:-0}" == "1" ]]; then
+      RUNTIME_FLAGS+=(--no-cpu-moe)
+    fi
+    if [[ "${NO_HOST:-0}" == "1" ]]; then
+      RUNTIME_FLAGS+=(--no-host)
+    fi
     if [[ "${DISABLE_TOOL_GRAMMAR:-0}" == "1" ]]; then
       if /usr/local/bin/llama-server --help 2>&1 | rg -q -- '--no-tool-grammar'; then
         EXTRA_ARGS+=(--no-tool-grammar)
@@ -553,6 +594,11 @@ start_model() {
       else
         echo "WARNING: DISABLE_TOOL_GRAMMAR=1 but llama-server has no known tool-grammar disable flag; skipping."
       fi
+    fi
+    if [[ -n "${EXTRA_FLAGS:-}" ]]; then
+      # shellcheck disable=SC2206
+      extra_flags=( $EXTRA_FLAGS )
+      EXTRA_ARGS+=( "${extra_flags[@]}" )
     fi
 
     [[ -n "${TEMP:-}" ]] && SAMPLING_FLAGS+=(--temp "$TEMP")
