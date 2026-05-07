@@ -98,6 +98,8 @@ scripts/llmops-admin migrate-config --dry-run
 The migration command writes only when run without `--dry-run`, refuses to
 overwrite existing JSON unless `--force` is supplied, and treats Secrets Kit as
 optional by defaulting the new config to the `env` secrets provider.
+When legacy config contains proxy or TTS bridge variables, migration writes
+service profiles under `~/.config/llm-ops/services/`.
 
 For llama.cpp/llama-server profiles, the new JSON model profile has a `server`
 section for switches that used to be stuffed into raw `EXTRA_FLAGS`, including

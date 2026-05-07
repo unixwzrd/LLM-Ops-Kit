@@ -40,34 +40,6 @@ model_add_main() {
   /usr/bin/env python3 "$helper" "$@"
 }
 
-llmops_config_home() {
-  if [[ -n "${LLMOPS_CONFIG_HOME:-}" ]]; then
-    printf '%s\n' "$LLMOPS_CONFIG_HOME"
-  elif [[ -n "${XDG_CONFIG_HOME:-}" ]]; then
-    printf '%s/llm-ops\n' "$XDG_CONFIG_HOME"
-  else
-    printf '%s/.config/llm-ops\n' "$HOME"
-  fi
-}
-
-json_model_profile_path() {
-  local m="$1"
-  printf '%s/models/%s.json\n' "$(llmops_config_home)" "$m"
-}
-
-source_json_model_profile_defaults() {
-  local m="$1"
-  local json_file="$2"
-  local line key
-  while IFS= read -r line; do
-    [[ -n "$line" && "$line" == *=* ]] || continue
-    key="${line%%=*}"
-    if [[ -z "${!key-}" ]]; then
-      eval "export $line"
-    fi
-  done < <("$SCRIPT_DIR/llmops-admin" model-render-env "$m" --profile-path "$json_file")
-}
-
 resolve_model_from_invocation() {
   local bn
   bn="$(basename "$0")"
@@ -119,7 +91,7 @@ load_model_defaults() {
   local json_model_file
   local model_override_file="$LLMOPS_CONFIG_DIR/${m}.env"
   local legacy_override_file="$LLMOPS_CONFIG_DIR/${m}.sh"
-  json_model_file="$(json_model_profile_path "$m")"
+  json_model_file="$(llmops_model_profile_path "$m")"
   [[ -f "$model_file" || -f "$json_model_file" ]] || {
     echo "Model defaults not found: $model_file or $json_model_file" >&2
     exit 2

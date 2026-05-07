@@ -529,6 +529,7 @@ class MigrationDestinations:
     models_dir: Path
     agents_dir: Path
     profiles_dir: Path
+    services_dir: Path
 
 
 def migration_destinations(output: str | None) -> MigrationDestinations:
@@ -541,6 +542,7 @@ def migration_destinations(output: str | None) -> MigrationDestinations:
         models_dir=config_home / "models",
         agents_dir=config_home / "agents",
         profiles_dir=config_home / "profiles",
+        services_dir=config_home / "services",
     )
 
 
@@ -563,6 +565,109 @@ def source_record(label: str, path: Path) -> dict[str, str]:
         "path": str(path),
         "status": "present" if path.exists() else "missing",
     }
+
+
+def build_model_proxy_service_profile(values: dict[str, str]) -> dict[str, Any] | None:
+    relevant = {
+        "LLMOPS_UPSTREAM_HOST",
+        "LLMOPS_UPSTREAM_PORT",
+        "MODEL_PROXY_LISTEN_HOST",
+        "MODEL_PROXY_LISTEN_PORT",
+        "MODEL_PROXY_CHAT_TEMPLATE",
+        "MODEL_PROXY_LOG_ROTATE_SECONDS",
+        "MODEL_PROXY_LOG_ROTATE_KEEP",
+    }
+    if not any(key in values for key in relevant):
+        return None
+    runtime: dict[str, Any] = {}
+    logging: dict[str, Any] = {}
+    template: dict[str, Any] = {}
+    if "LLMOPS_UPSTREAM_HOST" in values:
+        runtime["upstream_host"] = values["LLMOPS_UPSTREAM_HOST"]
+    if "LLMOPS_UPSTREAM_PORT" in values:
+        runtime["upstream_port"] = values["LLMOPS_UPSTREAM_PORT"]
+    if "MODEL_PROXY_LISTEN_HOST" in values:
+        runtime["listen_host"] = values["MODEL_PROXY_LISTEN_HOST"]
+    if "MODEL_PROXY_LISTEN_PORT" in values:
+        runtime["listen_port"] = values["MODEL_PROXY_LISTEN_PORT"]
+    if "MODEL_PROXY_CHAT_TEMPLATE" in values:
+        template["path"] = values["MODEL_PROXY_CHAT_TEMPLATE"]
+    if "MODEL_PROXY_LOG_ROTATE_SECONDS" in values:
+        logging["rotate_seconds"] = values["MODEL_PROXY_LOG_ROTATE_SECONDS"]
+    if "MODEL_PROXY_LOG_ROTATE_KEEP" in values:
+        logging["rotate_keep"] = values["MODEL_PROXY_LOG_ROTATE_KEEP"]
+    profile: dict[str, Any] = {
+        "schema_version": 1,
+        "name": "model-proxy",
+        "runtime": runtime,
+    }
+    if template:
+        profile["template"] = template
+    if logging:
+        profile["logging"] = logging
+    return profile
+
+
+def build_tts_bridge_service_profile(values: dict[str, str]) -> dict[str, Any] | None:
+    relevant = {
+        "TTS_BRIDGE_HOST",
+        "TTS_BRIDGE_PORT",
+        "TTS_BRIDGE_UPSTREAM_BASE",
+        "TTS_BRIDGE_MODEL",
+        "TTS_BRIDGE_CONFIG_DIR",
+        "TTS_BRIDGE_PRONOUNCE_CONFIG",
+        "TTS_BRIDGE_VOICE_MAP_CONFIG",
+        "TTS_BRIDGE_SAMPLES_DIR",
+        "TTS_BRIDGE_LOG_ROTATE_SECONDS",
+        "TTS_BRIDGE_LOG_ROTATE_KEEP",
+        "TTS_BRIDGE_REF_AUDIO",
+        "TTS_BRIDGE_REF_TEXT",
+        "TTS_BRIDGE_PYTHON_BIN",
+    }
+    if not any(key in values for key in relevant):
+        return None
+    runtime: dict[str, Any] = {}
+    paths: dict[str, Any] = {}
+    logging: dict[str, Any] = {}
+    defaults: dict[str, Any] = {}
+    if "TTS_BRIDGE_HOST" in values:
+        runtime["host"] = values["TTS_BRIDGE_HOST"]
+    if "TTS_BRIDGE_PORT" in values:
+        runtime["port"] = values["TTS_BRIDGE_PORT"]
+    if "TTS_BRIDGE_UPSTREAM_BASE" in values:
+        runtime["upstream_base"] = values["TTS_BRIDGE_UPSTREAM_BASE"]
+    if "TTS_BRIDGE_PYTHON_BIN" in values:
+        runtime["python_bin"] = values["TTS_BRIDGE_PYTHON_BIN"]
+    if "TTS_BRIDGE_MODEL" in values:
+        paths["model"] = values["TTS_BRIDGE_MODEL"]
+    if "TTS_BRIDGE_CONFIG_DIR" in values:
+        paths["config_dir"] = values["TTS_BRIDGE_CONFIG_DIR"]
+    if "TTS_BRIDGE_PRONOUNCE_CONFIG" in values:
+        paths["pronounce_config"] = values["TTS_BRIDGE_PRONOUNCE_CONFIG"]
+    if "TTS_BRIDGE_VOICE_MAP_CONFIG" in values:
+        paths["voice_map_config"] = values["TTS_BRIDGE_VOICE_MAP_CONFIG"]
+    if "TTS_BRIDGE_SAMPLES_DIR" in values:
+        paths["samples_dir"] = values["TTS_BRIDGE_SAMPLES_DIR"]
+    if "TTS_BRIDGE_LOG_ROTATE_SECONDS" in values:
+        logging["rotate_seconds"] = values["TTS_BRIDGE_LOG_ROTATE_SECONDS"]
+    if "TTS_BRIDGE_LOG_ROTATE_KEEP" in values:
+        logging["rotate_keep"] = values["TTS_BRIDGE_LOG_ROTATE_KEEP"]
+    if "TTS_BRIDGE_REF_AUDIO" in values:
+        defaults["ref_audio"] = values["TTS_BRIDGE_REF_AUDIO"]
+    if "TTS_BRIDGE_REF_TEXT" in values:
+        defaults["ref_text"] = values["TTS_BRIDGE_REF_TEXT"]
+    profile = {
+        "schema_version": 1,
+        "name": "tts-bridge",
+        "runtime": runtime,
+    }
+    if paths:
+        profile["paths"] = paths
+    if logging:
+        profile["logging"] = logging
+    if defaults:
+        profile["defaults"] = defaults
+    return profile
 
 
 def migration_processing_order(sources: list[tuple[str, Path]]) -> list[tuple[str, Path]]:
@@ -635,6 +740,13 @@ def migration_documents(legacy_home: Path) -> dict[Path, dict[str, Any]]:
         "sources": [source_record(label, path) for label, path in sources],
     }
     documents[destinations.config_file] = config
+    service_values = {**host_defaults, **config_env}
+    model_proxy = build_model_proxy_service_profile(service_values)
+    if model_proxy is not None:
+        documents[destinations.services_dir / "model-proxy.json"] = model_proxy
+    tts_bridge = build_tts_bridge_service_profile(service_values)
+    if tts_bridge is not None:
+        documents[destinations.services_dir / "tts-bridge.json"] = tts_bridge
     inventory_source = migration_inventory_source(legacy_home)
     if inventory_source is not None:
         hosts = load_inventory(inventory_source)
@@ -675,6 +787,8 @@ def remap_documents(documents: dict[Path, dict[str, Any]], destinations: Migrati
             remapped[destinations.models_dir / path.name] = document
         elif path.parent == default_destinations.agents_dir:
             remapped[destinations.agents_dir / path.name] = document
+        elif path.parent == default_destinations.services_dir:
+            remapped[destinations.services_dir / path.name] = document
         else:
             remapped[path] = document
     return remapped
@@ -698,6 +812,7 @@ def cmd_migrate_config(args: argparse.Namespace) -> int:
     print(f"destination_models_dir={destinations.models_dir}")
     print(f"destination_agents_dir={destinations.agents_dir}")
     print(f"destination_profiles_dir={destinations.profiles_dir}")
+    print(f"destination_services_dir={destinations.services_dir}")
     for label, path in migration_sources(legacy_home):
         status = "present" if path.exists() else "missing"
         print(f"source\t{status}\t{label}\t{path}")

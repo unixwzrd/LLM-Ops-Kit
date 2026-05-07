@@ -121,11 +121,21 @@ llmops_service_profile_path() {
   printf '%s/services/%s.json\n' "$(llmops_config_home)" "$service"
 }
 
-source_json_service_profile_defaults() {
-  local service="$1"
-  local json_file="${2:-}"
+llmops_model_profile_path() {
+  local model="$1"
+  printf '%s/models/%s.json\n' "$(llmops_config_home)" "$model"
+}
+
+llmops_agent_profile_path() {
+  local backend="$1"
+  printf '%s/agents/%s.json\n' "$(llmops_config_home)" "$backend"
+}
+
+source_json_rendered_env_defaults() {
+  local render_command="$1"
+  local name="$2"
+  local json_file="$3"
   local line key
-  json_file="${json_file:-$(llmops_service_profile_path "$service")}"
   [[ -f "$json_file" ]] || return 0
   while IFS= read -r line; do
     [[ -n "$line" && "$line" == *=* ]] || continue
@@ -133,7 +143,25 @@ source_json_service_profile_defaults() {
     if [[ -z "${!key-}" ]]; then
       eval "export $line"
     fi
-  done < <("$LLMOPS_ROOT/scripts/llmops-admin" service-render-env "$service" --profile-path "$json_file")
+  done < <("$LLMOPS_ROOT/scripts/llmops-admin" "$render_command" "$name" --profile-path "$json_file")
+}
+
+source_json_model_profile_defaults() {
+  local model="$1"
+  local json_file="${2:-$(llmops_model_profile_path "$model")}"
+  source_json_rendered_env_defaults model-render-env "$model" "$json_file"
+}
+
+source_json_agent_profile_defaults() {
+  local backend="$1"
+  local json_file="${2:-$(llmops_agent_profile_path "$backend")}"
+  source_json_rendered_env_defaults agent-render-env "$backend" "$json_file"
+}
+
+source_json_service_profile_defaults() {
+  local service="$1"
+  local json_file="${2:-$(llmops_service_profile_path "$service")}"
+  source_json_rendered_env_defaults service-render-env "$service" "$json_file"
 }
 
 strip_self_placeholder_env_values() {

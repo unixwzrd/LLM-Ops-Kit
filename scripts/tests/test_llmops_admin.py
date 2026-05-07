@@ -146,7 +146,19 @@ class LlmopsAdminTests(unittest.TestCase):
             agent_dir = config_dir / "agents"
             agent_dir.mkdir(parents=True)
             self.write_inventory(legacy_home)
-            (legacy_home / "config.env").write_text("LLMOPS_UPSTREAM_PORT=11434\n", encoding="utf-8")
+            (legacy_home / "config.env").write_text(
+                "\n".join(
+                    [
+                        "LLMOPS_UPSTREAM_HOST=127.0.0.1",
+                        "LLMOPS_UPSTREAM_PORT=11434",
+                        "MODEL_PROXY_LISTEN_PORT=11435",
+                        "TTS_BRIDGE_UPSTREAM_BASE=http://127.0.0.1:11434/v1",
+                        "TTS_BRIDGE_PORT=11440",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
             (config_dir / "Qwen3.6.env").write_text(
                 "\n".join(
                     [
@@ -176,6 +188,12 @@ class LlmopsAdminTests(unittest.TestCase):
             self.assertEqual(model["env"]["MODEL"], "/models/qwen3.6.gguf")
             agent = json.loads((output.parent / "agents" / "hermes.json").read_text(encoding="utf-8"))
             self.assertEqual(agent["env"]["HERMES_GATEWAY_CMD"], "hermes")
+            model_proxy = json.loads((output.parent / "services" / "model-proxy.json").read_text(encoding="utf-8"))
+            self.assertEqual(model_proxy["runtime"]["upstream_host"], "127.0.0.1")
+            self.assertEqual(model_proxy["runtime"]["listen_port"], "11435")
+            tts_bridge = json.loads((output.parent / "services" / "tts-bridge.json").read_text(encoding="utf-8"))
+            self.assertEqual(tts_bridge["runtime"]["upstream_base"], "http://127.0.0.1:11434/v1")
+            self.assertEqual(tts_bridge["runtime"]["port"], "11440")
 
     def test_migrate_config_user_model_override_wins_over_repo_profile(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

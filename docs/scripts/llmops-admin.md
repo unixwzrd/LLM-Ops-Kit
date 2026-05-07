@@ -76,10 +76,14 @@ The dry run reports each source and destination. A real migration writes:
 - `config.json`
 - `models/<profile>.json`
 - `agents/<backend>.json`
+- `services/model-proxy.json`
+- `services/tts-bridge.json`
 
 User model overrides are merged with shipped model profiles case-insensitively;
 the shipped profile seeds defaults and the user override wins for duplicate
-variables. Existing JSON outputs are not overwritten unless `--force` is used.
+variables. Runtime proxy and TTS bridge env values are also split into service
+profiles when present. Existing JSON outputs are not overwritten unless
+`--force` is used.
 
 Inspect a GGUF model without starting it:
 
