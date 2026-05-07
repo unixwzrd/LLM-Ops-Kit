@@ -111,6 +111,46 @@ class LlmopsAdminTests(unittest.TestCase):
             args = Namespace(inventory=str(self.write_inventory(Path(tmp))), role="llm", tag=None, host_name=None, dry_run=True)
             self.assertEqual(self.admin.cmd_bootstrap_host(args), 0)
 
+    def test_secrets_doctor_env_provider_reports_missing_required_env(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / "config.json"
+            config.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "secrets": {
+                            "provider": "env",
+                            "required": ["LLMOPS_TEST_SECRET"],
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            args = Namespace(config=str(config), provider=None, seckit_bin=None)
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                self.assertEqual(self.admin.cmd_secrets_doctor(args), 1)
+            rendered = stdout.getvalue()
+            self.assertIn("provider=env", rendered)
+            self.assertIn("status=missing-env", rendered)
+            self.assertIn("missing=LLMOPS_TEST_SECRET", rendered)
+
+    def test_secrets_doctor_none_provider_is_ok(self) -> None:
+        args = Namespace(config=None, provider="none", seckit_bin=None)
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            self.assertEqual(self.admin.cmd_secrets_doctor(args), 0)
+        self.assertIn("provider=none", stdout.getvalue())
+
+    def test_secrets_doctor_seckit_provider_missing_binary_is_clear(self) -> None:
+        args = Namespace(config=None, provider="seckit", seckit_bin="definitely-not-seckit")
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            self.assertEqual(self.admin.cmd_secrets_doctor(args), 1)
+        rendered = stdout.getvalue()
+        self.assertIn("status=missing-provider", rendered)
+        self.assertIn("definitely-not-seckit", rendered)
+
     def test_stage_dry_run(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             args = Namespace(

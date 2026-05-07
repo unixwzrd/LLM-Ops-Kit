@@ -426,6 +426,16 @@ export MODEL_PROXY_LISTEN_PORT="<listen-port>"
 ## Optional: Secrets Kit Integration
 
 If you do not want sensitive values in `.env` files, use `seckit` and let the shared LLM-Ops-Kit runtime loader import those values during startup. Keep `.env` files placeholder-only.
+Secrets Kit is optional; the canonical JSON config supports `env`, `none`, and
+`seckit` providers.
+
+Check provider readiness without starting runtimes:
+
+```bash
+scripts/llmops-admin secrets-doctor --provider env
+scripts/llmops-admin secrets-doctor --provider none
+scripts/llmops-admin secrets-doctor --provider seckit
+```
 
 Project:
 
