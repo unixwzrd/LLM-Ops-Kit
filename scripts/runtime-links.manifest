@@ -10,13 +10,13 @@ Qwen3|scripts/Qwen3
 agentctl|scripts/agentctl
 deploy-runtime|scripts/deploy-runtime
 gateway|scripts/gateway
+llmops-admin|scripts/llmops-admin
 model-proxy|scripts/model-proxy
 modelctl|scripts/modelctl
 openclaw-report|scripts/openclaw-report.sh
 openclaw-stack|scripts/openclaw-stack
 precheck|scripts/precheck
 runtime-maintenance|scripts/runtime-maintenance
-seckit-migrate-service|scripts/seckit-migrate-service.sh
 sync-ops-scripts|scripts/sync-ops-scripts.sh
 tts-bridge|scripts/tts-bridge
 tts|scripts/tts

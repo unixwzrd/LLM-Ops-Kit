@@ -83,15 +83,12 @@ load_shell_env() {
     fi
   done
   maybe_prepend_runtime_venv_bin
-  if [[ "${LLMOPS_SKIP_SECKIT_LOAD:-0}" != "1" ]]; then
-    maybe_load_seckit_env
-  fi
   late_files+=("$HOME/.env")
   for f in "${late_files[@]}"; do
     if [[ -f "$f" ]]; then
-      # The user env may now contain self-referential placeholders after
-      # migration to Secrets-Kit. Source it with nounset disabled so existing
-      # exported values from seckit win without tripping set -u.
+      # The user env may contain self-referential placeholders after migration
+      # to an external secret store. Source it with nounset disabled so
+      # placeholder cleanup can run without tripping set -u.
       set +u
       set -a
       # shellcheck disable=SC1090
@@ -101,9 +98,6 @@ load_shell_env() {
       strip_self_placeholder_env_values
     fi
   done
-  if [[ "${LLMOPS_SKIP_SECKIT_LOAD:-0}" != "1" ]]; then
-    maybe_warn_env_secret_fallback
-  fi
 }
 
 llmops_config_home() {
@@ -175,84 +169,6 @@ strip_self_placeholder_env_values() {
         ;;
     esac
   done < <(env)
-}
-
-secret_var_is_set() {
-  local name="$1"
-  [[ -n "${!name:-}" ]]
-}
-
-maybe_warn_env_secret_fallback() {
-  local enabled status warn required name
-  local -a matched=()
-  enabled="${LLMOPS_USE_SECKIT:-0}"
-  [[ "$enabled" == "1" ]] || { LLMOPS_SECKIT_LAST_STATUS="disabled"; return 0; }
-  status="${LLMOPS_SECKIT_LAST_STATUS:-disabled}"
-  [[ "$status" == "ok" || "$status" == "disabled" ]] && return 0
-  warn="${LLMOPS_SECRET_FALLBACK_WARN:-1}"
-  [[ "$warn" == "1" ]] || return 0
-  required="${LLMOPS_REQUIRED_SECRETS:-}"
-  [[ -n "${required// }" ]] || return 0
-  for name in $required; do
-    if secret_var_is_set "$name"; then
-      matched+=("$name")
-    fi
-  done
-  [[ ${#matched[@]} -gt 0 ]] || return 0
-  echo "warning: Secrets Kit fallback in use; continuing with environment-provided secrets (${matched[*]}). These may be more easily exposed than seckit-managed values." >&2
-}
-
-maybe_load_seckit_env() {
-  local enabled bin service account names export_cmd had_xtrace=0 quiet strict
-  enabled="${LLMOPS_USE_SECKIT:-0}"
-  [[ "$enabled" == "1" ]] || { LLMOPS_SECKIT_LAST_STATUS="disabled"; return 0; }
-
-  bin="${LLMOPS_SECKIT_BIN:-seckit}"
-  service="${LLMOPS_SECKIT_SERVICE:-openclaw}"
-  account="${LLMOPS_SECKIT_ACCOUNT:-default}"
-  names="${LLMOPS_SECKIT_NAMES:-}"
-  quiet="${LLMOPS_SECKIT_QUIET_FAILURES:-1}"
-  strict="${LLMOPS_SECKIT_STRICT:-0}"
-
-  if ! command -v "$bin" >/dev/null 2>&1; then
-    LLMOPS_SECKIT_LAST_STATUS="unavailable"
-    if [[ "$strict" == "1" || "$quiet" != "1" ]]; then
-      echo "warning: Secrets Kit enabled but '$bin' is not available; skipping secret export" >&2
-    fi
-    return 0
-  fi
-
-  if [[ -n "$names" ]]; then
-    if ! export_cmd="$("$bin" export --format shell --service "$service" --account "$account" --names "$names" 2>&1)"; then
-      LLMOPS_SECKIT_LAST_STATUS="failed"
-      if [[ "$strict" == "1" || "$quiet" != "1" ]]; then
-        echo "warning: Secrets Kit export failed for service=$service account=$account names=$names; skipping secret export" >&2
-        [[ -n "$export_cmd" ]] && echo "$export_cmd" >&2
-      fi
-      return 0
-    fi
-  else
-    if ! export_cmd="$("$bin" export --format shell --service "$service" --account "$account" --all 2>&1)"; then
-      LLMOPS_SECKIT_LAST_STATUS="failed"
-      if [[ "$strict" == "1" || "$quiet" != "1" ]]; then
-        echo "warning: Secrets Kit export failed for service=$service account=$account; skipping secret export" >&2
-        [[ -n "$export_cmd" ]] && echo "$export_cmd" >&2
-      fi
-      return 0
-    fi
-  fi
-  [[ -n "$export_cmd" ]] || { LLMOPS_SECKIT_LAST_STATUS="ok"; return 0; }
-  case "$-" in
-    *x*)
-      had_xtrace=1
-      set +x
-      ;;
-  esac
-  eval "$export_cmd"
-  LLMOPS_SECKIT_LAST_STATUS="ok"
-  if [[ "$had_xtrace" == "1" ]]; then
-    set -x
-  fi
 }
 
 runtime_mode() {

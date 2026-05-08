@@ -35,7 +35,7 @@ Back: [docs/INDEX.md](./INDEX.md)
   - [Optional: Secrets Kit Integration](#optional-secrets-kit-integration)
   - [Bootstrapping](#bootstrapping)
   - [Direct-Run Agent Runtime Notes](#direct-run-agent-runtime-notes)
-  - [Secrets Kit Fallback Behavior](#secrets-kit-fallback-behavior)
+  - [Secrets Kit Runtime Behavior](#secrets-kit-runtime-behavior)
   - [See Also](#see-also)
 
 ## What This Doc Is For
@@ -309,7 +309,6 @@ Notes:
 - `HERMES_GATEWAY_CMD`: Hermes command path/name used by `agentctl`.
 - `LLMOPS_AGENT_NATIVE_ENV_FILE`: backend-native `.env` file path for launchd runs.
 - `LLMOPS_AGENT_SECKIT_NAMES`: comma-separated names passed to `seckit run` for launchd-managed OpenClaw.
-- `LLMOPS_SKIP_SECKIT_LOAD`: internal flag used to defer `seckit` loading until backend config is known.
 - `HERMES_USE_SECKIT`: optional Hermes-native Secrets Kit toggle (default `0`).
 - `HERMES_SECKIT_SERVICE`: `seckit` service namespace for Hermes (default `hermes`).
 - `HERMES_SECKIT_ACCOUNT`: `seckit` account namespace for Hermes (default `default`).
@@ -347,7 +346,6 @@ Notes:
 - `LLMOPS_SECKIT_BIN`: optional `seckit` binary path (default `seckit`).
 - `LLMOPS_SECKIT_SERVICE`: `seckit` service namespace (default `openclaw`).
 - `LLMOPS_SECKIT_ACCOUNT`: `seckit` account namespace (default `default`).
-- `LLMOPS_SECRET_FALLBACK_WARN`: set to `0` to suppress env fallback warnings.
 
 ### Logs and backups
 

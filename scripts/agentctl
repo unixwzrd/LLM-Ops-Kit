@@ -247,26 +247,10 @@ source_agent_shell_init_file() {
 load_agent_backend_runtime_env() {
   local backend="$1"
   local seed_override="${2:-1}"
-  local previous_names="${LLMOPS_SECKIT_NAMES-}"
-  local had_names=0
 
   load_agent_backend_config "$backend" "$seed_override"
   source_agent_shell_init_file
   source_agent_native_env_file
-
-  if [[ -n "${LLMOPS_AGENT_SECKIT_NAMES:-}" ]]; then
-    if [[ -n "${LLMOPS_SECKIT_NAMES+x}" ]]; then
-      had_names=1
-    fi
-    export LLMOPS_SECKIT_NAMES="$LLMOPS_AGENT_SECKIT_NAMES"
-    maybe_load_seckit_env
-    maybe_warn_env_secret_fallback
-    if [[ "$had_names" == "1" ]]; then
-      export LLMOPS_SECKIT_NAMES="$previous_names"
-    else
-      unset LLMOPS_SECKIT_NAMES || true
-    fi
-  fi
 }
 
 load_agent_backend_launchd_env() {
@@ -850,7 +834,7 @@ run_launchd_action() {
   local action_name="$1"
   local target="$2"
   local backend rc=0
-  LLMOPS_SKIP_SECKIT_LOAD=1 load_shell_env
+  load_shell_env
   while IFS= read -r backend; do
     [[ -n "$backend" ]] || continue
     case "$action_name" in
@@ -923,7 +907,7 @@ launchd_run_gateway_backend() {
     return 2
   fi
 
-  LLMOPS_SKIP_SECKIT_LOAD=1 load_shell_env
+  load_shell_env
   port="${LLMOPS_GATEWAY_PORT:-18789}"
 
   case "$backend" in

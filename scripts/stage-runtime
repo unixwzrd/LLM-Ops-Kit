@@ -107,6 +107,7 @@ copy_runtime_sources() {
   local path=""
   while IFS= read -r path; do
     [[ -n "$path" ]] || continue
+    [[ -e "$REPO_ROOT/$path" || -L "$REPO_ROOT/$path" ]] || continue
     mkdir -p "$destination_root/$(dirname "$path")"
     deploy_verbose_echo "STAGE_COPY: $path -> $destination_root/$path"
     cp -pP "$REPO_ROOT/$path" "$destination_root/$path"
