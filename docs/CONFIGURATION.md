@@ -150,11 +150,10 @@ Scripts use this precedence (earlier items override later ones):
 
 1. CLI flags (when supported)
 2. `~/.llm-ops/config.env` user config for non-secret runtime values
-3. `seckit` exports when `LLMOPS_USE_SECKIT=1`
-4. `~/.env` and inherited process environment as fallback secret sources
-5. `~/.llm-ops/config/<ModelProfile>.env` per-model overrides for model launchers
-6. Repo defaults (`scripts/config/hosts.env`)
-7. Script defaults
+3. `~/.env` and inherited process environment as fallback secret sources
+4. `~/.llm-ops/config/<ModelProfile>.env` per-model overrides for model launchers
+5. Repo defaults (`scripts/config/hosts.env`)
+6. Script defaults
 
 Note:
 - Toolkit scripts do not rely on `~/.openclaw/.env` by default.
@@ -247,8 +246,7 @@ Notes:
   - legacy `~/.hermes/gateway.json`
 - `LLMOPS_GATEWAY_PORT` only applies to the OpenClaw backend.
 - `HERMES_GATEWAY_CMD` overrides the command used to launch Hermes when `backend=hermes`.
- - Secrets-Kit can be injected for Hermes by setting `HERMES_USE_SECKIT=1` and (optionally)
-   `HERMES_SECKIT_SERVICE`, `HERMES_SECKIT_ACCOUNT`, and `HERMES_SECKIT_NAMES`.
+- Hermes Secrets Kit use is optional and disabled by default.
 
 ### `tts-bridge`
 
@@ -310,12 +308,12 @@ Notes:
 - `LLMOPS_GATEWAY_PORT`: OpenClaw direct-run port used by `agentctl`.
 - `HERMES_GATEWAY_CMD`: Hermes command path/name used by `agentctl`.
 - `LLMOPS_AGENT_NATIVE_ENV_FILE`: backend-native `.env` file path for launchd runs.
-- `LLMOPS_AGENT_SECKIT_NAMES`: comma-separated `seckit` names to export for a backend.
+- `LLMOPS_AGENT_SECKIT_NAMES`: comma-separated names passed to `seckit run` for launchd-managed OpenClaw.
 - `LLMOPS_SKIP_SECKIT_LOAD`: internal flag used to defer `seckit` loading until backend config is known.
- - `HERMES_USE_SECKIT`: load secrets from `seckit` before Hermes reads `.env` (default `0`).
- - `HERMES_SECKIT_SERVICE`: `seckit` service namespace for Hermes (default `hermes`).
- - `HERMES_SECKIT_ACCOUNT`: `seckit` account namespace for Hermes (default `default`).
- - `HERMES_SECKIT_NAMES`: comma-separated `seckit` names to export for Hermes.
+- `HERMES_USE_SECKIT`: optional Hermes-native Secrets Kit toggle (default `0`).
+- `HERMES_SECKIT_SERVICE`: `seckit` service namespace for Hermes (default `hermes`).
+- `HERMES_SECKIT_ACCOUNT`: `seckit` account namespace for Hermes (default `default`).
+- `HERMES_SECKIT_NAMES`: comma-separated secret names for Hermes when that optional path is enabled.
  - `HERMES_SKIP_DOTENV`: skip `~/.hermes/.env` entirely (default `0`).
 
 ### LLM templates and sampling
@@ -345,7 +343,7 @@ Notes:
 
 ### Secrets
 
-- `LLMOPS_USE_SECKIT`: set to `1` to load secrets from `seckit`.
+- `LLMOPS_USE_SECKIT`: set to `1` to wrap supported agent launches with `seckit run`.
 - `LLMOPS_SECKIT_BIN`: optional `seckit` binary path (default `seckit`).
 - `LLMOPS_SECKIT_SERVICE`: `seckit` service namespace (default `openclaw`).
 - `LLMOPS_SECKIT_ACCOUNT`: `seckit` account namespace (default `default`).
@@ -425,19 +423,10 @@ export MODEL_PROXY_LISTEN_PORT="<listen-port>"
 
 ## Optional: Secrets Kit Integration
 
-If you do not want sensitive values in `.env` files, use `seckit` and let the shared LLM-Ops-Kit runtime loader import those values during startup. Keep `.env` files placeholder-only.
-Secrets Kit is optional; the canonical JSON config supports `env`, `none`, and
-`seckit` providers.
-
-Check provider readiness without starting runtimes:
-
-```bash
-scripts/llmops-admin secrets-doctor --provider env
-scripts/llmops-admin secrets-doctor --provider none
-scripts/llmops-admin secrets-doctor --provider seckit
-scripts/llmops-admin secrets-doctor --provider env --profile-path ./qwen3.6.json
-scripts/llmops-admin secrets-doctor --provider seckit --agent-profile openclaw
-```
+Secrets Kit is a separate tool. LLM-Ops-Kit does not manage, diagnose, import,
+or export secrets. When Secrets Kit is installed and explicitly enabled,
+LLM-Ops-Kit can launch agent runtimes through `seckit run` so API keys and
+tokens are injected into the child process environment by Secrets Kit.
 
 Project:
 
@@ -454,30 +443,29 @@ python -m pip install "git+https://github.com/unixwzrd/Secrets-Kit.git"
 echo 'sk-example' | seckit set --name OPENAI_API_KEY --stdin --kind api_key --service openclaw --account miafour
 echo 'el-example' | seckit set --name ELEVENLABS_API_KEY --stdin --kind api_key --service openclaw --account miafour
 
-# 3) Tell LLM-Ops-Kit to load them during startup
+# 3) Tell LLM-Ops-Kit to wrap the agent launch with seckit run
 cat >> ~/.llm-ops/config.env <<'EOF'
 LLMOPS_USE_SECKIT=1
 LLMOPS_SECKIT_SERVICE=openclaw
 LLMOPS_SECKIT_ACCOUNT=miafour
 EOF
 
-# 4) Start runtimes normally
-~/bin/agentctl restart
-~/bin/modelctl status
+# 4) Start the launchd-managed OpenClaw runtime normally
+~/bin/agentctl launchd-install openclaw
+~/bin/agentctl launchd-status openclaw
 ```
 
 Notes:
 
 - Keep non-secret host, port, and path settings in `~/.llm-ops/config.env`.
 - Keep tokens and API secrets in `seckit`.
-- When enabled, the shared runtime loader imports `seckit` exports before `agentctl`, `model-proxy`, `tts-bridge`, and related wrappers start.
-- If `seckit` is missing or export fails, wrappers log a warning and continue without imported secrets.
-- Do not run wrapper startup under `bash -x` / `set -x` when `LLMOPS_USE_SECKIT=1`; shell tracing can expose exported secrets.
-- Use `scripts/seckit-migrate-service.sh` to copy secrets between namespaces (for example, OpenClaw → Hermes).
+- For launchd OpenClaw runs, `agentctl launchd-run openclaw` uses `seckit run --service <service> --account <account> -- ...` only when `LLMOPS_USE_SECKIT=1`.
+- If `seckit` is missing for that explicit launch path, startup fails clearly instead of silently pretending secrets were loaded.
+- Do not run wrapper startup under `bash -x` / `set -x` when `LLMOPS_USE_SECKIT=1`; shell tracing can expose process environment values.
 
 Current runtime note:
 
-- `seckit` is the preferred secret source for OpenClaw and Hermes.
+- `seckit` is optional and external. LLM-Ops-Kit does not implement a Secrets Kit doctor, import/export flow, or secret store.
 
 ## Bootstrapping
 
@@ -534,16 +522,12 @@ At the moment, the standard OpenClaw service path is considered deferred work:
 - the native OpenClaw service entrypoint expects an installed LaunchAgent on macOS
 - `openclaw logs --follow` and related native health/probe commands may still fail against a live direct-run agent runtime because the CLI RPC attach path is not stable yet in this environment
 
-## Secrets Kit Fallback Behavior
+## Secrets Kit Runtime Behavior
 
-When `LLMOPS_USE_SECKIT=1`, wrappers try `seckit` first for secrets. If export succeeds, those values are used with no warning. If export fails, wrappers continue with environment-based secret fallback instead of aborting.
-
-Warnings are only emitted when both of these are true:
-
-- the current wrapper declares relevant secret names
-- one or more of those secrets is actually present in environment fallback
-
-This keeps commands like `tts-bridge status` quiet when they do not need secrets at all, while still warning when a command is running on env-backed secrets instead of `seckit`.
+The supported integration path is process wrapping with `seckit run`. Secrets
+Kit remains responsible for storage, diagnostics, import/export, and secure
+injection. LLM-Ops-Kit only decides whether a managed runtime should be launched
+through that external command.
 
 ## See Also
 

@@ -714,6 +714,7 @@ class ShellRuntimeHelperTests(unittest.TestCase):
                     "LLMOPS_HOME": str(llmops_home),
                     "OPENCLAW_HOME": str(openclaw_home),
                     "OPENCLAW_GATEWAY_CMD": str(fake_openclaw),
+                    "LLMOPS_USE_SECKIT": "1",
                     "LLMOPS_SECKIT_BIN": str(fake_seckit),
                     "LLMOPS_SECKIT_ACCOUNT": "miafour",
                 },
@@ -737,6 +738,36 @@ class ShellRuntimeHelperTests(unittest.TestCase):
             )
             self.assertEqual(seckit_args[7:], ["--", str(fake_openclaw), "gateway", "run", "--port", "18789"])
             self.assertEqual(openclaw_log.read_text(encoding="utf-8").splitlines(), ["gateway", "run", "--port", "18789"])
+
+    def test_agentctl_launchd_run_openclaw_without_seckit_runs_directly(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            llmops_home = home / ".llm-ops"
+            openclaw_home = home / ".openclaw"
+            openclaw_home.mkdir(parents=True)
+            launch_log = Path(tmp) / "openclaw.log"
+
+            fake_openclaw = Path(tmp) / "fake-openclaw"
+            fake_openclaw.write_text(
+                "#!/usr/bin/env bash\n"
+                "printf '%s\\n' \"$@\" > \"" + str(launch_log) + "\"\n",
+                encoding="utf-8",
+            )
+            fake_openclaw.chmod(0o755)
+
+            proc = self.run_bash(
+                f'"{AGENTCTL}" launchd-run openclaw',
+                env={
+                    "HOME": str(home),
+                    "LLMOPS_HOME": str(llmops_home),
+                    "OPENCLAW_HOME": str(openclaw_home),
+                    "OPENCLAW_GATEWAY_CMD": str(fake_openclaw),
+                    "LLMOPS_USE_SECKIT": "0",
+                    "LLMOPS_SECKIT_BIN": str(Path(tmp) / "missing-seckit"),
+                },
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertEqual(launch_log.read_text(encoding="utf-8").splitlines(), ["gateway", "run", "--port", "18789"])
 
     def test_seckit_env_secret_fallback_warning_can_be_suppressed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

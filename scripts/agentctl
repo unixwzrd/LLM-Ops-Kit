@@ -892,7 +892,7 @@ Agent runtime actions:
   switch           Stop the other backend and start the requested backend
   logs             Follow wrapper and backend-native logs
   setup            Run Hermes-native setup flow
-  exec             Run a backend CLI command with the managed env, shell init, and seckit exports
+  exec             Run a backend CLI command with the managed env and shell init
 
 Launchd actions:
   launchd-install  Write the backend plist to ~/Library/LaunchAgents and start it
@@ -936,21 +936,24 @@ launchd_run_gateway_backend() {
         echo "agentctl[$backend]: command not found: $openclaw_cmd" >&2
         return 1
       fi
-      if ! command -v "$seckit_cmd" >/dev/null 2>&1; then
-        echo "agentctl[$backend]: command not found: $seckit_cmd" >&2
-        return 1
+      if [[ "${LLMOPS_USE_SECKIT:-0}" == "1" ]]; then
+        if ! command -v "$seckit_cmd" >/dev/null 2>&1; then
+          echo "agentctl[$backend]: command not found: $seckit_cmd" >&2
+          return 1
+        fi
+        seckit_args=(
+          run
+          --service "${LLMOPS_SECKIT_SERVICE:-openclaw}"
+          --account "${LLMOPS_SECKIT_ACCOUNT:-default}"
+        )
+        if [[ -n "${LLMOPS_AGENT_SECKIT_NAMES:-}" ]]; then
+          seckit_args+=(--names "${LLMOPS_AGENT_SECKIT_NAMES}")
+        else
+          seckit_args+=(--all)
+        fi
+        exec "$seckit_cmd" "${seckit_args[@]}" -- "$openclaw_cmd" gateway run --port "$port"
       fi
-      seckit_args=(
-        run
-        --service "${LLMOPS_SECKIT_SERVICE:-openclaw}"
-        --account "${LLMOPS_SECKIT_ACCOUNT:-default}"
-      )
-      if [[ -n "${LLMOPS_AGENT_SECKIT_NAMES:-}" ]]; then
-        seckit_args+=(--names "${LLMOPS_AGENT_SECKIT_NAMES}")
-      else
-        seckit_args+=(--all)
-      fi
-      exec "$seckit_cmd" "${seckit_args[@]}" -- "$openclaw_cmd" gateway run --port "$port"
+      exec "$openclaw_cmd" gateway run --port "$port"
       ;;
     hermes)
       load_agent_backend_launchd_env "$backend"

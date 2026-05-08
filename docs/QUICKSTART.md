@@ -93,12 +93,14 @@ LLMOPS_SECKIT_ACCOUNT=miafour
 EOF
 ```
 
-When enabled, wrappers such as `agentctl`, `model-proxy`, and `tts-bridge` will import secret values from `seckit` automatically during startup.
+When enabled for supported launch paths, `agentctl` wraps the managed OpenClaw
+launch with `seckit run` so Secrets Kit injects selected values into the child
+process.
 
 Important:
 
 - Do not start wrappers with `bash -x` or `set -x` when `LLMOPS_USE_SECKIT=1`.
-- Shell tracing can expose exported secret values in terminal output or logs.
+- Shell tracing can expose process environment values in terminal output or logs.
 
 Current stabilization mode on the primary operator machine:
 

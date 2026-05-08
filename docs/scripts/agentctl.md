@@ -27,13 +27,13 @@ Use it when you want a control surface that matches `modelctl` and keeps agent o
 - `current` prints which backend is active.
 - `switch` stops the other backend and starts the requested backend.
 - Per-agent overrides live under `~/.llm-ops/config/agents/`.
-- Launchd uses the internal `agentctl launchd-run <backend>` path so backend-native `.env` files and selective `seckit` exports can be loaded without workspace-local wrappers.
+- Launchd uses the internal `agentctl launchd-run <backend>` path so backend-native `.env` files can be loaded without workspace-local wrappers. For OpenClaw, this path wraps the gateway with `seckit run` only when `LLMOPS_USE_SECKIT=1`.
 - Agents may also source a small shell init file before their native `.env`; Hermes defaults this to `~/.bashrc` so Conda/Python initialization can be picked up in managed runs.
-- Hermes is configured in the template to use Seckit by default (`HERMES_USE_SECKIT=1`). Keep `~/.hermes/.env` placeholder-only.
+- Hermes Secrets Kit use is optional and disabled by default. Keep `~/.hermes/.env` placeholder-only when using an external secret store.
 - `launchd-install` writes a per-backend plist under `~/Library/LaunchAgents/` and starts it immediately.
 - `launchd-start` and `launchd-stop` manage the loaded agent without rewriting the plist.
 - `launchd-bootout` exposes the raw launchd bootout action for cases where you want an explicit unload step without removing the plist.
 - `launchd-enable` and `launchd-disable` control whether launchd may run the agent automatically.
 - `launchd-remove` unloads the service and deletes the plist.
-- `exec` runs a backend CLI command under the same managed shell init, backend `.env`, and selective `seckit` export path used by the wrapper. Use this for commands like `agentctl exec openclaw status` or `agentctl exec openclaw update` when the standalone CLI would otherwise miss secrets.
+- `exec` runs a backend CLI command under the same managed shell init and backend `.env` path used by the wrapper. Use this for commands like `agentctl exec openclaw status` or `agentctl exec openclaw update` when the standalone CLI would otherwise miss runtime config.
 - Hermes gateway arguments can be customized in `~/.llm-ops/config/agents/hermes.env` with `HERMES_GATEWAY_ARGS`. The default is `--replace` so managed restarts clean up stale Hermes PID/session state.

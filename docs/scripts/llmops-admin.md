@@ -17,7 +17,6 @@ scripts/llmops-admin push [--stage <path>] [--workers <n>] [--dry-run]
 scripts/llmops-admin apply [--stage <path>] [--workers <n>] [--restart <script>] [--dry-run]
 scripts/llmops-admin config-settings [--host-name <name>] [--model <profile>]
 scripts/llmops-admin config-doctor [--role <role>] [--model <profile>] [--dry-run]
-scripts/llmops-admin secrets-doctor [--provider env|none|seckit] [--config <path>] [--seckit-bin <path>] [--profile-path <path>]
 scripts/llmops-admin migrate-config [--legacy-home <path>] [--output <path>] [--dry-run] [--force]
 scripts/llmops-admin model-inspect <model.gguf> [--json] [--no-cache]
 scripts/llmops-admin model-add <name> --gguf <model.gguf> [--output <path>] [--dry-run] [--force]
@@ -41,7 +40,6 @@ Use this command from the administrator workstation to:
 - apply a pushed bundle on remote hosts
 - install or refresh deployed runtime scripts and command links
 - inspect rendered config and source layers
-- validate optional secret provider selection without requiring Secrets Kit by default
 - inspect the platform-neutral config/state/cache/log path layout
 - plan or write JSON config migration outputs from legacy env/profile files
 - inspect GGUF metadata before generating a model profile
@@ -76,21 +74,6 @@ Inspect the resolved platform-neutral path layout without writing files:
 ```bash
 scripts/llmops-admin config-doctor --dry-run
 ```
-
-Check the selected secrets provider without starting any runtime:
-
-```bash
-scripts/llmops-admin secrets-doctor --provider env
-scripts/llmops-admin secrets-doctor --provider none
-scripts/llmops-admin secrets-doctor --provider seckit
-scripts/llmops-admin secrets-doctor --provider env --profile-path ./qwen3.6.json
-scripts/llmops-admin secrets-doctor --provider seckit --agent-profile openclaw
-```
-
-`seckit` is optional. `secrets-doctor --provider seckit` fails with a clear
-missing-provider status when the binary is not available; env and none modes do
-not require Secrets Kit. Profile checks aggregate `secrets.required` and
-`secrets.names` from selected JSON profiles.
 
 Plan migration from the current legacy layout without writing files:
 
