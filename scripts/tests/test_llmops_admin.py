@@ -126,7 +126,15 @@ class LlmopsAdminTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            args = Namespace(config=str(config), provider=None, seckit_bin=None)
+            args = Namespace(
+                config=str(config),
+                provider=None,
+                seckit_bin=None,
+                profile_path=None,
+                model_profile=None,
+                agent_profile=None,
+                service_profile=None,
+            )
             stdout = io.StringIO()
             with contextlib.redirect_stdout(stdout):
                 self.assertEqual(self.admin.cmd_secrets_doctor(args), 1)
@@ -136,20 +144,67 @@ class LlmopsAdminTests(unittest.TestCase):
             self.assertIn("missing=LLMOPS_TEST_SECRET", rendered)
 
     def test_secrets_doctor_none_provider_is_ok(self) -> None:
-        args = Namespace(config=None, provider="none", seckit_bin=None)
+        args = Namespace(
+            config=None,
+            provider="none",
+            seckit_bin=None,
+            profile_path=None,
+            model_profile=None,
+            agent_profile=None,
+            service_profile=None,
+        )
         stdout = io.StringIO()
         with contextlib.redirect_stdout(stdout):
             self.assertEqual(self.admin.cmd_secrets_doctor(args), 0)
         self.assertIn("provider=none", stdout.getvalue())
 
     def test_secrets_doctor_seckit_provider_missing_binary_is_clear(self) -> None:
-        args = Namespace(config=None, provider="seckit", seckit_bin="definitely-not-seckit")
+        args = Namespace(
+            config=None,
+            provider="seckit",
+            seckit_bin="definitely-not-seckit",
+            profile_path=None,
+            model_profile=None,
+            agent_profile=None,
+            service_profile=None,
+        )
         stdout = io.StringIO()
         with contextlib.redirect_stdout(stdout):
             self.assertEqual(self.admin.cmd_secrets_doctor(args), 1)
         rendered = stdout.getvalue()
         self.assertIn("status=missing-provider", rendered)
         self.assertIn("definitely-not-seckit", rendered)
+
+    def test_secrets_doctor_reads_required_names_from_profile_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profile = Path(tmp) / "profile.json"
+            profile.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "name": "example",
+                        "secrets": {
+                            "required": ["PROFILE_SECRET"],
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            args = Namespace(
+                config=None,
+                provider="env",
+                seckit_bin=None,
+                profile_path=[str(profile)],
+                model_profile=None,
+                agent_profile=None,
+                service_profile=None,
+            )
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                self.assertEqual(self.admin.cmd_secrets_doctor(args), 1)
+            rendered = stdout.getvalue()
+            self.assertIn(f"source={profile}\trequired=PROFILE_SECRET", rendered)
+            self.assertIn("missing=PROFILE_SECRET", rendered)
 
     def test_stage_dry_run(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

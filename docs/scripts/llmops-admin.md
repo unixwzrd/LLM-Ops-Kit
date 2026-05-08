@@ -17,7 +17,7 @@ scripts/llmops-admin push [--stage <path>] [--workers <n>] [--dry-run]
 scripts/llmops-admin apply [--stage <path>] [--workers <n>] [--restart <script>] [--dry-run]
 scripts/llmops-admin config-settings [--host-name <name>] [--model <profile>]
 scripts/llmops-admin config-doctor [--role <role>] [--model <profile>] [--dry-run]
-scripts/llmops-admin secrets-doctor [--provider env|none|seckit] [--config <path>] [--seckit-bin <path>]
+scripts/llmops-admin secrets-doctor [--provider env|none|seckit] [--config <path>] [--seckit-bin <path>] [--profile-path <path>]
 scripts/llmops-admin migrate-config [--legacy-home <path>] [--output <path>] [--dry-run] [--force]
 scripts/llmops-admin model-inspect <model.gguf> [--json] [--no-cache]
 scripts/llmops-admin model-add <name> --gguf <model.gguf> [--output <path>] [--dry-run] [--force]
@@ -83,11 +83,14 @@ Check the selected secrets provider without starting any runtime:
 scripts/llmops-admin secrets-doctor --provider env
 scripts/llmops-admin secrets-doctor --provider none
 scripts/llmops-admin secrets-doctor --provider seckit
+scripts/llmops-admin secrets-doctor --provider env --profile-path ./qwen3.6.json
+scripts/llmops-admin secrets-doctor --provider seckit --agent-profile openclaw
 ```
 
 `seckit` is optional. `secrets-doctor --provider seckit` fails with a clear
 missing-provider status when the binary is not available; env and none modes do
-not require Secrets Kit.
+not require Secrets Kit. Profile checks aggregate `secrets.required` and
+`secrets.names` from selected JSON profiles.
 
 Plan migration from the current legacy layout without writing files:
 

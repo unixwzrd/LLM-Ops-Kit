@@ -692,20 +692,65 @@ def cmd_config_doctor(args: argparse.Namespace) -> int:
     return 1 if failures else 0
 
 
+def load_json_profile_document(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        raise AdminError(f"profile not found: {path}")
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise AdminError(f"profile must be a JSON object: {path}")
+    return raw
+
+
+def secret_names_from_document(document: dict[str, Any]) -> list[str]:
+    secrets = document.get("secrets", {})
+    if not isinstance(secrets, dict):
+        return []
+    names: list[str] = []
+    required = secrets.get("required", [])
+    if isinstance(required, list):
+        names.extend(str(name) for name in required)
+    profile_names = secrets.get("names", [])
+    if isinstance(profile_names, list):
+        names.extend(str(name) for name in profile_names)
+    return names
+
+
+def selected_secret_documents(args: argparse.Namespace, config_data: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
+    documents: list[tuple[str, dict[str, Any]]] = [("config", config_data)]
+    for raw_path in args.profile_path or []:
+        path = Path(raw_path).expanduser()
+        documents.append((str(path), load_json_profile_document(path)))
+    for name in args.model_profile or []:
+        path, profile = load_model_profile(name)
+        documents.append((str(path), profile))
+    for name in args.agent_profile or []:
+        path, profile = load_agent_profile(name)
+        documents.append((str(path), profile))
+    for name in args.service_profile or []:
+        path, profile = load_service_profile(name)
+        documents.append((str(path), profile))
+    return documents
+
+
 def cmd_secrets_doctor(args: argparse.Namespace) -> int:
     config = load_config(Path(args.config).expanduser() if args.config else None)
     secrets = config.data.get("secrets", {})
     provider = args.provider or str(secrets.get("provider", "env"))
+    documents = selected_secret_documents(args, config.data)
+    required_names = sorted({name for _, document in documents for name in secret_names_from_document(document)})
     print(f"config={config.path}")
     print(f"config_status={'present' if config.exists else 'missing'}")
     print(f"provider={provider}")
+    for label, document in documents:
+        names = secret_names_from_document(document)
+        if names:
+            print(f"source={label}\trequired={','.join(names)}")
     if provider == "none":
         print("status=ok")
         print("secrets_required=0")
         return 0
     if provider == "env":
-        names = [str(name) for name in secrets.get("required", [])] if isinstance(secrets.get("required", []), list) else []
-        missing = [name for name in names if not os.environ.get(name)]
+        missing = [name for name in required_names if not os.environ.get(name)]
         print("status=ok" if not missing else "status=missing-env")
         for name in missing:
             print(f"missing={name}")
@@ -719,6 +764,8 @@ def cmd_secrets_doctor(args: argparse.Namespace) -> int:
             print(f"error=Secrets Kit provider selected but '{bin_name}' was not found on PATH")
             return 1
         print(f"seckit_path={resolved}")
+        if required_names:
+            print(f"secrets_required={','.join(required_names)}")
         print("status=ok")
         return 0
     raise AdminError(f"unsupported secrets provider: {provider}")
@@ -1663,6 +1710,10 @@ def build_parser() -> argparse.ArgumentParser:
     secrets_doctor.add_argument("--config")
     secrets_doctor.add_argument("--provider", choices=("env", "none", "seckit"))
     secrets_doctor.add_argument("--seckit-bin")
+    secrets_doctor.add_argument("--profile-path", action="append")
+    secrets_doctor.add_argument("--model-profile", action="append")
+    secrets_doctor.add_argument("--agent-profile", action="append", choices=("openclaw", "hermes"))
+    secrets_doctor.add_argument("--service-profile", action="append", choices=("model-proxy", "tts-bridge"))
     secrets_doctor.set_defaults(func=cmd_secrets_doctor)
     migrate = sub.add_parser("migrate-config")
     migrate.add_argument("--legacy-home", default="~/.llm-ops")

@@ -435,6 +435,8 @@ Check provider readiness without starting runtimes:
 scripts/llmops-admin secrets-doctor --provider env
 scripts/llmops-admin secrets-doctor --provider none
 scripts/llmops-admin secrets-doctor --provider seckit
+scripts/llmops-admin secrets-doctor --provider env --profile-path ./qwen3.6.json
+scripts/llmops-admin secrets-doctor --provider seckit --agent-profile openclaw
 ```
 
 Project:
