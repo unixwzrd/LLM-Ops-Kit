@@ -47,6 +47,6 @@ Examples:
 
 Notes:
 
-- This command manages toolkit-owned files under `~/.llm-ops`. It does not rotate OpenClaw-owned logs under `~/.openclaw`, including gateway stdout/stderr capture.
+- This command manages toolkit-owned state under `~/.local/state/llm-ops`. It does not rotate OpenClaw-owned logs under `~/.openclaw`, including gateway stdout/stderr capture.
 - Active log file paths remain stable. Rotation renames the previous file and recreates the active path in place.
-- Install backups are pruned from `~/.llm-ops/backups`.
+- Install backups are pruned from `~/.local/state/llm-ops/backups`.

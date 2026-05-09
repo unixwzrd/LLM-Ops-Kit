@@ -1,8 +1,7 @@
-
 # Model Proxy Tap Runbook
 
 **Created**: 2026-02-22
-**Updated**: 2026-03-01
+**Updated**: 2026-05-09
 
 - [Model Proxy Tap Runbook](#model-proxy-tap-runbook)
   - [Purpose](#purpose)
@@ -39,9 +38,9 @@ Default wrapper values (`~/bin/model-proxy-tap`):
 - `UPSTREAM=http://<upstream-host>:<upstream-port>`
 - `LISTEN_HOST=127.0.0.1`
 - `LISTEN_PORT=18080`
-- `LOG_PATH=~/.llm-ops/logs/model-proxy.ndjson`
-- `RAW_LOG=~/.llm-ops/logs/model-proxy.raw.log` (combined request + response)
-- `RENDERED_PROMPT_LOG=~/.llm-ops/logs/model-proxy.rendered.log`
+- `LOG_PATH=~/.local/state/llm-ops/logs/model-proxy.ndjson`
+- `RAW_LOG=~/.local/state/llm-ops/logs/model-proxy.raw.log` (combined request + response)
+- `RENDERED_PROMPT_LOG=~/.local/state/llm-ops/logs/model-proxy.rendered.log`
 - `LOG_FSYNC=0`
 
 Traffic-safety note:
@@ -83,7 +82,7 @@ LISTEN_PORT=18080
 ## Direct Logs (No jq)
 
 ```bash
-tail -F ~/.llm-ops/logs/model-proxy.raw.log
+tail -F ~/.local/state/llm-ops/logs/model-proxy.raw.log
 ```
 
 Sample output:
@@ -95,7 +94,7 @@ Sample output:
 ```
 
 ```bash
-tail -F ~/.llm-ops/logs/model-proxy.rendered.log
+tail -F ~/.local/state/llm-ops/logs/model-proxy.rendered.log
 ```
 
 Sample output:
@@ -119,7 +118,7 @@ Use this pattern so commands work whether lines are plain JSON objects or JSON s
 ## Live Traffic View
 
 ```bash
-tail -F ~/.llm-ops/logs/model-proxy.ndjson | jq --unbuffered -r '
+tail -F ~/.local/state/llm-ops/logs/model-proxy.ndjson | jq --unbuffered -r '
   (fromjson? // .)
   | select(.path=="/v1/chat/completions")
   | [.ts, .event, (.response_status // "-"), (.duration_ms // "-")]
@@ -138,7 +137,7 @@ Sample output:
 `request_end` records include `response_stats` when the upstream response exposes structured usage and timing fields, for example from llama.cpp OpenAI-compatible responses.
 
 ```bash
-tail -F ~/.llm-ops/logs/model-proxy.ndjson | jq --unbuffered -r '
+tail -F ~/.local/state/llm-ops/logs/model-proxy.ndjson | jq --unbuffered -r '
   (fromjson? // .)
   | select(.event=="request_end" and .path=="/v1/chat/completions")
   | .response_stats as $s
@@ -167,7 +166,7 @@ Sample output:
 ## Role / Tool Summary View
 
 ```bash
-tail -F ~/.llm-ops/logs/model-proxy.ndjson | jq --unbuffered -r '
+tail -F ~/.local/state/llm-ops/logs/model-proxy.ndjson | jq --unbuffered -r '
   (fromjson? // .)
   | select(.event=="request_start" and .path=="/v1/chat/completions")
   | .request_summary as $s
@@ -189,7 +188,7 @@ Sample output:
 ## Rendered Prompt (Human Readable)
 
 ```bash
-tail -F ~/.llm-ops/logs/model-proxy.ndjson | jq --unbuffered -r '
+tail -F ~/.local/state/llm-ops/logs/model-proxy.ndjson | jq --unbuffered -r '
   (fromjson? // .)
   | select(.event=="request_start" and .path=="/v1/chat/completions")
   | .ts as $ts
@@ -217,7 +216,7 @@ Sample output:
 ## Rendered Prompt (Only Body)
 
 ```bash
-tail -F ~/.llm-ops/logs/model-proxy.ndjson | jq --unbuffered -r '
+tail -F ~/.local/state/llm-ops/logs/model-proxy.ndjson | jq --unbuffered -r '
   (fromjson? // .)
   | select(.event=="request_start" and .path=="/v1/chat/completions")
   | .rendered_prompt'
@@ -240,7 +239,7 @@ jq -s -r '
   | map(select(.event=="request_start" and .path=="/v1/chat/completions"))
   | last
   | .rendered_prompt // ""
-' ~/.llm-ops/logs/model-proxy.ndjson > /tmp/last-rendered-prompt.txt
+' ~/.local/state/llm-ops/logs/model-proxy.ndjson > /tmp/last-rendered-prompt.txt
 ```
 
 Sample output:
@@ -255,7 +254,7 @@ wc -l /tmp/last-rendered-prompt.txt
 ## Framed Raw Request Stream
 
 ```bash
-tail -F ~/.llm-ops/logs/model-proxy.ndjson | jq --unbuffered -r '
+tail -F ~/.local/state/llm-ops/logs/model-proxy.ndjson | jq --unbuffered -r '
   (fromjson? // .)
   | select(.event=="request_start" and .path=="/v1/chat/completions")
   | [
@@ -271,7 +270,7 @@ tail -F ~/.llm-ops/logs/model-proxy.ndjson | jq --unbuffered -r '
 ## Combined Raw File (Recommended)
 
 ```bash
-tail -F ~/.llm-ops/logs/model-proxy.raw.log
+tail -F ~/.local/state/llm-ops/logs/model-proxy.raw.log
 ```
 
 Sample output:
@@ -298,7 +297,7 @@ Sample output:
 ## Full Pretty Request/Response Blocks
 
 ```bash
-tail -F ~/.llm-ops/logs/model-proxy.ndjson | jq --unbuffered -r '
+tail -F ~/.local/state/llm-ops/logs/model-proxy.ndjson | jq --unbuffered -r '
   (fromjson? // .)
   | [.ts, (.event // ""), .path, "=== REQUEST ===", (.request_text // ""), "=== RESPONSE ===", (.response_text // ""), ""]
   | join("\n")'

@@ -1,7 +1,7 @@
 # MLX Audio TTS Guide
 
 **Created**: 2026-03-02  
-**Updated**: 2026-03-26
+**Updated**: 2026-05-09
 
 - [MLX Audio TTS Guide](#mlx-audio-tts-guide)
   - [Purpose](#purpose)
@@ -137,13 +137,13 @@ And set provider in `~/.openclaw/openclaw.json`:
 }
 ```
 
-Treat the `11440` value above as an example only. Use whatever local bridge port you configured in `~/.llm-ops/config.env`.
+Treat the `11440` value above as an example only. Use whatever local bridge port you configured in `~/.config/llm-ops/config.env`.
 
 ## Bridge Configuration
 
 For normal installed-runtime operation, configure `tts-bridge` in:
 
-- `~/.llm-ops/config.env`
+- `~/.config/llm-ops/config.env`
 
 The main bridge settings are:
 
@@ -303,7 +303,7 @@ If that passes, confirm:
 
 Bridge log rotation:
 
-- the active bridge log stays at `~/.llm-ops/logs/tts-bridge.log`
+- the active bridge log stays at `~/.local/state/llm-ops/logs/tts-bridge.log`
 - older bridge logs rotate to `.0.log`, `.1.log`, and so on
 - `TTS_BRIDGE_LOG_ROTATE_SECONDS` defaults to `86400`
 - `TTS_BRIDGE_LOG_ROTATE_KEEP` defaults to `5`

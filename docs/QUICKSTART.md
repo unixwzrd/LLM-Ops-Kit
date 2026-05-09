@@ -3,7 +3,7 @@
 Back: [docs/INDEX.md](./INDEX.md)
 
 **Created**: 2026-02-26
-**Updated**: 2026-04-27
+**Updated**: 2026-05-09
 
 - [Quickstart (10 Minutes)](#quickstart-10-minutes)
   - [Requirements](#requirements)
@@ -57,7 +57,7 @@ separate operator workflow.
 
 Use this when OpenClaw, `agentctl`, `model-proxy`, and `tts-bridge` run locally, while the LLM, embeddings, and MLX TTS run on a remote model host.
 
-Set these first in `~/.llm-ops/config.env`:
+Set these in `~/.config/llm-ops/config.env` or export them in the shell before starting wrappers:
 
 ```bash
 export LLMOPS_UPSTREAM_HOST=<remote-model-host>
@@ -78,7 +78,7 @@ cd ~/projects/LLM-Ops-Kit
 
 What admin deployment does:
 
-- builds a local package under `~/.llm-ops/stage/<bundle_id>/`
+- builds a local package under `~/.local/share/llm-ops/stage/<bundle_id>/`
 - renders per-host config from inventory and layered config
 - pushes the package and config to selected hosts in parallel
 - applies the package on each remote host
@@ -87,7 +87,8 @@ What admin deployment does:
 Optional `Secrets Kit` setup:
 
 ```bash
-cat >> ~/.llm-ops/config.env <<'EOF'
+mkdir -p ~/.config/llm-ops
+cat >> ~/.config/llm-ops/config.env <<'EOF'
 LLMOPS_USE_SECKIT=1
 LLMOPS_SECKIT_SERVICE=openclaw
 LLMOPS_SECKIT_ACCOUNT=miafour
@@ -108,7 +109,7 @@ Current stabilization mode on the primary operator machine:
 - `agentctl` runs in direct-run mode through the wrapper instead of the native OpenClaw service entrypoint
 - runtime `seckit` loading is currently disabled for startup (`LLMOPS_USE_SECKIT=0`)
 - live logs are:
-  - wrapper stdio: `~/.llm-ops/logs/agentctl-openclaw.log` and `~/.llm-ops/logs/agentctl-openclaw.err.log`
+  - wrapper stdio: `~/.local/state/llm-ops/logs/agentctl-openclaw.log` and `~/.local/state/llm-ops/logs/agentctl-openclaw.err.log`
   - OpenClaw app log: `/tmp/openclaw/openclaw-YYYY-MM-DD.log`
 - `openclaw logs --follow` and related native health/probe commands may still fail even when the agent runtime itself is up in this mode
 - use `~/bin/agentctl logs` for a reliable local follow view during this phase
@@ -140,8 +141,8 @@ scripts/llmops-admin inventory-validate
 scripts/llmops-admin config-doctor --tag production
 scripts/llmops-admin bootstrap-host --tag production --dry-run
 scripts/llmops-admin stage --tag production --bundle-id <bundle_id>
-scripts/llmops-admin push --tag production --stage ~/.llm-ops/stage/<bundle_id> --workers 4
-scripts/llmops-admin apply --tag production --stage ~/.llm-ops/stage/<bundle_id> --workers 4
+scripts/llmops-admin push --tag production --stage ~/.local/share/llm-ops/stage/<bundle_id> --workers 4
+scripts/llmops-admin apply --tag production --stage ~/.local/share/llm-ops/stage/<bundle_id> --workers 4
 ```
 
 ## Common checks

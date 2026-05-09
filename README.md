@@ -126,7 +126,7 @@ Full setup + troubleshooting guide:
 
 - [MLX_AUDIO_TTS_GUIDE](docs/MLX_AUDIO_TTS_GUIDE.md)
 
-The `127.0.0.1:11439` endpoint above is a direct `mlx_audio.server` example for a model host running on the same machine. If your MLX TTS server runs on a different host, replace `127.0.0.1` with that remote host. If you are testing the OpenClaw bridge path, use the local bridge listener URL from `~/.llm-ops/config.env` instead.
+The `127.0.0.1:11439` endpoint above is a direct `mlx_audio.server` example for a model host running on the same machine. If your MLX TTS server runs on a different host, replace `127.0.0.1` with that remote host. If you are testing the OpenClaw bridge path, use the local bridge listener URL from `~/.config/llm-ops/config.env` instead.
 
 Bridge compatibility notes:
 
@@ -149,8 +149,8 @@ scripts/llmops-admin inventory-validate
 scripts/llmops-admin stage --dry-run --bundle-id smoke
 
 # 3) Push and apply the bundle to selected hosts
-scripts/llmops-admin push --stage ~/.llm-ops/stage/<bundle_id> --workers 4
-scripts/llmops-admin apply --stage ~/.llm-ops/stage/<bundle_id> --workers 4
+scripts/llmops-admin push --stage ~/.local/share/llm-ops/stage/<bundle_id> --workers 4
+scripts/llmops-admin apply --stage ~/.local/share/llm-ops/stage/<bundle_id> --workers 4
 
 # 4) Verify model settings / runtime root on the target
 ~/bin/Qwen3.5 settings
@@ -164,7 +164,7 @@ scripts/llmops-admin apply --stage ~/.llm-ops/stage/<bundle_id> --workers 4
 ```
 
 The administrator repo checkout is the control point, not the runtime install root.
-Deployment bundles are built under `~/.llm-ops/stage/<bundle_id>/`, pushed to
+Deployment bundles are built under `~/.local/share/llm-ops/stage/<bundle_id>/`, pushed to
 selected hosts from inventory, then applied on each remote host. Remote apply
 installs the scripts/programs under the host `install_root`, updates the
 `current` release pointer, and refreshes runtime command links.
@@ -196,8 +196,8 @@ Operational notes:
 
 - `modelctl settings` now prints `RUNTIME_MODE` and `RUNTIME_ROOT`.
 - `agentctl`, `model-proxy`, and `tts-bridge` status now print retention settings.
-- `agentctl` now seeds backend override templates under `~/.llm-ops/config/agents/` and provides an internal `launchd-run` path. For OpenClaw, that path can wrap startup with `seckit run` when explicitly enabled.
-- Runtime logs rotate in place and install backups under `~/.llm-ops/backups` are pruned by policy.
+- `agentctl` now seeds backend override templates under `~/.config/llm-ops/config/agents/` and provides an internal `launchd-run` path. For OpenClaw, that path can wrap startup with `seckit run` when explicitly enabled.
+- Runtime logs rotate in place and install backups under `~/.local/state/llm-ops/backups` are pruned by policy.
 - In the current direct-run agent wrapper mode, use `~/bin/agentctl logs` instead of relying on `openclaw logs --follow`.
 - `agentctl` owns agent runtime lifecycle across OpenClaw and Hermes.
 - `modelctl` owns model runtime lifecycle; the older bundled stack wrapper is gone.

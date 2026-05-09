@@ -1,5 +1,8 @@
 # LLM-Ops-Kit Installation Rework Checklist
 
+**Created**: 2026-04-27
+**Updated**: 2026-05-09
+
 ## Phase 1: Inventory And Bootstrap
 
 - [x] Define inventory schema.
@@ -15,7 +18,7 @@
 
 ## Phase 2: Local Staging
 
-- [x] Define staging directory layout under `~/.llm-ops/stage/<bundle_id>/`.
+- [x] Define staging directory layout under `~/.local/share/llm-ops/stage/<bundle_id>/`.
 - [x] Build package artifact from the local repo/runtime.
 - [x] Generate package manifest with checksums.
 - [x] Render per-host config payloads from layered config.
