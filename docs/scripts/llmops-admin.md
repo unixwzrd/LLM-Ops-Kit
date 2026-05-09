@@ -95,6 +95,11 @@ variables. Runtime proxy and TTS bridge env values are also split into service
 profiles when present. Existing JSON outputs are not overwritten unless
 `--force` is used.
 
+Use this as the roll-forward path when upgrading from older shell override
+files. Runtime commands do not maintain the old `.sh` override stack in
+parallel; migrate first, then run against JSON profiles or current `.env`
+override files.
+
 Inspect a GGUF model without starting it:
 
 ```bash

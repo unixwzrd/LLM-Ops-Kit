@@ -80,7 +80,7 @@ class ShellRuntimeHelperTests(unittest.TestCase):
             self.assertTrue(seeded_candidates, proc.stderr + proc.stdout)
             self.assertIn("copied template config", proc.stderr)
 
-    def test_modelctl_uses_legacy_sh_override_with_warning(self) -> None:
+    def test_modelctl_rejects_legacy_sh_override_with_migration_hint(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp) / "home"
             llmops_home = home / ".llm-ops"
@@ -95,10 +95,9 @@ class ShellRuntimeHelperTests(unittest.TestCase):
                     "LLMOPS_HOME": str(llmops_home),
                 },
             )
-            self.assertEqual(proc.returncode, 0, proc.stderr)
-            self.assertIn("legacy per-model override", proc.stderr)
-            self.assertIn("prefer renaming it", proc.stderr)
-            self.assertIn("TOP_K=77", proc.stdout)
+            self.assertEqual(proc.returncode, 2, proc.stderr)
+            self.assertIn("legacy per-model override is no longer loaded", proc.stderr)
+            self.assertIn("migrate-config", proc.stderr)
             self.assertFalse((config_dir / "Qwen3.5.env").exists())
 
     def test_modelctl_template_style_env_override_beats_profile_defaults(self) -> None:
@@ -777,6 +776,25 @@ class ShellRuntimeHelperTests(unittest.TestCase):
             self.assertEqual(proc.returncode, 0, proc.stderr)
             self.assertEqual(proc.stdout.strip(), "ok")
             self.assertEqual(args_log.read_text(encoding="utf-8").strip(), "status")
+
+    def test_agentctl_rejects_legacy_sh_override_with_migration_hint(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            home = root / "home"
+            llmops_home = home / ".llm-ops"
+            agents_dir = llmops_home / "config" / "agents"
+            agents_dir.mkdir(parents=True)
+            (agents_dir / "openclaw.sh").write_text("LLMOPS_GATEWAY_PORT=19999\n", encoding="utf-8")
+            proc = self.run_bash(
+                f'"{AGENTCTL}" exec openclaw status',
+                env={
+                    "HOME": str(home),
+                    "LLMOPS_HOME": str(llmops_home),
+                },
+            )
+            self.assertEqual(proc.returncode, 2, proc.stderr)
+            self.assertIn("legacy per-backend override is no longer loaded", proc.stderr)
+            self.assertIn("migrate-config", proc.stderr)
 
     def test_model_proxy_status_can_load_json_service_profile(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

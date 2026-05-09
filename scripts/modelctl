@@ -125,11 +125,10 @@ load_model_defaults() {
     . "$model_override_file"
     [[ -f "$model_file" ]] && warn_override_drift "$model_file" "$model_override_file"
   elif [[ -f "$legacy_override_file" ]]; then
-    echo "modelctl: legacy per-model override detected at $legacy_override_file" >&2
-    echo "modelctl: prefer renaming it to $model_override_file" >&2
-    # shellcheck disable=SC1090
-    . "$legacy_override_file"
-    [[ -f "$model_file" ]] && warn_override_drift "$model_file" "$legacy_override_file"
+    echo "modelctl: legacy per-model override is no longer loaded: $legacy_override_file" >&2
+    echo "modelctl: migrate it with: scripts/llmops-admin migrate-config --legacy-home \"$LLMOPS_HOME\"" >&2
+    echo "modelctl: then use the JSON profile under $(llmops_config_home)/models/ or create $model_override_file" >&2
+    exit 2
   fi
 
   if [[ -f "$json_model_file" ]]; then
@@ -338,8 +337,8 @@ ensure_model_override_template() {
     return 0
   fi
   if [[ -f "$legacy_override_file" ]]; then
-    echo "modelctl: legacy per-model override already exists for '$m': $legacy_override_file" >&2
-    echo "modelctl: rename it to $model_override_file to match the current convention" >&2
+    echo "modelctl: legacy per-model override is no longer used for '$m': $legacy_override_file" >&2
+    echo "modelctl: run: scripts/llmops-admin migrate-config --legacy-home \"$LLMOPS_HOME\"" >&2
     return 0
   fi
 

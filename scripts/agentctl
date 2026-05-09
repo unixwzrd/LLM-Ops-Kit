@@ -166,6 +166,10 @@ ensure_agent_override_template() {
 
   [[ -f "$profile_file" ]] || return 0
   if [[ -f "$override_file" || -f "$legacy_file" ]]; then
+    if [[ -f "$legacy_file" && ! -f "$override_file" ]]; then
+      echo "agentctl: legacy per-backend override is no longer used for '$backend': $legacy_file" >&2
+      echo "agentctl: run: scripts/llmops-admin migrate-config --legacy-home \"$LLMOPS_HOME\"" >&2
+    fi
     return 0
   fi
 
@@ -203,10 +207,10 @@ load_agent_backend_config() {
     # shellcheck disable=SC1090
     . "$override_file"
   elif [[ -f "$legacy_file" ]]; then
-    echo "agentctl: legacy per-backend override detected at $legacy_file" >&2
-    echo "agentctl: prefer renaming it to $override_file" >&2
-    # shellcheck disable=SC1090
-    . "$legacy_file"
+    echo "agentctl: legacy per-backend override is no longer loaded: $legacy_file" >&2
+    echo "agentctl: migrate it with: scripts/llmops-admin migrate-config --legacy-home \"$LLMOPS_HOME\"" >&2
+    echo "agentctl: then use the JSON profile under $(llmops_config_home)/agents/ or create $override_file" >&2
+    return 2
   fi
 
   if [[ -f "$json_profile_file" ]]; then

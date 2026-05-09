@@ -101,6 +101,11 @@ optional by defaulting the new config to the `env` secrets provider.
 When legacy config contains proxy or TTS bridge variables, migration writes
 service profiles under `~/.config/llm-ops/services/`.
 
+Run this migration before upgrading from legacy shell override files. Runtime
+commands no longer source `~/.llm-ops/config/*.sh` or
+`~/.llm-ops/config/agents/*.sh`; if one is present, the command stops with a
+migration hint instead of maintaining the old config stack in parallel.
+
 For llama.cpp/llama-server profiles, the new JSON model profile has a `server`
 section for switches that used to be stuffed into raw `EXTRA_FLAGS`, including
 cache prompt/reuse, slot save path, speculative ngram settings, `--perf`,
@@ -115,8 +120,9 @@ runtime commands to use the shared resolver directly.
 
 `agentctl` can consume JSON agent profiles from
 `~/.config/llm-ops/agents/<backend>.json` the same way. If a JSON profile exists,
-`agentctl` does not auto-seed a legacy per-backend override template; existing
-legacy override files still win over JSON values.
+`agentctl` does not auto-seed a shell per-backend override template. Legacy
+`.sh` per-backend override files are migration input only and are not sourced
+at runtime.
 
 `model-proxy` and `tts-bridge` can consume JSON service profiles from
 `~/.config/llm-ops/services/model-proxy.json` and
@@ -162,7 +168,7 @@ Note:
 - Reserve `~/.env` for secret fallback values only.
 - For model-specific overrides, prefer `~/.llm-ops/config/<ModelProfile>.env`.
 - If a per-model override file is missing, `modelctl` auto-seeds it from the shipped model profile the first time that launcher is used and prints a notice.
-- Legacy per-model override files named `~/.llm-ops/config/<ModelProfile>.sh` are still detected and loaded, but `~/.llm-ops/config/<ModelProfile>.env` is now the preferred convention.
+- Legacy per-model override files named `~/.llm-ops/config/<ModelProfile>.sh` are migration input only. `modelctl` refuses to source them and points operators at `llmops-admin migrate-config`.
 
 ## Service-Specific Config Sources
 
@@ -190,7 +196,7 @@ Notes:
 
 - `modelctl` is the wrapper that owns per-model override files.
 - If the current `.env`-style override file is missing, `modelctl` auto-seeds it.
-- Legacy `~/.llm-ops/config/<ModelProfile>.sh` files are still loaded and warned about.
+- Legacy `~/.llm-ops/config/<ModelProfile>.sh` files must be migrated; they are not loaded at runtime.
 - `modelctl` warns when overrides are missing new variables added to shipped profiles.
 
 ### `model-proxy`

@@ -77,8 +77,11 @@ scripts/llmops-admin model-render-env qwen3.6 --profile-path ~/.config/llm-ops/m
 
 The JSON profile is rendered through `scripts/llmops-admin model-render-env`
 into the same environment shape the current runner already understands. During
-the transition, exported environment variables and legacy per-model override
-files still win, and model-kind defaults fill any values omitted from JSON.
+the transition, exported environment variables and current `.env` per-model
+override files still win, and model-kind defaults fill any values omitted from
+JSON. Legacy `.sh` per-model overrides must be migrated with
+`scripts/llmops-admin migrate-config`; `modelctl` no longer sources them at
+runtime.
 
 New JSON profiles have first-class `server` fields for common llama-server
 switches such as `--cache-prompt`, `--cache-reuse`, `--slot-save-path`,
