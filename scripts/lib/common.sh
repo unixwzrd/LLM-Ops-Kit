@@ -1,12 +1,34 @@
 #! /usr/bin/env bash
 set -euo pipefail
 
+llmops_default_config_home() {
+  if [[ -n "${LLMOPS_CONFIG_HOME:-}" ]]; then
+    printf '%s\n' "$LLMOPS_CONFIG_HOME"
+  elif [[ -n "${XDG_CONFIG_HOME:-}" ]]; then
+    printf '%s/llm-ops\n' "$XDG_CONFIG_HOME"
+  else
+    printf '%s/.config/llm-ops\n' "$HOME"
+  fi
+}
+
+llmops_default_state_home() {
+  if [[ -n "${LLMOPS_STATE_HOME:-}" ]]; then
+    printf '%s\n' "$LLMOPS_STATE_HOME"
+  elif [[ -n "${XDG_STATE_HOME:-}" ]]; then
+    printf '%s/llm-ops\n' "$XDG_STATE_HOME"
+  else
+    printf '%s/.local/state/llm-ops\n' "$HOME"
+  fi
+}
+
 LLMOPS_HOME="${LLMOPS_HOME:-$HOME/.llm-ops}"
-LLMOPS_RUN_DIR="${LLMOPS_RUN_DIR:-$LLMOPS_HOME/run}"
-LLMOPS_LOG_DIR="${LLMOPS_LOG_DIR:-$LLMOPS_HOME/logs}"
+LLMOPS_CONFIG_HOME="${LLMOPS_CONFIG_HOME:-$(llmops_default_config_home)}"
+LLMOPS_STATE_HOME="${LLMOPS_STATE_HOME:-$(llmops_default_state_home)}"
+LLMOPS_RUN_DIR="${LLMOPS_RUN_DIR:-$LLMOPS_STATE_HOME/run}"
+LLMOPS_LOG_DIR="${LLMOPS_LOG_DIR:-$LLMOPS_STATE_HOME/logs}"
 LLMOPS_ROOT="${LLMOPS_ROOT:-$(cd -P "$(dirname "${BASH_SOURCE[0]}")/../.." >/dev/null 2>&1 && pwd)}"
-LLMOPS_CONFIG_DIR="${LLMOPS_CONFIG_DIR:-$LLMOPS_HOME/config}"
-LLMOPS_BACKUP_DIR="${LLMOPS_BACKUP_DIR:-$LLMOPS_HOME/backups}"
+LLMOPS_CONFIG_DIR="${LLMOPS_CONFIG_DIR:-$LLMOPS_CONFIG_HOME/config}"
+LLMOPS_BACKUP_DIR="${LLMOPS_BACKUP_DIR:-$LLMOPS_STATE_HOME/backups}"
 
 LLMOPS_LOG_ROTATE_BYTES="${LLMOPS_LOG_ROTATE_BYTES:-10485760}"
 LLMOPS_LOG_ROTATE_KEEP="${LLMOPS_LOG_ROTATE_KEEP:-5}"
@@ -23,7 +45,7 @@ ensure_runtime_dirs() {
 }
 
 state_file_path() {
-  printf '%s\n' "${LLMOPS_STATE_FILE:-$LLMOPS_HOME/runtime-state.env}"
+  printf '%s\n' "${LLMOPS_STATE_FILE:-$LLMOPS_STATE_HOME/runtime-state.env}"
 }
 
 prepend_path_once() {
@@ -73,7 +95,7 @@ load_shell_env() {
   # Load toolkit config first so we know whether Secrets-Kit is enabled before
   # touching placeholder-based ~/.env files.
   early_files+=("$LLMOPS_ROOT/config/hosts.env" "$LLMOPS_ROOT/config/hosts.local.env")
-  early_files+=("$LLMOPS_HOME/config.env" "$LLMOPS_HOME/hosts.env")
+  early_files+=("$LLMOPS_CONFIG_HOME/config.env" "$LLMOPS_CONFIG_HOME/hosts.env")
   for f in "${early_files[@]}"; do
     if [[ -f "$f" ]]; then
       set -a
@@ -101,13 +123,7 @@ load_shell_env() {
 }
 
 llmops_config_home() {
-  if [[ -n "${LLMOPS_CONFIG_HOME:-}" ]]; then
-    printf '%s\n' "$LLMOPS_CONFIG_HOME"
-  elif [[ -n "${XDG_CONFIG_HOME:-}" ]]; then
-    printf '%s/llm-ops\n' "$XDG_CONFIG_HOME"
-  else
-    printf '%s/.config/llm-ops\n' "$HOME"
-  fi
+  printf '%s\n' "$LLMOPS_CONFIG_HOME"
 }
 
 llmops_service_profile_path() {
@@ -173,7 +189,7 @@ strip_self_placeholder_env_values() {
 
 runtime_mode() {
   local state_file mode
-  state_file="${LLMOPS_STATE_FILE:-$LLMOPS_HOME/runtime-state.env}"
+  state_file="$(state_file_path)"
   mode="${LLMOPS_RUNTIME_MODE:-}"
   if [[ -n "$mode" ]]; then
     printf '%s\n' "$mode"

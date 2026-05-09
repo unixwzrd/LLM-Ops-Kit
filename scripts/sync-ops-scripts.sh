@@ -27,7 +27,7 @@ NO_AGENT=0
 NO_MANIFEST=0
 NO_LINKS=0
 QUIET=0
-STATE_FILE="${LLMOPS_STATE_FILE:-$HOME/.llm-ops/runtime-state.env}"
+STATE_FILE="${LLMOPS_STATE_FILE:-$(state_file_path)}"
 RUNTIME_MODE="${LLMOPS_RUNTIME_MODE:-installed}" # repo|installed
 INSTALL_PREFIX="${LLMOPS_INSTALL_BASE:-$HOME/.llm-ops}"
 RUNTIME_MODE_EXPLICIT=0
@@ -53,7 +53,7 @@ Options:
   --no-links               Skip remote deploy+verify link steps after sync
   --runtime-mode <mode>    Remote runtime mode: installed (default) or repo
   --install-prefix <path>  Remote install prefix for installed mode
-  --state-file <path>      Local runtime state file (default: ~/.llm-ops/runtime-state.env)
+  --state-file <path>      Local runtime state file (default: ~/.local/state/llm-ops/runtime-state.env)
   --quiet                  Less output
   -h, --help               Show this help
 

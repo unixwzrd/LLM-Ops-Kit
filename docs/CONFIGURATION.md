@@ -3,7 +3,7 @@
 Back: [docs/INDEX.md](./INDEX.md)
 
 **Created**: 2026-02-28  
-**Updated**: 2026-05-07
+**Updated**: 2026-05-09
 
 - [Configuration Guide](#configuration-guide)
   - [What This Doc Is For](#what-this-doc-is-for)
@@ -155,18 +155,18 @@ the `modelctl` refactor is completed.
 Scripts use this precedence (earlier items override later ones):
 
 1. CLI flags (when supported)
-2. `~/.llm-ops/config.env` user config for non-secret runtime values
+2. `~/.config/llm-ops/config.env` user config for non-secret runtime values
 3. `~/.env` and inherited process environment as fallback secret sources
-4. `~/.llm-ops/config/<ModelProfile>.env` per-model overrides for model launchers
+4. `~/.config/llm-ops/config/<ModelProfile>.env` per-model overrides for model launchers
 5. Repo defaults (`scripts/config/hosts.env`)
 6. Script defaults
 
 Note:
 - Toolkit scripts do not rely on `~/.openclaw/.env` by default.
-- Keep toolkit configuration in `~/.llm-ops/config.env`, but keep it minimal if you want per-model overrides to drive behavior.
-- Keep runtime routing config in `~/.llm-ops/config.env`, not in `~/.env`.
+- Keep toolkit configuration in `~/.config/llm-ops/config.env`, but keep it minimal if you want JSON profiles and per-model overrides to drive behavior.
+- Keep runtime routing config in `~/.config/llm-ops/config.env`, not in `~/.env`.
 - Reserve `~/.env` for secret fallback values only.
-- For model-specific overrides, prefer `~/.llm-ops/config/<ModelProfile>.env`.
+- For model-specific overrides, prefer `~/.config/llm-ops/config/<ModelProfile>.env`.
 - If a per-model override file is missing, `modelctl` auto-seeds it from the shipped model profile the first time that launcher is used and prints a notice.
 - Legacy per-model override files named `~/.llm-ops/config/<ModelProfile>.sh` are migration input only. `modelctl` refuses to source them and points operators at `llmops-admin migrate-config`.
 
@@ -186,11 +186,11 @@ Effective precedence:
 
 1. CLI action and any runtime flags passed directly to the launcher
 2. exported environment variables
-3. `~/.llm-ops/config.env`
+3. `~/.config/llm-ops/config.env`
 4. global defaults under `scripts/defaults/global-defaults.sh`
 5. model-type defaults under `scripts/defaults/`
 6. shipped model profile under `scripts/models/<ModelProfile>.sh`
-7. `~/.llm-ops/config/<ModelProfile>.env`
+7. `~/.config/llm-ops/config/<ModelProfile>.env`
 
 Notes:
 
@@ -205,14 +205,14 @@ Effective precedence:
 
 1. CLI flags passed to `model-proxy` / `model-proxy-tap`
 2. exported environment variables
-3. `~/.llm-ops/config.env`
+3. `~/.config/llm-ops/config.env`
 4. JSON service profile under `~/.config/llm-ops/services/model-proxy.json`
 5. built-in wrapper defaults
 
 Notes:
 
 - `model-proxy` can load a JSON service profile, but still renders that profile into the existing wrapper environment.
-- It does persist live runtime metadata under `~/.llm-ops/run/model-proxy-live-*`,
+- It does persist live runtime metadata under `~/.local/state/llm-ops/run/model-proxy-live-*`,
   but those files are for status/reporting, not configuration input.
 - `model-proxy render` is a render-only debugging path that reuses the normal
   env/CLI config surface and does not require upstream connectivity.
@@ -229,23 +229,23 @@ Effective precedence:
 
 1. CLI action
 2. exported environment variables
-3. `~/.llm-ops/config.env`
-4. existing per-backend override files under `~/.llm-ops/config/agents/`
+3. `~/.config/llm-ops/config.env`
+4. existing per-backend override files under `~/.config/llm-ops/config/agents/`
 5. JSON agent profiles under `~/.config/llm-ops/agents/`
 6. built-in wrapper defaults
 7. backend-native config owned by the selected agent runtime
 
 Notes:
 
-- `agentctl` now seeds optional per-backend override files under `~/.llm-ops/config/agents/`.
+- `agentctl` now seeds optional per-backend override files under `~/.config/llm-ops/config/agents/`.
 - JSON profiles are loaded from `~/.config/llm-ops/agents/openclaw.json` and `~/.config/llm-ops/agents/hermes.json`.
 - When a JSON profile exists and no legacy override exists, `agentctl` does not create a legacy override template for that backend.
 - Select the default target with `LLMOPS_GATEWAY_BACKEND`:
   - `openclaw` (default)
   - `hermes`
   - `all`
-- OpenClaw-specific runtime behavior can be customized in `~/.llm-ops/config/agents/openclaw.env`.
-- Hermes-specific wrapper defaults can be customized in `~/.llm-ops/config/agents/hermes.env`.
+- OpenClaw-specific runtime behavior can be customized in `~/.config/llm-ops/config/agents/openclaw.env`.
+- Hermes-specific wrapper defaults can be customized in `~/.config/llm-ops/config/agents/hermes.env`.
 - Hermes-native runtime behavior is loaded by Hermes from:
   - `~/.hermes/config.yaml`
   - `~/.hermes/.env` (keep placeholder-only; Hermes always reads it)
@@ -260,7 +260,7 @@ Effective precedence:
 
 1. CLI flags
 2. exported environment variables
-3. `~/.llm-ops/config.env`
+3. `~/.config/llm-ops/config.env`
 4. JSON service profile under `~/.config/llm-ops/services/tts-bridge.json`
 5. files derived from `TTS_BRIDGE_CONFIG_DIR`
 6. built-in wrapper defaults
@@ -277,17 +277,20 @@ Notes:
 
 ### Files and override sources
 
-- `~/.llm-ops/config.env`: global toolkit config (keep minimal if you prefer per-model overrides).
-- `~/.llm-ops/config/<ModelProfile>.env`: per-model overrides loaded by `modelctl`.
+- `~/.config/llm-ops/config.env`: global toolkit config (keep minimal if you prefer JSON profiles and per-model overrides).
+- `~/.config/llm-ops/config/<ModelProfile>.env`: transitional per-model env overrides loaded by `modelctl`.
 - `scripts/config/hosts.env`: repo-owned default host/IP config for wrappers.
-- `~/.llm-ops/config/agents/openclaw.env`: per-backend OpenClaw overrides seeded by `agentctl`.
-- `~/.llm-ops/config/agents/hermes.env`: per-backend Hermes overrides seeded by `agentctl`.
+- `~/.config/llm-ops/config/agents/openclaw.env`: transitional per-backend OpenClaw overrides seeded by `agentctl`.
+- `~/.config/llm-ops/config/agents/hermes.env`: transitional per-backend Hermes overrides seeded by `agentctl`.
 
 ### Toolkit roots and paths
 
-- `LLMOPS_HOME`: toolkit state root (default `~/.llm-ops`).
-- `LLMOPS_RUN_DIR`: runtime pid/state dir (default `$LLMOPS_HOME/run`).
-- `LLMOPS_LOG_DIR`: toolkit log dir (default `$LLMOPS_HOME/logs`).
+- `LLMOPS_HOME`: installed runtime payload root (default `~/.llm-ops`; command payload defaults to `$LLMOPS_HOME/current`).
+- `LLMOPS_CONFIG_HOME`: canonical config root (default `~/.config/llm-ops`).
+- `LLMOPS_STATE_HOME`: canonical state root (default `~/.local/state/llm-ops`).
+- `LLMOPS_CONFIG_DIR`: transitional env override dir (default `$LLMOPS_CONFIG_HOME/config`).
+- `LLMOPS_RUN_DIR`: runtime pid/state dir (default `$LLMOPS_STATE_HOME/run`).
+- `LLMOPS_LOG_DIR`: toolkit log dir (default `$LLMOPS_STATE_HOME/logs`).
 - `LLMOPS_ROOT`: canonical runtime asset root for the installed payload.
 - `LLMOPS_RUNTIME_VENV_PATH`: optional runtime Python virtualenv prepended to `PATH` when present.
 
@@ -394,9 +397,8 @@ LLMOPS_UPSTREAM_HOST=<upstream-host>
 LLMOPS_UPSTREAM_PORT=<upstream-port>
 MODEL_PROXY_LISTEN_HOST=127.0.0.1
 MODEL_PROXY_LISTEN_PORT=<listen-port>
-LLMOPS_HOME=~/.llm-ops
-LLMOPS_RUN_DIR=~/.llm-ops/run
-LLMOPS_LOG_DIR=~/.llm-ops/logs
+LLMOPS_CONFIG_HOME=~/.config/llm-ops
+LLMOPS_STATE_HOME=~/.local/state/llm-ops
 LLMOPS_LOG_ROTATE_BYTES=10485760
 LLMOPS_LOG_ROTATE_KEEP=5
 LLMOPS_BACKUP_KEEP=5
@@ -448,7 +450,7 @@ echo 'sk-example' | seckit set --name OPENAI_API_KEY --stdin --kind api_key --se
 echo 'el-example' | seckit set --name ELEVENLABS_API_KEY --stdin --kind api_key --service openclaw --account miafour
 
 # 3) Tell LLM-Ops-Kit to wrap the agent launch with seckit run
-cat >> ~/.llm-ops/config.env <<'EOF'
+cat >> ~/.config/llm-ops/config.env <<'EOF'
 LLMOPS_USE_SECKIT=1
 LLMOPS_SECKIT_SERVICE=openclaw
 LLMOPS_SECKIT_ACCOUNT=miafour
@@ -461,7 +463,7 @@ EOF
 
 Notes:
 
-- Keep non-secret host, port, and path settings in `~/.llm-ops/config.env`.
+- Keep non-secret host, port, and path settings in `~/.config/llm-ops/config.env`.
 - Keep tokens and API secrets in `seckit`.
 - For launchd OpenClaw runs, `agentctl launchd-run openclaw` uses `seckit run --service <service> --account <account> -- ...` only when `LLMOPS_USE_SECKIT=1`.
 - If `seckit` is missing for that explicit launch path, startup fails clearly instead of silently pretending secrets were loaded.
@@ -478,16 +480,15 @@ Use [`.env.example`](../.env.example) as a starting template for your local envi
 Recommended user-owned config path:
 
 ```bash
-mkdir -p ~/.llm-ops
-cat > ~/.llm-ops/config.env <<'EOF'
+mkdir -p ~/.config/llm-ops
+cat > ~/.config/llm-ops/config.env <<'EOF'
 LLMOPS_UPSTREAM_HOST=<example-upstream-host>
 LLMOPS_SYNC_HOST=<example-upstream-host>
 LLMOPS_UPSTREAM_PORT=11434
 MODEL_PROXY_LISTEN_HOST=127.0.0.1
 MODEL_PROXY_LISTEN_PORT=11434
-LLMOPS_HOME=$HOME/.llm-ops
-LLMOPS_RUN_DIR=$HOME/.llm-ops/run
-LLMOPS_LOG_DIR=$HOME/.llm-ops/logs
+LLMOPS_CONFIG_HOME=$HOME/.config/llm-ops
+LLMOPS_STATE_HOME=$HOME/.local/state/llm-ops
 LLMOPS_LOG_ROTATE_BYTES=10485760
 LLMOPS_LOG_ROTATE_KEEP=5
 LLMOPS_BACKUP_KEEP=5
@@ -499,8 +500,8 @@ EOF
 Example per-model override:
 
 ```bash
-mkdir -p ~/.llm-ops/config
-cat > ~/.llm-ops/config/Qwen3.5.env <<'EOF'
+mkdir -p ~/.config/llm-ops/config
+cat > ~/.config/llm-ops/config/Qwen3.5.env <<'EOF'
 USE_CUSTOM_TEMPLATE=1
 CHAT_TEMPLATE=$HOME/.llm-ops/current/scripts/templates/Qwen3.5-chatml-no-tools.jinja
 TEMP=0.9
@@ -517,7 +518,7 @@ EOF
 The current known-good startup path on the primary operator machine is the direct-run `agentctl` wrapper:
 
 - `agentctl start` launches the OpenClaw agent runtime under `nohup`
-- wrapper logs go to `~/.llm-ops/logs/agentctl-openclaw.log` and `~/.llm-ops/logs/agentctl-openclaw.err.log`
+- wrapper logs go to `~/.local/state/llm-ops/logs/agentctl-openclaw.log` and `~/.local/state/llm-ops/logs/agentctl-openclaw.err.log`
 - OpenClaw app logs go to `/tmp/openclaw/openclaw-YYYY-MM-DD.log`
 - `agentctl logs` tails all three of those files together
 

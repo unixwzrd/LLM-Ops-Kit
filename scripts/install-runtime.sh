@@ -14,7 +14,8 @@ SOURCE_DIR="${LLMOPS_SOURCE_DIR:-$SOURCE_DIR_DEFAULT}"
 INSTALL_BASE="${LLMOPS_INSTALL_BASE:-$HOME/.llm-ops}"
 INSTALL_DIR="$INSTALL_BASE/current"
 BIN_DIR="${BIN_DIR:-$HOME/bin}"
-STATE_FILE="${LLMOPS_STATE_FILE:-$HOME/.llm-ops/runtime-state.env}"
+STATE_HOME="${LLMOPS_STATE_HOME:-${XDG_STATE_HOME:-$HOME/.local/state}/llm-ops}"
+STATE_FILE="${LLMOPS_STATE_FILE:-$STATE_HOME/runtime-state.env}"
 VENV_PATH="${LLMOPS_RUNTIME_VENV_PATH:-}"
 INSTALL_SECRETS_KIT=0
 SECRETS_KIT_SOURCE="${LLMOPS_SECRETS_KIT_SOURCE:-git+https://github.com/unixwzrd/Secrets-Kit.git}"
@@ -63,7 +64,7 @@ Options:
   --source <path>      Source repo directory (default: $SOURCE_DIR_DEFAULT)
   --prefix <path>      Install base dir (default: ~/.llm-ops)
   --bin-dir <path>     Runtime bin dir (default: ~/bin)
-  --state-file <path>  Runtime state file (default: ~/.llm-ops/runtime-state.env)
+  --state-file <path>  Runtime state file (default: ~/.local/state/llm-ops/runtime-state.env)
   --venv-path <path>   Optional runtime Python virtualenv path
   --install-secrets-kit  Install Secrets-Kit into the runtime venv
   --secrets-kit-source <spec>  pip install source for Secrets-Kit

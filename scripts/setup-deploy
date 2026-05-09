@@ -54,8 +54,8 @@ default_bin_dir() {
 }
 
 default_state_file() {
-  local install_prefix="$1"
-  printf '%s/runtime-state.env\n' "$install_prefix"
+  local base_dir="$1"
+  printf '%s/.local/state/llm-ops/runtime-state.env\n' "$base_dir"
 }
 
 default_venv_path() {
@@ -74,7 +74,7 @@ print_template() {
 # LLMOPS_DEPLOY_BASE_DIR="/Users/operator"
 # LLMOPS_DEPLOY_INSTALL_PREFIX="/Users/operator/.llm-ops"
 # LLMOPS_DEPLOY_BIN_DIR="/Users/operator/bin"
-# LLMOPS_DEPLOY_STATE_FILE="/Users/operator/.llm-ops/runtime-state.env"
+# LLMOPS_DEPLOY_STATE_FILE="/Users/operator/.local/state/llm-ops/runtime-state.env"
 # LLMOPS_DEPLOY_VENV_PATH="/Users/operator/.llm-ops/venv"
 # LLMOPS_DEPLOY_INSTALL_SECRETS_KIT="0"
 # LLMOPS_DEPLOY_SECRETS_KIT_SOURCE="git+https://github.com/unixwzrd/Secrets-Kit.git"
@@ -205,7 +205,7 @@ USER_NAME="${LLMOPS_DEPLOY_USER:-$USER}"
 BASE_DIR="${LLMOPS_DEPLOY_BASE_DIR:-$(default_base_dir_for_user "$USER_NAME")}"
 INSTALL_PREFIX="${LLMOPS_DEPLOY_INSTALL_PREFIX:-$(default_install_prefix "$BASE_DIR")}"
 BIN_DIR="${LLMOPS_DEPLOY_BIN_DIR:-$(default_bin_dir "$BASE_DIR")}"
-STATE_FILE="${LLMOPS_DEPLOY_STATE_FILE:-$(default_state_file "$INSTALL_PREFIX")}"
+STATE_FILE="${LLMOPS_DEPLOY_STATE_FILE:-$(default_state_file "$BASE_DIR")}"
 VENV_PATH="${LLMOPS_DEPLOY_VENV_PATH:-$(default_venv_path "$INSTALL_PREFIX")}"
 HOSTS="$(deploy_host_list_normalize "${LLMOPS_DEPLOY_HOSTS:-}")"
 INSTALL_SECRETS_KIT="${LLMOPS_DEPLOY_INSTALL_SECRETS_KIT:-0}"
@@ -234,8 +234,8 @@ if [[ "$RESET" -eq 1 || ! -f "$CONFIG_FILE" ]]; then
     BIN_DIR="$(default_bin_dir "$BASE_DIR")"
   fi
   BIN_DIR="$(prompt_value "Where should managed executables be linked?" "$BIN_DIR")"
-  if [[ -z "$STATE_FILE" || "$STATE_FILE" == "$(default_state_file "$old_install")" ]]; then
-    STATE_FILE="$(default_state_file "$INSTALL_PREFIX")"
+  if [[ -z "$STATE_FILE" || "$STATE_FILE" == "$(default_state_file "$old_base")" ]]; then
+    STATE_FILE="$(default_state_file "$BASE_DIR")"
   fi
   STATE_FILE="$(prompt_value "Where should the runtime state file live?" "$STATE_FILE")"
   if [[ -z "$VENV_PATH" || "$VENV_PATH" == "$(default_venv_path "$old_install")" ]]; then

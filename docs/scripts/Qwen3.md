@@ -25,7 +25,7 @@ USE_CUSTOM_TEMPLATE=1 CHAT_TEMPLATE=/absolute/path/to/template.jinja ~/bin/Qwen3
 
 ## Notes
 
-Operator overrides belong in `~/.llm-ops/config.env`.
+Operator overrides belong in `~/.config/llm-ops/config.env`.
 Enable a custom template explicitly there, for example:
 
 ```bash

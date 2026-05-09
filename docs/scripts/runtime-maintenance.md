@@ -1,9 +1,9 @@
 # runtime-maintenance
 
 **Created**: 2026-03-08
-**Updated**: 2026-03-08
+**Updated**: 2026-05-09
 
-Inspect and maintain toolkit-owned runtime artifacts under `~/.llm-ops`.
+Inspect and maintain toolkit-owned runtime artifacts under `~/.local/state/llm-ops`.
 
 ```bash
 ~/bin/runtime-maintenance [status|rotate|prune|run]
@@ -22,11 +22,11 @@ Actions:
 
 Known log targets:
 
-- `~/.llm-ops/logs/model-proxy-tap.log`
-- `~/.llm-ops/logs/model-proxy-tap.err.log`
-- `~/.llm-ops/logs/tts-bridge.log`
-- `~/.llm-ops/logs/llama-server-*.log`
-- `~/.llm-ops/logs/tts-server-*.log`
+- `~/.local/state/llm-ops/logs/model-proxy-tap.log`
+- `~/.local/state/llm-ops/logs/model-proxy-tap.err.log`
+- `~/.local/state/llm-ops/logs/tts-bridge.log`
+- `~/.local/state/llm-ops/logs/llama-server-*.log`
+- `~/.local/state/llm-ops/logs/tts-server-*.log`
 
 Retention controls:
 

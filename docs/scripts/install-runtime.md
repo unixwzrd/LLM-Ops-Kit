@@ -1,7 +1,7 @@
 # install-runtime
 
 **Created**: 2026-03-03
-**Updated**: 2026-04-27
+**Updated**: 2026-05-09
 
 Helper for installing a durable runtime payload outside a git checkout, then
 linking commands from `~/bin`.
@@ -24,7 +24,7 @@ Default install path:
 
 Default runtime state file:
 
-- `~/.llm-ops/runtime-state.env`
+- `~/.local/state/llm-ops/runtime-state.env`
 
 Default command link path:
 

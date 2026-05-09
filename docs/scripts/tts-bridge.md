@@ -79,7 +79,7 @@ Config resolution precedence:
 
 1. CLI flag
 2. matching environment variable
-3. `~/.llm-ops/config.env`
+3. `~/.config/llm-ops/config.env`
 4. file derived from `TTS_BRIDGE_CONFIG_DIR`
 5. built-in default
 
@@ -234,6 +234,6 @@ OpenClaw wiring:
 export OPENAI_TTS_BASE_URL=http://127.0.0.1:11440/v1
 ```
 
-That port is an example only. Use the bridge port from your `~/.llm-ops/config.env`.
+That port is an example only. Use the bridge port from your `~/.config/llm-ops/config.env`.
 
 Then set `messages.tts.provider` to `openai` in `~/.openclaw/openclaw.json`.

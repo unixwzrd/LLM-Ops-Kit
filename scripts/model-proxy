@@ -44,8 +44,8 @@ Options:
 
 Default env-backed values:
   LLMOPS_ROOT=${LLMOPS_ROOT}
-  LLMOPS_UPSTREAM_HOST=<required from ~/.llm-ops/config.env or explicit env>
-  LLMOPS_UPSTREAM_PORT=<required from ~/.llm-ops/config.env or explicit env>
+  LLMOPS_UPSTREAM_HOST=<required from ~/.config/llm-ops/config.env or explicit env>
+  LLMOPS_UPSTREAM_PORT=<required from ~/.config/llm-ops/config.env or explicit env>
   MODEL_PROXY_LISTEN_PORT=<optional; defaults to upstream port>
   MODEL_PROXY_LOG_ROTATE_SECONDS=<optional; defaults to 86400>
   MODEL_PROXY_LOG_ROTATE_KEEP=<optional; defaults to 5>

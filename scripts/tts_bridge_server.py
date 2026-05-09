@@ -23,11 +23,11 @@ UNSUPPORTED_FORMAT_FALLBACKS = {
     "ogg": "wav",
 }
 
-DEFAULT_CONFIG_DIR = "~/.llm-ops"
+DEFAULT_CONFIG_DIR = "~/.config/llm-ops/tts"
 DEFAULT_PRONOUNCE_CONFIG = "pronounce.json"
 DEFAULT_VOICE_MAP_CONFIG = "voice-map.json"
 DEFAULT_SAMPLES_DIR = "~/LLM_Repository/TTS/Samples"
-DEFAULT_LOG_PATH = "~/.llm-ops/logs/tts-bridge.log"
+DEFAULT_LOG_PATH = "~/.local/state/llm-ops/logs/tts-bridge.log"
 
 
 class BridgeConfigError(RuntimeError):

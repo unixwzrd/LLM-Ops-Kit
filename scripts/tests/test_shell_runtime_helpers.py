@@ -56,11 +56,55 @@ class ShellRuntimeHelperTests(unittest.TestCase):
             self.assertIn("========== Qwen3.5 - MARKTIME", proc.stdout)
             self.assertIn("UTC", proc.stdout)
 
+    def test_common_shell_defaults_use_platform_neutral_state_and_config_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            proc = self.run_bash(
+                f"""
+                . "{COMMON_SH}"
+                printf 'config_home=%s\\n' "$LLMOPS_CONFIG_HOME"
+                printf 'config_dir=%s\\n' "$LLMOPS_CONFIG_DIR"
+                printf 'state_home=%s\\n' "$LLMOPS_STATE_HOME"
+                printf 'run_dir=%s\\n' "$LLMOPS_RUN_DIR"
+                printf 'log_dir=%s\\n' "$LLMOPS_LOG_DIR"
+                printf 'backup_dir=%s\\n' "$LLMOPS_BACKUP_DIR"
+                printf 'state_file=%s\\n' "$(state_file_path)"
+                """,
+                env={"HOME": str(home), "LLMOPS_HOME": str(home / ".llm-ops")},
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            expected_config = home / ".config" / "llm-ops"
+            expected_state = home / ".local" / "state" / "llm-ops"
+            self.assertIn(f"config_home={expected_config}", proc.stdout)
+            self.assertIn(f"config_dir={expected_config / 'config'}", proc.stdout)
+            self.assertIn(f"state_home={expected_state}", proc.stdout)
+            self.assertIn(f"run_dir={expected_state / 'run'}", proc.stdout)
+            self.assertIn(f"log_dir={expected_state / 'logs'}", proc.stdout)
+            self.assertIn(f"backup_dir={expected_state / 'backups'}", proc.stdout)
+            self.assertIn(f"state_file={expected_state / 'runtime-state.env'}", proc.stdout)
+
+    def test_load_shell_env_reads_xdg_config_env(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            config_home = home / ".config" / "llm-ops"
+            config_home.mkdir(parents=True)
+            (config_home / "config.env").write_text("LLMOPS_TEST_FROM_CONFIG=xdg\n", encoding="utf-8")
+            proc = self.run_bash(
+                f"""
+                . "{COMMON_SH}"
+                load_shell_env
+                printf '%s\\n' "$LLMOPS_TEST_FROM_CONFIG"
+                """,
+                env={"HOME": str(home), "LLMOPS_HOME": str(home / ".llm-ops")},
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertEqual(proc.stdout.strip(), "xdg")
+
     def test_modelctl_seeds_env_override_when_missing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp) / "home"
             llmops_home = home / ".llm-ops"
-            config_dir = llmops_home / "config"
+            config_dir = home / ".config" / "llm-ops" / "config"
             config_dir.mkdir(parents=True)
             template_dir = llmops_home / "current" / "scripts" / "templates"
             template_dir.mkdir(parents=True)
@@ -93,6 +137,7 @@ class ShellRuntimeHelperTests(unittest.TestCase):
                 env={
                     "HOME": str(home),
                     "LLMOPS_HOME": str(llmops_home),
+                    "LLMOPS_CONFIG_DIR": str(config_dir),
                 },
             )
             self.assertEqual(proc.returncode, 2, proc.stderr)
@@ -124,6 +169,7 @@ class ShellRuntimeHelperTests(unittest.TestCase):
                 env={
                     "HOME": str(home),
                     "LLMOPS_HOME": str(llmops_home),
+                    "LLMOPS_CONFIG_DIR": str(config_dir),
                 },
             )
             self.assertEqual(proc.returncode, 0, proc.stderr)
@@ -157,6 +203,7 @@ class ShellRuntimeHelperTests(unittest.TestCase):
                 env={
                     "HOME": str(home),
                     "LLMOPS_HOME": str(llmops_home),
+                    "LLMOPS_CONFIG_DIR": str(config_dir),
                     "MODEL": "/tmp/external-model.gguf",
                     "CTX_SIZE": "777",
                     "CHAT_TEMPLATE": str(external_template),
@@ -198,6 +245,7 @@ class ShellRuntimeHelperTests(unittest.TestCase):
                 env={
                     "HOME": str(home),
                     "LLMOPS_HOME": str(llmops_home),
+                    "LLMOPS_CONFIG_DIR": str(config_dir),
                 },
             )
             self.assertEqual(proc.returncode, 0, proc.stderr)
@@ -355,6 +403,7 @@ class ShellRuntimeHelperTests(unittest.TestCase):
             self.assertIn('LLMOPS_DEPLOY_BASE_DIR=/Users/agent-user', config_text)
             self.assertIn('LLMOPS_DEPLOY_INSTALL_PREFIX=/Users/agent-user/.llm-ops', config_text)
             self.assertIn('LLMOPS_DEPLOY_BIN_DIR=/Users/agent-user/bin', config_text)
+            self.assertIn('LLMOPS_DEPLOY_STATE_FILE=/Users/agent-user/.local/state/llm-ops/runtime-state.env', config_text)
             self.assertIn('LLMOPS_DEPLOY_INSTALL_SECRETS_KIT=1', config_text)
 
     def test_stage_runtime_builds_trimmed_payload(self) -> None:
@@ -374,7 +423,7 @@ class ShellRuntimeHelperTests(unittest.TestCase):
                         'LLMOPS_DEPLOY_BASE_DIR="~"',
                         'LLMOPS_DEPLOY_INSTALL_PREFIX="~/.llm-ops"',
                         'LLMOPS_DEPLOY_BIN_DIR="~/bin"',
-                        'LLMOPS_DEPLOY_STATE_FILE="~/.llm-ops/runtime-state.env"',
+                        'LLMOPS_DEPLOY_STATE_FILE="~/.local/state/llm-ops/runtime-state.env"',
                         'LLMOPS_DEPLOY_VENV_PATH="~/.llm-ops/venv"',
                         'LLMOPS_DEPLOY_INSTALL_SECRETS_KIT="0"',
                         'LLMOPS_DEPLOY_SECRETS_KIT_SOURCE="git+https://github.com/unixwzrd/Secrets-Kit.git"',
@@ -417,7 +466,7 @@ class ShellRuntimeHelperTests(unittest.TestCase):
                         'LLMOPS_DEPLOY_BASE_DIR="~"',
                         'LLMOPS_DEPLOY_INSTALL_PREFIX="~/.llm-ops"',
                         'LLMOPS_DEPLOY_BIN_DIR="~/bin"',
-                        'LLMOPS_DEPLOY_STATE_FILE="~/.llm-ops/runtime-state.env"',
+                        'LLMOPS_DEPLOY_STATE_FILE="~/.local/state/llm-ops/runtime-state.env"',
                         'LLMOPS_DEPLOY_VENV_PATH="~/.llm-ops/venv"',
                         'LLMOPS_DEPLOY_INSTALL_SECRETS_KIT="0"',
                         'LLMOPS_DEPLOY_SECRETS_KIT_SOURCE="git+https://github.com/unixwzrd/Secrets-Kit.git"',
@@ -478,6 +527,12 @@ class ShellRuntimeHelperTests(unittest.TestCase):
                 "  '~') remote_path=\"$remote_home\" ;;\n"
                 "  '~/'*) remote_path=\"$remote_home/${remote_path#~/}\" ;;\n"
                 "esac\n"
+                "if [[ -f \"$src\" ]]; then\n"
+                "  mkdir -p \"$(dirname \"$remote_path\")\"\n"
+                "  cp \"$src\" \"$remote_path\"\n"
+                "  printf '%s -> %s\\n' \"$src\" \"$remote_path\" >> \"$log_file\"\n"
+                "  exit 0\n"
+                "fi\n"
                 "mkdir -p \"$remote_path\"\n"
                 "if [[ \"$delete_mode\" == \"1\" && -d \"$remote_path\" ]]; then\n"
                 "  find \"$remote_path\" -mindepth 1 -maxdepth 1 -exec rm -rf {} +\n"
@@ -503,7 +558,7 @@ class ShellRuntimeHelperTests(unittest.TestCase):
             )
             self.assertEqual(proc.returncode, 0, proc.stderr)
             self.assertTrue((remote_home / ".llm-ops" / "current" / "scripts" / "agentctl").exists())
-            self.assertTrue((remote_home / ".llm-ops" / "runtime-state.env").exists())
+            self.assertTrue((remote_home / ".local" / "state" / "llm-ops" / "runtime-state.env").exists())
             self.assertTrue((remote_home / ".llm-ops" / "venv" / "bin" / "python").exists())
             self.assertTrue((remote_home / "bin" / "agentctl").is_symlink())
             self.assertTrue(ssh_log.exists())
@@ -526,7 +581,7 @@ class ShellRuntimeHelperTests(unittest.TestCase):
                         'LLMOPS_DEPLOY_BASE_DIR="~"',
                         'LLMOPS_DEPLOY_INSTALL_PREFIX="~/.llm-ops"',
                         'LLMOPS_DEPLOY_BIN_DIR="~/bin"',
-                        'LLMOPS_DEPLOY_STATE_FILE="~/.llm-ops/runtime-state.env"',
+                        'LLMOPS_DEPLOY_STATE_FILE="~/.local/state/llm-ops/runtime-state.env"',
                         'LLMOPS_DEPLOY_VENV_PATH="~/.llm-ops/venv"',
                         'LLMOPS_DEPLOY_INSTALL_SECRETS_KIT="0"',
                         'LLMOPS_DEPLOY_SECRETS_KIT_SOURCE="git+https://github.com/unixwzrd/Secrets-Kit.git"',
@@ -579,6 +634,11 @@ class ShellRuntimeHelperTests(unittest.TestCase):
                 "  '~') remote_path=\"$remote_home\" ;;\n"
                 "  '~/'*) remote_path=\"$remote_home/${remote_path#~/}\" ;;\n"
                 "esac\n"
+                "if [[ -f \"$src\" ]]; then\n"
+                "  mkdir -p \"$(dirname \"$remote_path\")\"\n"
+                "  cp \"$src\" \"$remote_path\"\n"
+                "  exit 0\n"
+                "fi\n"
                 "mkdir -p \"$remote_path\"\n"
                 "cp -R \"$src\"/. \"$remote_path\"/\n",
                 encoding="utf-8",
@@ -605,7 +665,7 @@ class ShellRuntimeHelperTests(unittest.TestCase):
             home = Path(tmp) / "home"
             llmops_home = home / ".llm-ops"
             openclaw_home = home / ".openclaw"
-            config_dir = llmops_home / "config" / "agents"
+            config_dir = home / ".config" / "llm-ops" / "config" / "agents"
             config_dir.mkdir(parents=True)
             openclaw_home.mkdir(parents=True)
             (openclaw_home / ".env").write_text("OPENAI_API_KEY=from-dotenv\n", encoding="utf-8")
@@ -790,6 +850,7 @@ class ShellRuntimeHelperTests(unittest.TestCase):
                 env={
                     "HOME": str(home),
                     "LLMOPS_HOME": str(llmops_home),
+                    "LLMOPS_CONFIG_DIR": str(llmops_home / "config"),
                 },
             )
             self.assertEqual(proc.returncode, 2, proc.stderr)
@@ -986,7 +1047,7 @@ class ShellRuntimeHelperTests(unittest.TestCase):
             self.assertIn("gateway run --port 18789|sec-gateway|sec-telegram", invocations.read_text(encoding="utf-8"))
             self.assertIn("run --service openclaw --account miafour --names OPENCLAW_GATEWAY_TOKEN,TELEGRAM_BOT_TOKEN,OPENAI_API_KEY,HUGGINGFACE_API_KEY,LOCAL_EMBEDDING_API_KEY,BRAVE_SEARCH_API_KEY,ELEVENLABS_API_KEY,SAG_API_KEY", args_log.read_text(encoding="utf-8"))
             self.assertEqual(seckit_env_log.read_text(encoding="utf-8").splitlines(), ["OPENCLAW_GATEWAY_TOKEN=", "TELEGRAM_BOT_TOKEN="])
-            self.assertTrue((llmops_home / "config" / "agents" / "openclaw.env").exists())
+            self.assertTrue((home / ".config" / "llm-ops" / "config" / "agents" / "openclaw.env").exists())
 
     def test_gateway_start_stop_openclaw_with_fake_command(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1052,7 +1113,7 @@ class ShellRuntimeHelperTests(unittest.TestCase):
             self.assertIn("agentctl-openclaw.log", status.stdout)
             self.assertIn("agentctl-hermes.log", status.stdout)
 
-            pid_dir = llmops_home / "run"
+            pid_dir = home / ".local" / "state" / "llm-ops" / "run"
             self.assertTrue((pid_dir / "agentctl-openclaw.pid").exists())
             self.assertTrue((pid_dir / "agentctl-hermes.pid").exists())
 
@@ -1200,7 +1261,7 @@ class ShellRuntimeHelperTests(unittest.TestCase):
             self.assertNotIn("fake seckit should not run", proc.stderr)
             self.assertNotIn("copied template config", proc.stderr)
             self.assertFalse(plist_path.exists())
-            self.assertFalse((llmops_home / "config" / "agents" / "openclaw.env").exists())
+            self.assertFalse((home / ".config" / "llm-ops" / "config" / "agents" / "openclaw.env").exists())
 
 
 if __name__ == "__main__":

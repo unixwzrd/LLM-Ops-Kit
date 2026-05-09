@@ -22,7 +22,7 @@ LISTEN_HOST="${TTS_BRIDGE_HOST:-127.0.0.1}"
 LISTEN_PORT="${TTS_BRIDGE_PORT:-11440}"
 UPSTREAM_BASE="${TTS_BRIDGE_UPSTREAM_BASE:-}"
 MODEL_PATH="${TTS_BRIDGE_MODEL:-$HOME/LLM_Repository/TTS/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit}"
-CONFIG_DIR="${TTS_BRIDGE_CONFIG_DIR:-$HOME/.llm-ops}"
+CONFIG_DIR="${TTS_BRIDGE_CONFIG_DIR:-$LLMOPS_CONFIG_HOME/tts}"
 PRONOUNCE_CONFIG="${TTS_BRIDGE_PRONOUNCE_CONFIG:-}"
 VOICE_MAP_CONFIG="${TTS_BRIDGE_VOICE_MAP_CONFIG:-}"
 SAMPLES_DIR="${TTS_BRIDGE_SAMPLES_DIR:-$HOME/LLM_Repository/TTS/Samples}"
@@ -45,15 +45,15 @@ Usage: tts-bridge [start|stop|restart|status] [-- <extra python args>]
 Env overrides:
   TTS_BRIDGE_HOST             (default: 127.0.0.1)
   TTS_BRIDGE_PORT             (default: 11440)
-  TTS_BRIDGE_UPSTREAM_BASE    (required from ~/.llm-ops/config.env or explicit env)
+  TTS_BRIDGE_UPSTREAM_BASE    (required from ~/.config/llm-ops/config.env or explicit env)
   TTS_BRIDGE_MODEL            (default: Qwen3-TTS local path)
   TTS_BRIDGE_VOICE            (ignored by wrapper; bridge code selects/normalizes the effective voice)
   TTS_BRIDGE_PREFER_INCOMING_VOICE (default: 0; set 1 to honor incoming voice)
-  TTS_BRIDGE_CONFIG_DIR       (default: ~/.llm-ops)
+  TTS_BRIDGE_CONFIG_DIR       (default: ~/.config/llm-ops/tts)
   TTS_BRIDGE_PRONOUNCE_CONFIG (optional; defaults to <config-dir>/pronounce.json)
   TTS_BRIDGE_VOICE_MAP_CONFIG (optional; defaults to <config-dir>/voice-map.json)
   TTS_BRIDGE_SAMPLES_DIR      (default: ~/LLM_Repository/TTS/Samples)
-  TTS_BRIDGE_LOG_PATH         (default: ~/.llm-ops/logs/tts-bridge.log)
+  TTS_BRIDGE_LOG_PATH         (default: ~/.local/state/llm-ops/logs/tts-bridge.log)
   TTS_BRIDGE_LOG_ROTATE_SECONDS (default: 86400)
   TTS_BRIDGE_LOG_ROTATE_KEEP  (default: 5)
   TTS_BRIDGE_REF_AUDIO        (optional bridge-level fallback)

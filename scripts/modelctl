@@ -99,8 +99,8 @@ load_model_defaults() {
 
   # Precedence (highest -> lowest):
   # 1) external environment
-  # 2) ~/.llm-ops/config.env (via load_shell_env)
-  # 3) ~/.llm-ops/config/<Model>.env
+  # 2) ~/.config/llm-ops/config.env (via load_shell_env)
+  # 3) ~/.config/llm-ops/config/<Model>.env
   # 4) model profile
   # 5) model-kind defaults
   # 6) global defaults

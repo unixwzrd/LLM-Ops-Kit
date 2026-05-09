@@ -4,7 +4,8 @@ set -euo pipefail
 INSTALL_BASE="${LLMOPS_INSTALL_BASE:-$HOME/.llm-ops}"
 INSTALL_DIR="$INSTALL_BASE/current"
 BIN_DIR="${BIN_DIR:-$HOME/bin}"
-STATE_FILE="${LLMOPS_STATE_FILE:-$HOME/.llm-ops/runtime-state.env}"
+STATE_HOME="${LLMOPS_STATE_HOME:-${XDG_STATE_HOME:-$HOME/.local/state}/llm-ops}"
+STATE_FILE="${LLMOPS_STATE_FILE:-$STATE_HOME/runtime-state.env}"
 KEEP_FILES=0
 
 usage() {
@@ -14,7 +15,7 @@ Usage: $(basename "$0") [options]
 Options:
   --prefix <path>    Install base dir (default: ~/.llm-ops)
   --bin-dir <path>   Runtime bin dir (default: ~/bin)
-  --state-file <path> Runtime state file (default: ~/.llm-ops/runtime-state.env)
+  --state-file <path> Runtime state file (default: ~/.local/state/llm-ops/runtime-state.env)
   --keep-files       Keep installed runtime files; remove links only
   -h, --help         Show this help
 USAGE

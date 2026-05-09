@@ -33,7 +33,7 @@ USE_CUSTOM_TEMPLATE="${USE_CUSTOM_TEMPLATE:-0}"
 CHAT_TEMPLATE="${CHAT_TEMPLATE:-}"
 VERBOSE_PROMPT="${VERBOSE_PROMPT:-0}"
 
-# Sampling defaults (external env or ~/.llm-ops/config.env can override directly)
+# Sampling defaults (external env or ~/.config/llm-ops/config.env can override directly)
 TEMP="${TEMP:-1.0}"
 TOP_P="${TOP_P:-0.95}"
 TOP_K="${TOP_K:-20}"
