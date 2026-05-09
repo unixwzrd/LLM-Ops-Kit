@@ -1,4 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-echo "openclaw-stack: removed; use agentctl for agents and modelctl for models instead" >&2
-exit 2

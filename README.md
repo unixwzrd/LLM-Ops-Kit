@@ -196,7 +196,7 @@ Operational notes:
 
 - `modelctl settings` now prints `RUNTIME_MODE` and `RUNTIME_ROOT`.
 - `agentctl`, `model-proxy`, and `tts-bridge` status now print retention settings.
-- `agentctl` now seeds backend override templates under `~/.llm-ops/config/agents/` and provides an internal `launchd-run` path so LaunchAgents can load backend-native `.env` files plus selective `seckit` exports without using workspace-local wrapper scripts.
+- `agentctl` now seeds backend override templates under `~/.llm-ops/config/agents/` and provides an internal `launchd-run` path. For OpenClaw, that path can wrap startup with `seckit run` when explicitly enabled.
 - Runtime logs rotate in place and install backups under `~/.llm-ops/backups` are pruned by policy.
 - In the current direct-run agent wrapper mode, use `~/bin/agentctl logs` instead of relying on `openclaw logs --follow`.
 - `agentctl` owns agent runtime lifecycle across OpenClaw and Hermes.
@@ -270,7 +270,7 @@ A future optional path is to add `pyproject.toml` and package wrappers for insta
 - [QUICKSTART](docs/QUICKSTART.md) — fast path setup and startup
 - [HOW_IT_WORKS](docs/HOW_IT_WORKS.md) — plain-language system overview
 - [SWITCHING](docs/SWITCHING.md) — switching models and agents
-- [CONFIGURATION](docs/CONFIGURATION.md) — environment overrides, host/path defaults, and optional `seckit` runtime export workflow
+- [CONFIGURATION](docs/CONFIGURATION.md) — environment overrides, host/path defaults, and optional `seckit run` integration
 - [SSH_SETUP_RUNBOOK](docs/SSH_SETUP_RUNBOOK.md) — SSH key setup and deployment auth flow
 - [TROUBLESHOOTING](docs/TROUBLESHOOTING.md) — symptom-driven fixes
 - [ARCHITECTURE](docs/ARCHITECTURE.md) — component and runtime flow overview

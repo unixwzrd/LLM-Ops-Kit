@@ -1,4 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-echo "gateway: removed; use agentctl instead" >&2
-exit 2
