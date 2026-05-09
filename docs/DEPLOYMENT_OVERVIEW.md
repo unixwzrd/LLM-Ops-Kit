@@ -43,19 +43,22 @@ The admin workflow is inventory driven. The preferred live inventory path is:
 ~/.config/llm-ops/inventory.json
 ```
 
-If that file is missing, `llmops-admin` falls back to the legacy admin
-inventory and then the checked-in example:
+If that file is missing, `llmops-admin` falls back to the checked-in JSON
+example:
 
 ```text
-~/.llm-ops/inventory.yml
-deploy/inventory.yml
+deploy/inventory.json
 ```
 
 The docs copy lives at:
 
 ```text
-docs/inventory.example.yml
+docs/inventory.example.json
 ```
+
+Legacy YAML inventories are migration input only. Pass one explicitly with
+`--inventory <path>` or run `scripts/llmops-admin migrate-config --dry-run` to
+plan conversion to `~/.config/llm-ops/inventory.json`.
 
 Each host record must define:
 

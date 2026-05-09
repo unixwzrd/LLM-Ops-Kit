@@ -42,8 +42,9 @@ scripts/llmops-admin bootstrap-host --dry-run
 scripts/llmops-admin stage --dry-run --bundle-id smoke
 ```
 
-The admin workflow is inventory based. Edit `~/.llm-ops/inventory.yml` for live
-targets, or start from `deploy/inventory.yml`.
+The admin workflow is inventory based. Edit
+`~/.config/llm-ops/inventory.json` for live targets, or start from
+`deploy/inventory.json`.
 
 For the full deployment sequence, see
 [Deployment Overview](./DEPLOYMENT_OVERVIEW.md).

@@ -26,10 +26,9 @@ from llmops_paths import resolve_paths
 from llmops_config import ConfigError, default_config, load_config
 from gguf_metadata import GgufError, read_gguf_metadata, write_metadata_cache
 
-DEFAULT_INVENTORY = REPO_ROOT / "deploy" / "inventory.yml"
-FALLBACK_INVENTORY = REPO_ROOT / "docs" / "inventory.example.yml"
+DEFAULT_INVENTORY = REPO_ROOT / "deploy" / "inventory.json"
+FALLBACK_INVENTORY = REPO_ROOT / "docs" / "inventory.example.json"
 ADMIN_INVENTORY = resolve_paths().inventory_file
-LEGACY_ADMIN_INVENTORY = Path("~/.llm-ops/inventory.yml").expanduser()
 DEFAULT_STAGE_ROOT = resolve_paths().stage_dir
 SUPPORTED_ROLES = {"admin", "llm", "agent", "hybrid"}
 CONFIG_PRECEDENCE = (
@@ -139,8 +138,6 @@ def inventory_path(args: argparse.Namespace) -> Path:
         return Path(args.inventory).expanduser()
     if ADMIN_INVENTORY.exists():
         return ADMIN_INVENTORY
-    if LEGACY_ADMIN_INVENTORY.exists():
-        return LEGACY_ADMIN_INVENTORY
     if DEFAULT_INVENTORY.exists():
         return DEFAULT_INVENTORY
     return FALLBACK_INVENTORY

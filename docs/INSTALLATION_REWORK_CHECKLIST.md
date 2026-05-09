@@ -10,7 +10,7 @@
 - [x] Verify noninteractive SSH planning for each host.
 - [x] Create remote install directories planning.
 - [x] Write host readiness marker planning.
-- [x] Add checked-in `deploy/inventory.yml` example.
+- [x] Add checked-in `deploy/inventory.json` example.
 - [ ] Document bootstrap recovery steps.
 
 ## Phase 2: Local Staging

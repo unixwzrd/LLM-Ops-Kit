@@ -99,6 +99,37 @@ class LlmopsAdminTests(unittest.TestCase):
             self.assertEqual([host.name for host in hosts], ["llm-json"])
             self.assertEqual(hosts[0].destination, "deploy@llm-json.local")
 
+    def test_inventory_path_defaults_to_json_not_legacy_yaml(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            admin_inventory = root / "config" / "inventory.json"
+            legacy_inventory = root / ".llm-ops" / "inventory.yml"
+            default_inventory = root / "deploy" / "inventory.json"
+            fallback_inventory = root / "docs" / "inventory.example.json"
+            legacy_inventory.parent.mkdir(parents=True)
+            default_inventory.parent.mkdir(parents=True)
+            fallback_inventory.parent.mkdir(parents=True)
+            legacy_inventory.write_text("hosts: []\n", encoding="utf-8")
+            default_inventory.write_text('{"hosts": []}\n', encoding="utf-8")
+            fallback_inventory.write_text('{"hosts": []}\n', encoding="utf-8")
+            old_values = (
+                self.admin.ADMIN_INVENTORY,
+                self.admin.DEFAULT_INVENTORY,
+                self.admin.FALLBACK_INVENTORY,
+            )
+            try:
+                self.admin.ADMIN_INVENTORY = admin_inventory
+                self.admin.DEFAULT_INVENTORY = default_inventory
+                self.admin.FALLBACK_INVENTORY = fallback_inventory
+                selected = self.admin.inventory_path(Namespace(inventory=None))
+                self.assertEqual(selected, default_inventory)
+            finally:
+                (
+                    self.admin.ADMIN_INVENTORY,
+                    self.admin.DEFAULT_INVENTORY,
+                    self.admin.FALLBACK_INVENTORY,
+                ) = old_values
+
     def test_config_precedence_reports_cli_source(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             host = self.admin.load_inventory(self.write_inventory(Path(tmp)))[0]
