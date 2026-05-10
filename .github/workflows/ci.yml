@@ -21,18 +21,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y shellcheck
 
-      - name: Shell syntax checks
+      - name: Run local precheck
         run: |
-          bash -n scripts/lib/common.sh
-          bash -n scripts/modelctl
-          bash -n scripts/tts-bridge
-          bash -n scripts/model-proxy
-          bash -n scripts/gateway
-
-      - name: Shellcheck wrappers
-        run: |
-          shellcheck scripts/lib/common.sh scripts/modelctl scripts/tts-bridge scripts/model-proxy scripts/gateway
-
-      - name: Run Python regression tests
-        run: |
-          python -m unittest discover -s scripts/tests -p 'test_*.py'
+          scripts/precheck
