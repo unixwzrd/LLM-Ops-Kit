@@ -5,6 +5,9 @@
 
 Use this checklist after end-to-end testing and before the final release commit/tag.
 
+Detailed command-by-command validation lives in
+[Manual End-to-End Release Test Checklist](./MANUAL_E2E_TEST_CHECKLIST.md).
+
 ## Runtime payload audit
 
 - confirm `stage/` is ignored and not tracked
