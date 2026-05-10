@@ -44,3 +44,4 @@ This is the canonical index for operator docs in `LLM-Ops-Kit`.
 ## Reference
 
 - [Glossary](./GLOSSARY.md)
+- [Consolidated TODO](./TODO.md)

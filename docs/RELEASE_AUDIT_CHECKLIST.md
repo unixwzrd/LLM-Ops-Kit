@@ -1,7 +1,7 @@
 # Release Audit Checklist
 
 **Created**: 2026-04-17
-**Updated**: 2026-04-17
+**Updated**: 2026-05-10
 
 Use this checklist after end-to-end testing and before the final release commit/tag.
 
@@ -34,4 +34,5 @@ Use this checklist after end-to-end testing and before the final release commit/
 - optional runtime venv creation works
 - optional Secrets-Kit install path works when enabled
 - repo tree is clean apart from intentional release changes
+- ignored local artifacts are clean or intentionally present (`git clean -Xdn`)
 - version/tag will represent the cleaned staged-deploy workflow, not an intermediate migration snapshot

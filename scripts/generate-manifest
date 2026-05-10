@@ -9,7 +9,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 is_excluded_script() {
   local name="$1"
   case "$name" in
-    modelctl|generate-manifest|deploy-runtime-links.sh|verify-runtime-links.sh|setup-ssh-deploy-key.sh|post-commit-sync.sample|sanitized-daily-report.sh|jinja-snapshot.sh|node-hygiene.sh|model_proxy_tap.py|render_chatml_prompt.py|setup-deploy|stage-runtime|push-runtime|install-runtime.sh)
+    modelctl|generate-manifest|deploy-runtime-links.sh|verify-runtime-links.sh|setup-ssh-deploy-key.sh|post-commit-sync.sample|jinja-snapshot.sh|model_proxy_tap.py|render_chatml_prompt.py|setup-deploy|stage-runtime|push-runtime|install-runtime.sh)
       return 0
       ;;
     *.py|*.sample)
@@ -24,9 +24,6 @@ is_excluded_script() {
 is_excluded_bin() {
   local name="$1"
   case "$name" in
-    openclaw-start.sh|node-hygiene.sh)
-      return 0
-      ;;
     *)
       return 1
       ;;

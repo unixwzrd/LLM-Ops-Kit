@@ -36,6 +36,7 @@ Back: [docs/INDEX.md](./INDEX.md)
 ## Reference
 
 - [`GLOSSARY.md`](./GLOSSARY.md) — terms used across the repo
+- [`TODO.md`](./TODO.md) — consolidated maintainer TODO after the rework
 
 ## Internal
 
