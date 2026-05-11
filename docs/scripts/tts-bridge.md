@@ -13,7 +13,7 @@ The bridge can now:
 - fail loudly when configuration is malformed or the upstream request itself is invalid
 
 ```bash
-~/bin/tts-bridge [start|stop|restart|status]
+llmops tts-bridge [start|stop|restart|status]
 ```
 
 Default runtime:
@@ -138,7 +138,7 @@ Startup and failure behavior:
 Startup logging:
 
 - startup logs no longer dump a JSON config blob
-- use `~/bin/tts-bridge status` as the canonical human-readable runtime summary
+- use `llmops tts-bridge status` as the canonical human-readable runtime summary
 - routine `/health` probes are not written into the bridge log
 
 Log rotation behavior:

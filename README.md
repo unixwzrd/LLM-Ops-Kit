@@ -41,7 +41,7 @@ Docs index: [docs/INDEX.md](docs/INDEX.md)
 - Unified startup/shutdown/status scripts for agent runtimes, model-proxy, TTS, LLM, and embeddings
 - Model profile management (`Qwen3`, `Qwen3.5`, `BGEm3`) via one launcher architecture
 - Deployment helpers for staged SSH rollout and runtime link management
-- Installed-runtime defaults under `~/.llm-ops/current`, with repo mode kept for explicit developer workflows
+- Installed-runtime defaults under `~/.local/llm-ops/current`, with repo mode kept for explicit developer workflows
 - Built-in runtime maintenance for log rotation and install-backup retention
 - Practical runbooks and changelog-driven operations
 - Prompt/template and observability tooling for debugging real runtime behavior
@@ -96,7 +96,7 @@ These are the profiles currently documented and validated in this toolkit:
 
 ## MLX Audio TTS API (Voice Clone)
 
-`~/bin/tts` and `~/bin/Qwen3TTS` wrap `mlx_audio.server` and expose an OpenAI-compatible endpoint:
+`llmops tts` and `llmops Qwen3TTS` wrap `mlx_audio.server` and expose an OpenAI-compatible endpoint:
 
 - `POST /v1/audio/speech`
 
@@ -153,14 +153,14 @@ scripts/llmops-admin push --stage ~/.local/share/llm-ops/stage/<bundle_id> --wor
 scripts/llmops-admin apply --stage ~/.local/share/llm-ops/stage/<bundle_id> --workers 4
 
 # 4) Verify model settings / runtime root on the target
-~/bin/Qwen3.5 settings
-~/bin/Qwen3 settings
+llmops Qwen3.5 settings
+llmops Qwen3 settings
 
 # 5) Start services
-~/bin/agentctl start
-~/bin/Qwen3 start
-~/bin/BGEm3 start
-~/bin/model-proxy start
+llmops agentctl start
+llmops Qwen3 start
+llmops BGEm3 start
+llmops model-proxy start
 ```
 
 The administrator repo checkout is the control point, not the runtime install root.
@@ -172,24 +172,24 @@ installs the scripts/programs under the host `install_root`, updates the
 ## Runtime Command Surface
 
 ```bash
-~/bin/agentctl [start|stop|restart|status] [openclaw|hermes|all]
-~/bin/agentctl [current|switch] [openclaw|hermes|all]
-~/bin/agentctl logs
-~/bin/agentctl [launchd-install|launchd-start|launchd-stop|launchd-bootout|launchd-enable|launchd-disable|launchd-remove|launchd-status] [openclaw|hermes|all]
-~/bin/model-proxy [start|stop|restart|status]
-~/bin/tts [start|stop|restart|status]
-~/bin/tts-bridge [start|stop|restart|status]
-~/bin/Qwen3TTS [start|stop|restart|status|settings|verify|test]
-~/bin/Qwen3 [start|stop|restart|status|settings|verify|test]
-~/bin/Qwen3.5 [start|stop|restart|status|settings|verify|test]
-~/bin/BGEm3 [start|stop|restart|status|settings|verify|test]
-~/bin/modelctl list
-~/bin/modelctl status
-~/bin/modelctl add --model <path> --name <label>
-~/bin/modelctl <ModelProfile> [start|stop|restart|status|settings|verify|test]
-~/bin/uninstall-runtime [--prefix <install-base>] [--bin-dir <bin-dir>] [--state-file <path>] [--keep-files]
-~/bin/openclaw-report
-~/bin/runtime-maintenance [status|rotate|prune|run]
+llmops agentctl [start|stop|restart|status] [openclaw|hermes|all]
+llmops agentctl [current|switch] [openclaw|hermes|all]
+llmops agentctl logs
+llmops agentctl [launchd-install|launchd-start|launchd-stop|launchd-bootout|launchd-enable|launchd-disable|launchd-remove|launchd-status] [openclaw|hermes|all]
+llmops model-proxy [start|stop|restart|status]
+llmops tts [start|stop|restart|status]
+llmops tts-bridge [start|stop|restart|status]
+llmops Qwen3TTS [start|stop|restart|status|settings|verify|test]
+llmops Qwen3 [start|stop|restart|status|settings|verify|test]
+llmops Qwen3.5 [start|stop|restart|status|settings|verify|test]
+llmops BGEm3 [start|stop|restart|status|settings|verify|test]
+llmops modelctl list
+llmops modelctl status
+llmops modelctl add --model <path> --name <label>
+llmops modelctl <ModelProfile> [start|stop|restart|status|settings|verify|test]
+llmops uninstall-runtime [--prefix <install-base>] [--bin-dir <bin-dir>] [--state-file <path>] [--keep-files]
+llmops openclaw-report
+llmops runtime-maintenance [status|rotate|prune|run]
 ```
 
 Operational notes:
@@ -198,7 +198,7 @@ Operational notes:
 - `agentctl`, `model-proxy`, and `tts-bridge` status now print retention settings.
 - `agentctl` now seeds backend override templates under `~/.config/llm-ops/config/agents/` and provides an internal `launchd-run` path. For OpenClaw, that path can wrap startup with `seckit run` when explicitly enabled.
 - Runtime logs rotate in place and install backups under `~/.local/state/llm-ops/backups` are pruned by policy.
-- In the current direct-run agent wrapper mode, use `~/bin/agentctl logs` instead of relying on `openclaw logs --follow`.
+- In the current direct-run agent wrapper mode, use `llmops agentctl logs` instead of relying on `openclaw logs --follow`.
 - `agentctl` owns agent runtime lifecycle across OpenClaw and Hermes.
 - `modelctl` owns model runtime lifecycle; the older bundled stack wrapper is gone.
 - `llmops-admin` is the deployment entrypoint for inventory validation, SSH bootstrap, local staging, parallel push, and remote apply from the administrator workstation.
@@ -248,9 +248,9 @@ Current profiles:
 The launcher resolves profile defaults and prints active runtime settings with:
 
 ```bash
-~/bin/Qwen3 settings
-~/bin/Qwen3.5 settings
-~/bin/BGEm3 settings
+llmops Qwen3 settings
+llmops Qwen3.5 settings
+llmops BGEm3 settings
 ```
 
 ## Packaging Status

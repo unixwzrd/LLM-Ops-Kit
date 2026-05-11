@@ -51,7 +51,7 @@ Fix:
 Notes:
 
 - Deploy auto-heals symlinks from `OpenClaw-Ops-Toolkit` to `LLM-Ops-Kit` for managed runtime commands.
-- Non-symlink files in `~/bin` are still treated as real conflicts and are not overwritten automatically.
+- Non-symlink files in `~/.local/llm-ops/bin` are still treated as real conflicts and are not overwritten automatically.
 
 ## `declare -A: invalid option`
 
@@ -80,16 +80,16 @@ Fix:
 Checks:
 
 ```bash
-~/bin/modelctl status
-~/bin/Qwen3 status
-~/bin/BGEm3 status
+llmops modelctl status
+llmops Qwen3 status
+llmops BGEm3 status
 ```
 
 Then restart target cleanly:
 
 ```bash
-~/bin/Qwen3 restart
-~/bin/BGEm3 restart
+llmops Qwen3 restart
+llmops BGEm3 restart
 ```
 
 ## Embedding indexing context-size errors
@@ -100,7 +100,7 @@ Symptoms:
 
 Actions:
 
-- Verify embedding profile settings with `~/bin/BGEm3 settings`.
+- Verify embedding profile settings with `llmops BGEm3 settings`.
 - Confirm running model actually supports the configured `CTX_SIZE`.
 - Check OpenClaw memory chunking values in `.openclaw/openclaw.json`.
 

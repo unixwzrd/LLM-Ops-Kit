@@ -3,7 +3,7 @@
 Back: [docs/INDEX.md](./INDEX.md)
 
 **Created**: 2026-02-26
-**Updated**: 2026-05-09
+**Updated**: 2026-05-11
 
 - [modelctl Guide](#modelctl-guide)
   - [Purpose](#purpose)
@@ -29,9 +29,9 @@ Any launcher name is supported as long as `scripts/models/<Launcher>.sh` exists.
 ## Commands
 
 ```bash
-~/bin/<ModelProfile> [start|stop|restart|status|settings|verify|test]
-~/bin/modelctl <ModelProfile> [start|stop|restart|status|settings|verify|test]
-~/bin/modelctl add --model <path> --name <label>
+llmops <ModelProfile> [start|stop|restart|status|settings|verify|test]
+llmops modelctl <ModelProfile> [start|stop|restart|status|settings|verify|test]
+llmops modelctl add --model <path> --name <label>
 ```
 
 - `status`: checks pidfile, validates pid is still running, validates process command shape via `ps`, and does a fast API probe.

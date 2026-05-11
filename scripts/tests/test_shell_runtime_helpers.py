@@ -16,6 +16,8 @@ AGENTCTL = REPO_ROOT / "scripts/agentctl"
 MODEL_PROXY = REPO_ROOT / "scripts/model-proxy"
 TTS_BRIDGE = REPO_ROOT / "scripts/tts-bridge"
 DEPLOY_RUNTIME_LINKS = REPO_ROOT / "scripts/deploy-runtime-links.sh"
+INSTALL_RUNTIME = REPO_ROOT / "scripts/install-runtime.sh"
+LLMOPS = REPO_ROOT / "scripts/llmops"
 SETUP_DEPLOY = REPO_ROOT / "scripts/setup-deploy"
 STAGE_RUNTIME = REPO_ROOT / "scripts/stage-runtime"
 PUSH_RUNTIME = REPO_ROOT / "scripts/push-runtime"
@@ -368,6 +370,76 @@ class ShellRuntimeHelperTests(unittest.TestCase):
             self.assertTrue(target.is_symlink())
             self.assertEqual(target.resolve(), source.resolve())
 
+    def test_llmops_dispatcher_runs_known_command_from_managed_bin(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            managed_bin = Path(tmp) / "managed-bin"
+            log_path = Path(tmp) / "modelctl.log"
+            managed_bin.mkdir()
+            modelctl = managed_bin / "modelctl"
+            modelctl.write_text(
+                "#!/usr/bin/env bash\n"
+                f"printf '%s\\n' \"$*\" > \"{log_path}\"\n",
+                encoding="utf-8",
+            )
+            modelctl.chmod(0o755)
+
+            proc = self.run_bash(
+                f'"{LLMOPS}" modelctl status',
+                env={"LLMOPS_BIN_DIR": str(managed_bin)},
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertEqual(log_path.read_text(encoding="utf-8").strip(), "status")
+
+    def test_llmops_dispatcher_rejects_unknown_command(self) -> None:
+        proc = self.run_bash(f'"{LLMOPS}" does-not-exist')
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("unknown command: does-not-exist", proc.stderr)
+
+    def test_llmops_dispatcher_help_lists_commands(self) -> None:
+        proc = self.run_bash(f'"{LLMOPS}" --help')
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("Usage: llmops <command> [args...]", proc.stdout)
+        self.assertIn("modelctl", proc.stdout)
+
+    def test_install_runtime_writes_idempotent_public_path_block(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "repo"
+            home = Path(tmp) / "home"
+            install_base = home / ".local" / "llm-ops"
+            managed_bin = install_base / "bin"
+            public_bin = home / ".local" / "bin"
+            shell_profile = home / ".bash_profile"
+            root.mkdir()
+            proc = self.run_bash(
+                f'rsync -a --exclude .git "{REPO_ROOT}/" "{root}/" && '
+                f'"{root / "scripts" / "install-runtime.sh"}" '
+                f'--source "{root}" '
+                f'--prefix "{install_base}" '
+                f'--bin-dir "{managed_bin}" '
+                f'--public-bin-dir "{public_bin}" '
+                f'--shell-profile "{shell_profile}"',
+                env={"HOME": str(home)},
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertTrue((public_bin / "llmops").is_symlink())
+            self.assertTrue((managed_bin / "modelctl").is_symlink())
+            profile_text = shell_profile.read_text(encoding="utf-8")
+            self.assertEqual(profile_text.count("# >>> llm-ops path >>>"), 1)
+            self.assertIn(f'export PATH="{public_bin}:$PATH"', profile_text)
+
+            second = self.run_bash(
+                f'"{root / "scripts" / "install-runtime.sh"}" '
+                f'--source "{root}" '
+                f'--prefix "{install_base}" '
+                f'--bin-dir "{managed_bin}" '
+                f'--public-bin-dir "{public_bin}" '
+                f'--shell-profile "{shell_profile}"',
+                env={"HOME": str(home)},
+            )
+            self.assertEqual(second.returncode, 0, second.stderr)
+            profile_text = shell_profile.read_text(encoding="utf-8")
+            self.assertEqual(profile_text.count("# >>> llm-ops path >>>"), 1)
+
     def test_setup_deploy_writes_named_config(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -376,6 +448,7 @@ class ShellRuntimeHelperTests(unittest.TestCase):
             answers = "\n".join(
                 [
                     "agent-user",
+                    "",
                     "",
                     "",
                     "",
@@ -401,8 +474,9 @@ class ShellRuntimeHelperTests(unittest.TestCase):
             self.assertIn('LLMOPS_DEPLOY_CONFIG_NAME=demo', config_text)
             self.assertIn('LLMOPS_DEPLOY_HOSTS=example-host', config_text)
             self.assertIn('LLMOPS_DEPLOY_BASE_DIR=/Users/agent-user', config_text)
-            self.assertIn('LLMOPS_DEPLOY_INSTALL_PREFIX=/Users/agent-user/.llm-ops', config_text)
-            self.assertIn('LLMOPS_DEPLOY_BIN_DIR=/Users/agent-user/bin', config_text)
+            self.assertIn('LLMOPS_DEPLOY_INSTALL_PREFIX=/Users/agent-user/.local/llm-ops', config_text)
+            self.assertIn('LLMOPS_DEPLOY_BIN_DIR=/Users/agent-user/.local/llm-ops/bin', config_text)
+            self.assertIn('LLMOPS_DEPLOY_PUBLIC_BIN_DIR=/Users/agent-user/.local/bin', config_text)
             self.assertIn('LLMOPS_DEPLOY_STATE_FILE=/Users/agent-user/.local/state/llm-ops/runtime-state.env', config_text)
             self.assertIn('LLMOPS_DEPLOY_INSTALL_SECRETS_KIT=1', config_text)
 
@@ -421,10 +495,11 @@ class ShellRuntimeHelperTests(unittest.TestCase):
                         'LLMOPS_DEPLOY_HOSTS="fake-host"',
                         'LLMOPS_DEPLOY_USER="agent-user"',
                         'LLMOPS_DEPLOY_BASE_DIR="~"',
-                        'LLMOPS_DEPLOY_INSTALL_PREFIX="~/.llm-ops"',
-                        'LLMOPS_DEPLOY_BIN_DIR="~/bin"',
+                        'LLMOPS_DEPLOY_INSTALL_PREFIX="~/.local/llm-ops"',
+                        'LLMOPS_DEPLOY_BIN_DIR="~/.local/llm-ops/bin"',
+                        'LLMOPS_DEPLOY_PUBLIC_BIN_DIR="~/.local/bin"',
                         'LLMOPS_DEPLOY_STATE_FILE="~/.local/state/llm-ops/runtime-state.env"',
-                        'LLMOPS_DEPLOY_VENV_PATH="~/.llm-ops/venv"',
+                        'LLMOPS_DEPLOY_VENV_PATH="~/.local/llm-ops/venv"',
                         'LLMOPS_DEPLOY_INSTALL_SECRETS_KIT="0"',
                         'LLMOPS_DEPLOY_SECRETS_KIT_SOURCE="git+https://github.com/unixwzrd/Secrets-Kit.git"',
                         'LLMOPS_DEPLOY_SSH_KEY_PATH=""',
@@ -440,11 +515,13 @@ class ShellRuntimeHelperTests(unittest.TestCase):
                 },
             )
             self.assertEqual(proc.returncode, 0, proc.stderr)
-            staged_install = stage_dir / Path(str(home).lstrip("/")) / ".llm-ops" / "current"
-            staged_bin = stage_dir / Path(str(home).lstrip("/")) / "bin"
+            staged_install = stage_dir / Path(str(home).lstrip("/")) / ".local" / "llm-ops" / "current"
+            staged_bin = stage_dir / Path(str(home).lstrip("/")) / ".local" / "llm-ops" / "bin"
+            staged_public_bin = stage_dir / Path(str(home).lstrip("/")) / ".local" / "bin"
             self.assertTrue((staged_install / "scripts" / "agentctl").exists())
             self.assertTrue((staged_install / "scripts" / "runtime-links.manifest").exists())
             self.assertTrue(staged_bin.is_dir())
+            self.assertTrue((staged_public_bin / "llmops").is_symlink())
             self.assertTrue((stage_dir / "metadata" / "build-info.json").exists())
             self.assertFalse((staged_install / "scripts" / "tests").exists())
             self.assertFalse((stage_dir / "docs").exists())
@@ -464,10 +541,11 @@ class ShellRuntimeHelperTests(unittest.TestCase):
                         'LLMOPS_DEPLOY_HOSTS="fake-host"',
                         'LLMOPS_DEPLOY_USER="agent-user"',
                         'LLMOPS_DEPLOY_BASE_DIR="~"',
-                        'LLMOPS_DEPLOY_INSTALL_PREFIX="~/.llm-ops"',
-                        'LLMOPS_DEPLOY_BIN_DIR="~/bin"',
+                        'LLMOPS_DEPLOY_INSTALL_PREFIX="~/.local/llm-ops"',
+                        'LLMOPS_DEPLOY_BIN_DIR="~/.local/llm-ops/bin"',
+                        'LLMOPS_DEPLOY_PUBLIC_BIN_DIR="~/.local/bin"',
                         'LLMOPS_DEPLOY_STATE_FILE="~/.local/state/llm-ops/runtime-state.env"',
-                        'LLMOPS_DEPLOY_VENV_PATH="~/.llm-ops/venv"',
+                        'LLMOPS_DEPLOY_VENV_PATH="~/.local/llm-ops/venv"',
                         'LLMOPS_DEPLOY_INSTALL_SECRETS_KIT="0"',
                         'LLMOPS_DEPLOY_SECRETS_KIT_SOURCE="git+https://github.com/unixwzrd/Secrets-Kit.git"',
                         'LLMOPS_DEPLOY_SSH_KEY_PATH=""',
@@ -557,10 +635,12 @@ class ShellRuntimeHelperTests(unittest.TestCase):
                 },
             )
             self.assertEqual(proc.returncode, 0, proc.stderr)
-            self.assertTrue((remote_home / ".llm-ops" / "current" / "scripts" / "agentctl").exists())
+            self.assertTrue((remote_home / ".local" / "llm-ops" / "current" / "scripts" / "agentctl").exists())
             self.assertTrue((remote_home / ".local" / "state" / "llm-ops" / "runtime-state.env").exists())
-            self.assertTrue((remote_home / ".llm-ops" / "venv" / "bin" / "python").exists())
-            self.assertTrue((remote_home / "bin" / "agentctl").is_symlink())
+            self.assertTrue((remote_home / ".local" / "llm-ops" / "venv" / "bin" / "python").exists())
+            self.assertTrue((remote_home / ".local" / "llm-ops" / "bin" / "agentctl").is_symlink())
+            self.assertTrue((remote_home / ".local" / "bin" / "llmops").is_symlink())
+            self.assertIn(str(remote_home / ".local" / "bin"), (remote_home / ".bash_profile").read_text(encoding="utf-8"))
             self.assertTrue(ssh_log.exists())
             self.assertTrue(rsync_log.exists())
 
@@ -579,10 +659,11 @@ class ShellRuntimeHelperTests(unittest.TestCase):
                         'LLMOPS_DEPLOY_HOSTS="fake-host"',
                         'LLMOPS_DEPLOY_USER="agent-user"',
                         'LLMOPS_DEPLOY_BASE_DIR="~"',
-                        'LLMOPS_DEPLOY_INSTALL_PREFIX="~/.llm-ops"',
-                        'LLMOPS_DEPLOY_BIN_DIR="~/bin"',
+                        'LLMOPS_DEPLOY_INSTALL_PREFIX="~/.local/llm-ops"',
+                        'LLMOPS_DEPLOY_BIN_DIR="~/.local/llm-ops/bin"',
+                        'LLMOPS_DEPLOY_PUBLIC_BIN_DIR="~/.local/bin"',
                         'LLMOPS_DEPLOY_STATE_FILE="~/.local/state/llm-ops/runtime-state.env"',
-                        'LLMOPS_DEPLOY_VENV_PATH="~/.llm-ops/venv"',
+                        'LLMOPS_DEPLOY_VENV_PATH="~/.local/llm-ops/venv"',
                         'LLMOPS_DEPLOY_INSTALL_SECRETS_KIT="0"',
                         'LLMOPS_DEPLOY_SECRETS_KIT_SOURCE="git+https://github.com/unixwzrd/Secrets-Kit.git"',
                         'LLMOPS_DEPLOY_SSH_KEY_PATH=""',

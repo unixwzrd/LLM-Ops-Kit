@@ -3,7 +3,7 @@
 Back: [docs/INDEX.md](./INDEX.md)
 
 **Created**: 2026-02-28  
-**Updated**: 2026-05-09
+**Updated**: 2026-05-11
 
 - [Configuration Guide](#configuration-guide)
   - [What This Doc Is For](#what-this-doc-is-for)
@@ -269,8 +269,8 @@ Notes:
 
 - `tts-bridge` does not use a single dedicated shell config file of its own.
 - Its extra structured config comes from JSON files, typically:
-  - `~/.llm-ops/pronounce.json`
-  - `~/.llm-ops/voice-map.json`
+  - `~/.local/llm-ops/pronounce.json`
+  - `~/.local/llm-ops/voice-map.json`
 - Environment chooses the paths; the JSON files provide the structured bridge data.
 
 ## Core Environment Variables
@@ -285,7 +285,7 @@ Notes:
 
 ### Toolkit roots and paths
 
-- `LLMOPS_HOME`: installed runtime payload root (default `~/.llm-ops`; command payload defaults to `$LLMOPS_HOME/current`).
+- `LLMOPS_HOME`: installed runtime payload root (default `~/.local/llm-ops`; command payload defaults to `$LLMOPS_HOME/current`).
 - `LLMOPS_CONFIG_HOME`: canonical config root (default `~/.config/llm-ops`).
 - `LLMOPS_STATE_HOME`: canonical state root (default `~/.local/state/llm-ops`).
 - `LLMOPS_CONFIG_DIR`: transitional env override dir (default `$LLMOPS_CONFIG_HOME/config`).

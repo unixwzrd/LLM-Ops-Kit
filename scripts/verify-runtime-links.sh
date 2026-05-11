@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MANIFEST_FILE="${MANIFEST_FILE:-$SCRIPT_DIR/runtime-links.manifest}"
 
-BIN_DIR="${BIN_DIR:-$HOME/bin}"
+BIN_DIR="${BIN_DIR:-${LLMOPS_BIN_DIR:-$HOME/.local/llm-ops/bin}}"
 RUNTIME_DIR="${RUNTIME_DIR:-${REPO_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}}"
 
 if [[ ! -f "$MANIFEST_FILE" ]]; then

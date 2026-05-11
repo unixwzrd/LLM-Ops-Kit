@@ -11,17 +11,17 @@ Prefer `BGEm3` for the current `bge-m3` embedding profile.
 ## Syntax
 
 ```bash
-~/bin/BGEen [start|stop|restart|status|settings|verify|test]
-~/bin/BGEm3 [start|stop|restart|status|settings|verify|test]
+llmops BGEen [start|stop|restart|status|settings|verify|test]
+llmops BGEm3 [start|stop|restart|status|settings|verify|test]
 ```
 
 ## Examples
 
 ```bash
-~/bin/BGEm3 settings
-~/bin/BGEm3 verify
-~/bin/BGEm3 test
-~/bin/BGEm3 restart
+llmops BGEm3 settings
+llmops BGEm3 verify
+llmops BGEm3 test
+llmops BGEm3 restart
 ```
 
 ## Notes

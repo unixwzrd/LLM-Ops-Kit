@@ -104,14 +104,14 @@ If creating a new template:
 2. Rename clearly (for example `MyModel-chatml-tools.jinja`)
 3. Keep historical-thinking filtering behavior if needed for multi-turn stability
 4. Set `CHAT_TEMPLATE` in your model profile
-5. Validate with `~/bin/MyModel settings`
+5. Validate with `llmops MyModel settings`
 
 ## 7) Validate profile before start
 
 ```bash
-~/bin/MyModel settings
-~/bin/MyModel start
-~/bin/MyModel status
+llmops MyModel settings
+llmops MyModel start
+llmops MyModel status
 ```
 
 ## 8) Optional: add provider model entry in `.openclaw/openclaw.json`
@@ -129,7 +129,7 @@ OpenClaw tracks model metadata in:
 To lock the model id (as reported by llama.cpp), use one of:
 
 ```bash
-~/bin/<Profile> verify
+llmops <Profile> verify
 curl -sS http://127.0.0.1:11434/v1/models
 ```
 

@@ -91,7 +91,8 @@ write_build_metadata() {
   "source_root": "$REPO_ROOT",
   "base_dir": "$DEPLOY_BASE_DIR",
   "install_prefix": "$DEPLOY_INSTALL_PREFIX",
-  "bin_dir": "$DEPLOY_BIN_DIR",
+  "managed_bin_dir": "$DEPLOY_BIN_DIR",
+  "public_bin_dir": "$DEPLOY_PUBLIC_BIN_DIR",
   "state_file": "$DEPLOY_STATE_FILE",
   "venv_path": "${DEPLOY_VENV_PATH:-}",
   "git_revision": "$revision",
@@ -157,7 +158,14 @@ STAGE_DIR="$(normalize_stage_dir "$STAGE_DIR")"
 
 DEPLOY_BASE_DIR="$(expand_path "$DEPLOY_BASE_DIR")"
 DEPLOY_INSTALL_PREFIX="$(expand_path "$DEPLOY_INSTALL_PREFIX")"
+if [[ -z "${DEPLOY_BIN_DIR:-}" ]]; then
+  DEPLOY_BIN_DIR="$DEPLOY_BASE_DIR/.local/llm-ops/bin"
+fi
+if [[ -z "${DEPLOY_PUBLIC_BIN_DIR:-}" ]]; then
+  DEPLOY_PUBLIC_BIN_DIR="$DEPLOY_BASE_DIR/.local/bin"
+fi
 DEPLOY_BIN_DIR="$(expand_path "$DEPLOY_BIN_DIR")"
+DEPLOY_PUBLIC_BIN_DIR="$(expand_path "$DEPLOY_PUBLIC_BIN_DIR")"
 DEPLOY_STATE_FILE="$(expand_path "$DEPLOY_STATE_FILE")"
 if [[ -n "${DEPLOY_VENV_PATH:-}" ]]; then
   DEPLOY_VENV_PATH="$(expand_path "$DEPLOY_VENV_PATH")"
@@ -165,6 +173,7 @@ fi
 
 ensure_relative_to_base "$DEPLOY_BASE_DIR" "$DEPLOY_INSTALL_PREFIX" >/dev/null
 ensure_relative_to_base "$DEPLOY_BASE_DIR" "$DEPLOY_BIN_DIR" >/dev/null
+ensure_relative_to_base "$DEPLOY_BASE_DIR" "$DEPLOY_PUBLIC_BIN_DIR" >/dev/null
 ensure_relative_to_base "$DEPLOY_BASE_DIR" "$DEPLOY_STATE_FILE" >/dev/null
 
 STAGE_DIR="$(mkdir -p "$(dirname "$STAGE_DIR")" && cd "$(dirname "$STAGE_DIR")" >/dev/null 2>&1 && pwd)/$(basename "$STAGE_DIR")"
@@ -197,6 +206,8 @@ mkdir -p "$RUNTIME_CURRENT_DIR"
 copy_runtime_sources "$RUNTIME_CURRENT_DIR"
 
 mkdir -p "$(stage_path_for_absolute "$DEPLOY_BIN_DIR")"
+mkdir -p "$(stage_path_for_absolute "$DEPLOY_PUBLIC_BIN_DIR")"
+ln -sfn "$DEPLOY_INSTALL_PREFIX/current/scripts/llmops" "$(stage_path_for_absolute "$DEPLOY_PUBLIC_BIN_DIR")/llmops"
 
 mkdir -p "$(dirname "$(stage_path_for_absolute "$DEPLOY_STATE_FILE")")"
 cat > "$(stage_path_for_absolute "$DEPLOY_STATE_FILE")" <<EOF
@@ -204,6 +215,7 @@ LLMOPS_INSTALL_MODE=staged
 LLMOPS_INSTALL_BASE=$DEPLOY_INSTALL_PREFIX
 LLMOPS_INSTALL_DIR=$DEPLOY_INSTALL_PREFIX/current
 LLMOPS_BIN_DIR=$DEPLOY_BIN_DIR
+LLMOPS_PUBLIC_BIN_DIR=$DEPLOY_PUBLIC_BIN_DIR
 LLMOPS_SOURCE_DIR=$REPO_ROOT
 LLMOPS_RUNTIME_VENV_PATH=${DEPLOY_VENV_PATH:-}
 LLMOPS_UPDATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)

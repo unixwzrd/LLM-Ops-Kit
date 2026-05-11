@@ -23,7 +23,7 @@ done
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MANIFEST_FILE="${MANIFEST_FILE:-$SCRIPT_DIR/runtime-links.manifest}"
 
-BIN_DIR="${BIN_DIR:-$HOME/bin}"
+BIN_DIR="${BIN_DIR:-${LLMOPS_BIN_DIR:-$HOME/.local/llm-ops/bin}}"
 RUNTIME_DIR="${RUNTIME_DIR:-${REPO_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}}"
 mkdir -p "$BIN_DIR"
 
@@ -40,6 +40,7 @@ is_managed_link_target() {
     "$HOME"/projects/LLM-Ops-Kit/*|\
     "$HOME"/projects/OpenClaw-Ops-Toolkit/*|\
     "$HOME"/.llm-ops/current/*|\
+    "$HOME"/.local/llm-ops/current/*|\
     "$HOME"/.openclaw-ops/current/*)
       return 0
       ;;

@@ -13,14 +13,14 @@ This guide focuses on simple, copy-paste commands for switching models and agent
 ## Switch Agent Runtime
 
 ```bash
-~/bin/agentctl switch openclaw
-~/bin/agentctl switch hermes
+llmops agentctl switch openclaw
+llmops agentctl switch hermes
 ```
 
 Check what is running:
 
 ```bash
-~/bin/agentctl current
+llmops agentctl current
 ```
 
 ## Add a Model to OpenClaw
@@ -28,7 +28,7 @@ Check what is running:
 Add a new model entry using a local GGUF path:
 
 ```bash
-~/bin/modelctl add --model "$HOME/LLM_Repository/gemma-4-31B-it-GGUF/gemma-4-31B-it-UD-Q8_K_XL.gguf" \
+llmops modelctl add --model "$HOME/LLM_Repository/gemma-4-31B-it-GGUF/gemma-4-31B-it-UD-Q8_K_XL.gguf" \
   --name "Gemma4 31B IT (llama.cpp)"
 ```
 

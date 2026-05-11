@@ -6,18 +6,18 @@
 Run/control local MLX Audio TTS server (`mlx_audio.server`) via model profile `Qwen3TTS`.
 
 ```bash
-~/bin/tts [start|stop|restart|status]
-~/bin/Qwen3TTS [start|stop|restart|status|settings|verify|test]
+llmops tts [start|stop|restart|status]
+llmops Qwen3TTS [start|stop|restart|status|settings|verify|test]
 ```
 
 Examples:
 
 ```bash
-~/bin/tts start
-~/bin/tts status
-~/bin/Qwen3TTS settings
-~/bin/Qwen3TTS verify
-~/bin/Qwen3TTS test
+llmops tts start
+llmops tts status
+llmops Qwen3TTS settings
+llmops Qwen3TTS verify
+llmops Qwen3TTS test
 ```
 
 Qwen3-TTS smoke test:
@@ -42,7 +42,7 @@ Optional env overrides:
 
 Notes:
 
-- `~/bin/tts` is a convenience alias for `modelctl Qwen3TTS`.
+- `llmops tts` is a convenience alias for `modelctl Qwen3TTS`.
 - Server runtime behavior is managed by `scripts/models/Qwen3TTS.sh` and `scripts/defaults/tts-defaults.sh`.
 - `verify` queries `/v1/models` and prints reported model IDs.
 - `test` sends a minimal `/v1/audio/speech` request and checks that audio bytes are returned.

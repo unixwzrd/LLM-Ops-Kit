@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+LLMOPS_HOME="${LLMOPS_HOME:-$HOME/.local/llm-ops}"
+LLMOPS_BIN_DIR="${LLMOPS_BIN_DIR:-$LLMOPS_HOME/bin}"
+
+usage() {
+  cat <<'USAGE'
+Usage: llmops <command> [args...]
+
+Commands:
+  agentctl
+  llmops-admin
+  model-proxy
+  modelctl
+  runtime-maintenance
+  tts
+  tts-bridge
+
+Run `llmops <command> --help` for command-specific help.
+Installed model launchers under LLMOPS_BIN_DIR are also accepted.
+USAGE
+}
+
+cmd="${1:-}"
+case "$cmd" in
+  ""|-h|--help|help)
+    usage
+    exit 0
+    ;;
+esac
+
+case "$cmd" in
+  */*|.*|"")
+    echo "llmops: invalid command name: $cmd" >&2
+    exit 2
+    ;;
+esac
+
+target="$LLMOPS_BIN_DIR/$cmd"
+if [[ ! -x "$target" ]]; then
+  echo "llmops: unknown command: $cmd" >&2
+  echo "Run 'llmops --help' for available commands." >&2
+  exit 2
+fi
+
+shift
+exec "$target" "$@"

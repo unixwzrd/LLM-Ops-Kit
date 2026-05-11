@@ -10,16 +10,16 @@ Run/control Qwen3.5 llama.cpp profile.
 ## Syntax
 
 ```bash
-~/bin/Qwen3.5 [start|stop|restart|status|settings|verify|test]
+llmops Qwen3.5 [start|stop|restart|status|settings|verify|test]
 ```
 
 ## Examples
 
 ```bash
-~/bin/Qwen3.5 settings
-~/bin/Qwen3.5 verify
-~/bin/Qwen3.5 test
-USE_CUSTOM_TEMPLATE=1 CHAT_TEMPLATE=/absolute/path/to/template.jinja ~/bin/Qwen3.5 settings
+llmops Qwen3.5 settings
+llmops Qwen3.5 verify
+llmops Qwen3.5 test
+USE_CUSTOM_TEMPLATE=1 CHAT_TEMPLATE=/absolute/path/to/template.jinja llmops Qwen3.5 settings
 ```
 
 ## Notes

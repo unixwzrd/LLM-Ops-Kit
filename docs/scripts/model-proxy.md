@@ -1,7 +1,7 @@
 # model-proxy
 
 **Created**: 2026-02-26
-**Updated**: 2026-05-09
+**Updated**: 2026-05-11
 
 ## Purpose
 
@@ -18,21 +18,21 @@ Manage OpenAI proxy tap lifecycle for request/response visibility.
 ## Syntax
 
 ```bash
-~/bin/model-proxy [start|stop|restart|status|render] [options...]
-~/bin/model-proxy [--start|--stop|--restart|--status] [options...]
+llmops model-proxy [start|stop|restart|status|render] [options...]
+llmops model-proxy [--start|--stop|--restart|--status] [options...]
 ```
 
 ## Examples
 
 ```bash
-~/bin/model-proxy restart --upstream http://<upstream-host>:<upstream-port>
-~/bin/model-proxy restart --port <listen-port> --upstream http://<upstream-host>:<upstream-port>
-~/bin/model-proxy restart --upstream http://<upstream-host>:<upstream-port> --chat-template ~/projects/LLM-Ops-Kit/scripts/templates/Qwen3.5-chatml-tools.jinja
-~/bin/model-proxy restart --upstream http://<upstream-host>:<upstream-port> --raw-log ~/.local/state/llm-ops/logs/model-proxy.raw.log
-~/bin/model-proxy restart --upstream http://<upstream-host>:<upstream-port> --raw-request-log ~/.local/state/llm-ops/logs/model-proxy.requests.log --raw-response-log ~/.local/state/llm-ops/logs/model-proxy.responses.log
-~/bin/model-proxy restart --upstream http://<upstream-host>:<upstream-port> --log-rotate-seconds 86400 --log-rotate-keep 7
-~/bin/model-proxy render -i /tmp/payload.json
-cat /tmp/payload.json | ~/bin/model-proxy render -i -
+llmops model-proxy restart --upstream http://<upstream-host>:<upstream-port>
+llmops model-proxy restart --port <listen-port> --upstream http://<upstream-host>:<upstream-port>
+llmops model-proxy restart --upstream http://<upstream-host>:<upstream-port> --chat-template ~/projects/LLM-Ops-Kit/scripts/templates/Qwen3.5-chatml-tools.jinja
+llmops model-proxy restart --upstream http://<upstream-host>:<upstream-port> --raw-log ~/.local/state/llm-ops/logs/model-proxy.raw.log
+llmops model-proxy restart --upstream http://<upstream-host>:<upstream-port> --raw-request-log ~/.local/state/llm-ops/logs/model-proxy.requests.log --raw-response-log ~/.local/state/llm-ops/logs/model-proxy.responses.log
+llmops model-proxy restart --upstream http://<upstream-host>:<upstream-port> --log-rotate-seconds 86400 --log-rotate-keep 7
+llmops model-proxy render -i /tmp/payload.json
+cat /tmp/payload.json | llmops model-proxy render -i -
 ```
 
 ## Notes

@@ -1,12 +1,12 @@
 # runtime-maintenance
 
 **Created**: 2026-03-08
-**Updated**: 2026-05-09
+**Updated**: 2026-05-11
 
 Inspect and maintain toolkit-owned runtime artifacts under `~/.local/state/llm-ops`.
 
 ```bash
-~/bin/runtime-maintenance [status|rotate|prune|run]
+llmops runtime-maintenance [status|rotate|prune|run]
 ```
 
 Actions:
@@ -39,10 +39,10 @@ Retention controls:
 Examples:
 
 ```bash
-~/bin/runtime-maintenance status
-~/bin/runtime-maintenance rotate
-~/bin/runtime-maintenance prune
-~/bin/runtime-maintenance run
+llmops runtime-maintenance status
+llmops runtime-maintenance rotate
+llmops runtime-maintenance prune
+llmops runtime-maintenance run
 ```
 
 Notes:

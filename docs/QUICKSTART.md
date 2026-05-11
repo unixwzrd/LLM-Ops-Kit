@@ -3,7 +3,7 @@
 Back: [docs/INDEX.md](./INDEX.md)
 
 **Created**: 2026-02-26
-**Updated**: 2026-05-09
+**Updated**: 2026-05-11
 
 - [Quickstart (10 Minutes)](#quickstart-10-minutes)
   - [Requirements](#requirements)
@@ -71,9 +71,9 @@ export TTS_BRIDGE_UPSTREAM_BASE=http://<remote-model-host>:11439/v1
 
 ```bash
 cd ~/projects/LLM-Ops-Kit
-~/bin/agentctl start
-~/bin/model-proxy restart --upstream http://<remote-model-host>:11434
-~/bin/tts-bridge start
+llmops agentctl start
+llmops model-proxy restart --upstream http://<remote-model-host>:11434
+llmops tts-bridge start
 ```
 
 What admin deployment does:
@@ -112,7 +112,7 @@ Current stabilization mode on the primary operator machine:
   - wrapper stdio: `~/.local/state/llm-ops/logs/agentctl-openclaw.log` and `~/.local/state/llm-ops/logs/agentctl-openclaw.err.log`
   - OpenClaw app log: `/tmp/openclaw/openclaw-YYYY-MM-DD.log`
 - `openclaw logs --follow` and related native health/probe commands may still fail even when the agent runtime itself is up in this mode
-- use `~/bin/agentctl logs` for a reliable local follow view during this phase
+- use `llmops agentctl logs` for a reliable local follow view during this phase
 
 ## Fully Local Models and Agent Runtime
 
@@ -123,15 +123,15 @@ Use this when the LLM, embeddings, MLX TTS server, and OpenClaw all run on the s
 
 ```bash
 cd ~/projects/LLM-Ops-Kit
-~/bin/Qwen3.5 start
-~/bin/BGEm3 start
+llmops Qwen3.5 start
+llmops BGEm3 start
 # Optional:
-# ~/bin/Qwen3TTS start
-# ~/bin/model-proxy restart --listen-port 11440 --upstream http://127.0.0.1:11434
-# ~/bin/tts-bridge start
+# llmops Qwen3TTS start
+# llmops model-proxy restart --listen-port 11440 --upstream http://127.0.0.1:11434
+# llmops tts-bridge start
 ```
 
-The deployed runtime still lives under the configured install prefix, typically `~/.llm-ops/current`; the target `~/bin` only contains links to that installed payload.
+The deployed runtime still lives under the configured install prefix, typically `~/.local/llm-ops/current`; the target `~/.local/llm-ops/bin` only contains links to that installed payload.
 
 ## Admin Deployment
 
@@ -148,13 +148,13 @@ scripts/llmops-admin apply --tag production --stage ~/.local/share/llm-ops/stage
 ## Common checks
 
 ```bash
-~/bin/agentctl status
-~/bin/agentctl logs
-~/bin/modelctl status
-~/bin/Qwen3 settings
-~/bin/BGEm3 settings
-~/bin/model-proxy status
-~/bin/tts-bridge status
+llmops agentctl status
+llmops agentctl logs
+llmops modelctl status
+llmops Qwen3 settings
+llmops BGEm3 settings
+llmops model-proxy status
+llmops tts-bridge status
 ```
 
 If anything looks off, go to `docs/TROUBLESHOOTING.md`.

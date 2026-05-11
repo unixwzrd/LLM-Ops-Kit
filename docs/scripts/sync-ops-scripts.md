@@ -12,17 +12,17 @@ Deployment note:
 - This script is a low-level maintenance/helper path for direct repo syncs.
 
 ```bash
-~/bin/sync-ops-scripts [--delete] [--dry-run] [--no-links] [--runtime-mode <repo|installed>] [--install-prefix <path>] [--state-file <path>]
+llmops sync-ops-scripts [--delete] [--dry-run] [--no-links] [--runtime-mode <repo|installed>] [--install-prefix <path>] [--state-file <path>]
 ```
 
 Examples:
 
 ```bash
-~/bin/sync-ops-scripts --delete
-~/bin/sync-ops-scripts --dry-run
-~/bin/sync-ops-scripts --delete --no-links
-~/bin/sync-ops-scripts --delete --runtime-mode installed
-~/bin/sync-ops-scripts --delete --runtime-mode installed --install-prefix ~/.llm-ops
+llmops sync-ops-scripts --delete
+llmops sync-ops-scripts --dry-run
+llmops sync-ops-scripts --delete --no-links
+llmops sync-ops-scripts --delete --runtime-mode installed
+llmops sync-ops-scripts --delete --runtime-mode installed --install-prefix ~/.local/llm-ops
 ```
 
 Notes:
@@ -39,7 +39,7 @@ Notes:
     - `install-runtime.sh --source <remote_repo> --prefix <install_prefix>`
 - If `--runtime-mode` is not provided, sync auto-detects installed mode from:
   - `~/.local/state/llm-ops/runtime-state.env`
-- `verify-runtime-links.sh` now checks manifest links plus any dead symlink in `~/bin`.
+- `verify-runtime-links.sh` now checks manifest links plus any dead symlink in `~/.local/llm-ops/bin`.
 - If deploy fails, verify is not run (the sync command exits on first failure).
 - During repo rename migration, deploy auto-heals managed symlinks that still target `~/projects/OpenClaw-Ops-Toolkit/...` to `~/projects/LLM-Ops-Kit/...`.
 - Use `--no-links` to sync only.

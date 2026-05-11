@@ -1,7 +1,7 @@
 # Manual End-to-End Release Test Checklist
 
 **Created**: 2026-05-10
-**Updated**: 2026-05-10
+**Updated**: 2026-05-11
 
 Back: [docs/INDEX.md](./INDEX.md)
 
@@ -20,6 +20,7 @@ export LLMOPS_TEST_LLM_HOST="<inventory-llm-host-name>"
 export LLMOPS_TEST_AGENT_HOST="<inventory-agent-host-name>"
 export LLMOPS_TEST_MODEL="Qwen3.6"
 export LLMOPS_TEST_MODEL_PATH="$HOME/LLM_Repository/<path-to-qwen3.6.gguf>"
+export LLMOPS_TEST_REMOTE_CMD="$HOME/.local/bin/llmops"
 ```
 
 ## 1. Admin Workstation Baseline
@@ -331,26 +332,26 @@ For each target host, SSH in and run the relevant block.
 - [ ] Confirm installed runtime and links.
 
 ```bash
-ssh "$LLMOPS_TEST_LLM_HOST" 'set -e; readlink ~/.llm-ops/current; ls -l ~/bin/modelctl ~/bin/Qwen3 ~/bin/BGEm3'
+ssh "$LLMOPS_TEST_LLM_HOST" 'set -e; readlink ~/.local/llm-ops/current; ls -l ~/.local/bin/llmops ~/.local/llm-ops/bin/modelctl ~/.local/llm-ops/bin/Qwen3 ~/.local/llm-ops/bin/BGEm3'
 ```
 
 - [ ] Confirm settings render.
 
 ```bash
-ssh "$LLMOPS_TEST_LLM_HOST" '~/bin/modelctl list && ~/bin/modelctl status && ~/bin/Qwen3 settings && ~/bin/BGEm3 settings'
+ssh "$LLMOPS_TEST_LLM_HOST" '~/.local/bin/llmops modelctl list && ~/.local/bin/llmops modelctl status && ~/.local/bin/llmops Qwen3 settings && ~/.local/bin/llmops BGEm3 settings'
 ```
 
 - [ ] Start model services if this host is safe for live model testing.
 
 ```bash
-ssh "$LLMOPS_TEST_LLM_HOST" '~/bin/Qwen3 start && ~/bin/BGEm3 start'
+ssh "$LLMOPS_TEST_LLM_HOST" '~/.local/bin/llmops Qwen3 start && ~/.local/bin/llmops BGEm3 start'
 ```
 
 - [ ] Verify model endpoints.
 
 ```bash
-ssh "$LLMOPS_TEST_LLM_HOST" '~/bin/Qwen3 verify && ~/bin/BGEm3 verify'
-ssh "$LLMOPS_TEST_LLM_HOST" '~/bin/Qwen3 test && ~/bin/BGEm3 test'
+ssh "$LLMOPS_TEST_LLM_HOST" '~/.local/bin/llmops Qwen3 verify && ~/.local/bin/llmops BGEm3 verify'
+ssh "$LLMOPS_TEST_LLM_HOST" '~/.local/bin/llmops Qwen3 test && ~/.local/bin/llmops BGEm3 test'
 ```
 
 - [ ] Confirm runtime logs are under state path.
@@ -364,25 +365,25 @@ ssh "$LLMOPS_TEST_LLM_HOST" 'ls -lah ~/.local/state/llm-ops/logs; tail -n 40 ~/.
 - [ ] Confirm agent command surface.
 
 ```bash
-ssh "$LLMOPS_TEST_AGENT_HOST" '~/bin/agentctl current; ~/bin/agentctl status all'
+ssh "$LLMOPS_TEST_AGENT_HOST" '~/.local/bin/llmops agentctl current; ~/.local/bin/llmops agentctl status all'
 ```
 
 - [ ] Start and stop direct-run agent wrapper if safe.
 
 ```bash
-ssh "$LLMOPS_TEST_AGENT_HOST" '~/bin/agentctl start openclaw; sleep 3; ~/bin/agentctl status openclaw; ~/bin/agentctl stop openclaw'
+ssh "$LLMOPS_TEST_AGENT_HOST" '~/.local/bin/llmops agentctl start openclaw; sleep 3; ~/.local/bin/llmops agentctl status openclaw; ~/.local/bin/llmops agentctl stop openclaw'
 ```
 
 - [ ] Validate launchd install/status/remove path if testing macOS launchd.
 
 ```bash
-ssh "$LLMOPS_TEST_AGENT_HOST" '~/bin/agentctl launchd-install openclaw; ~/bin/agentctl launchd-status openclaw; ~/bin/agentctl launchd-remove openclaw'
+ssh "$LLMOPS_TEST_AGENT_HOST" '~/.local/bin/llmops agentctl launchd-install openclaw; ~/.local/bin/llmops agentctl launchd-status openclaw; ~/.local/bin/llmops agentctl launchd-remove openclaw'
 ```
 
 - [ ] Validate Secrets Kit optional path only if Secrets Kit is installed and configured.
 
 ```bash
-ssh "$LLMOPS_TEST_AGENT_HOST" 'LLMOPS_USE_SECKIT=1 ~/bin/agentctl launchd-run openclaw'
+ssh "$LLMOPS_TEST_AGENT_HOST" 'LLMOPS_USE_SECKIT=1 ~/.local/bin/llmops agentctl launchd-run openclaw'
 ```
 
 Expected:
@@ -412,16 +413,17 @@ scripts/install-runtime.sh --source "$PWD"
 ```bash
 test -f ~/.local/state/llm-ops/runtime-state.env
 cat ~/.local/state/llm-ops/runtime-state.env
+ls -l ~/.local/bin/llmops ~/.local/llm-ops/bin/modelctl
 ```
 
 - [ ] Confirm local commands resolve.
 
 ```bash
-~/bin/modelctl status
-~/bin/agentctl status all
-~/bin/model-proxy status || true
-~/bin/tts-bridge status || true
-~/bin/runtime-maintenance status
+llmops modelctl status
+llmops agentctl status all
+llmops model-proxy status || true
+llmops tts-bridge status || true
+llmops runtime-maintenance status
 ```
 
 - [ ] Verify stale old links are removed or flagged.
@@ -429,6 +431,7 @@ cat ~/.local/state/llm-ops/runtime-state.env
 ```bash
 scripts/deploy-runtime-links.sh --replace-managed-links
 scripts/verify-runtime-links.sh
+scripts/uninstall-runtime.sh --bin-dir "$HOME/bin" --keep-files
 ```
 
 - [ ] Test uninstall keep-files mode on a disposable install only.
@@ -440,6 +443,7 @@ scripts/uninstall-runtime.sh --keep-files
 Expected:
 
 - managed links are removed
+- public launcher is removed if it points at this runtime
 - installed payload remains
 
 ## 9. Proxy And TTS Runtime Checks
@@ -447,22 +451,22 @@ Expected:
 - [ ] Start or restart model proxy against a known model endpoint.
 
 ```bash
-~/bin/model-proxy restart --listen-port 11440 --upstream http://<model-host>:11434
-~/bin/model-proxy status
+llmops model-proxy restart --listen-port 11440 --upstream http://<model-host>:11434
+llmops model-proxy status
 ```
 
 - [ ] Render one request without forwarding.
 
 ```bash
 printf '{"model":"test","messages":[{"role":"user","content":"hello"}]}\n' \
-  | ~/bin/model-proxy render -i -
+  | llmops model-proxy render -i -
 ```
 
 - [ ] Start TTS bridge against a known MLX TTS endpoint.
 
 ```bash
-TTS_BRIDGE_UPSTREAM_BASE="http://<tts-host>:11439/v1" ~/bin/tts-bridge restart
-~/bin/tts-bridge status
+TTS_BRIDGE_UPSTREAM_BASE="http://<tts-host>:11439/v1" llmops tts-bridge restart
+llmops tts-bridge status
 ```
 
 - [ ] Send one TTS bridge request.
@@ -486,11 +490,11 @@ Expected:
 - [ ] Stop any test services you started.
 
 ```bash
-~/bin/model-proxy stop || true
-~/bin/tts-bridge stop || true
-~/bin/agentctl stop all || true
-~/bin/Qwen3 stop || true
-~/bin/BGEm3 stop || true
+llmops model-proxy stop || true
+llmops tts-bridge stop || true
+llmops agentctl stop all || true
+llmops Qwen3 stop || true
+llmops BGEm3 stop || true
 ```
 
 - [ ] Rerun final local checks.

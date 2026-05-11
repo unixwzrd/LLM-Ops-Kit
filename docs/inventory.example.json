@@ -3,7 +3,7 @@
   "defaults": {
     "user": "llmops",
     "port": 22,
-    "install_root": "~/.llm-ops",
+    "install_root": "~/.local/llm-ops",
     "ssh_key": "~/.ssh/llmops_deploy_ed25519",
     "config_profile": "default"
   },
@@ -25,7 +25,7 @@
       "role": "hybrid",
       "host": "hybrid-dev.example.net",
       "user": "miafour",
-      "install_root": "~/.llm-ops",
+      "install_root": "~/.local/llm-ops",
       "config_profile": "dev",
       "tags": ["development"]
     }

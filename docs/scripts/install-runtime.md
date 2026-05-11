@@ -1,26 +1,26 @@
 # install-runtime
 
 **Created**: 2026-03-03
-**Updated**: 2026-05-09
+**Updated**: 2026-05-11
 
 Helper for installing a durable runtime payload outside a git checkout, then
-linking commands from `~/bin`.
+linking commands from `~/.local/llm-ops/bin`.
 
 Manual first-time install:
 
 ```bash
 git clone https://github.com/unixwzrd/LLM-Ops-Kit.git ~/projects/LLM-Ops-Kit
 cd ~/projects/LLM-Ops-Kit
-./scripts/install-runtime --source "$PWD"
+./scripts/install-runtime.sh --source "$PWD"
 ```
 
 ```bash
-~/bin/install-runtime [--source <repo-or-stage-path>] [--prefix <install-base>] [--bin-dir <bin-dir>] [--state-file <path>] [--venv-path <path>] [--install-secrets-kit] [--secrets-kit-source <spec>] [--no-links]
+scripts/install-runtime.sh [--source <repo-or-stage-path>] [--prefix <install-base>] [--bin-dir <bin-dir>] [--public-bin-dir <path>] [--state-file <path>] [--venv-path <path>] [--install-secrets-kit] [--secrets-kit-source <spec>] [--no-links] [--no-shell-profile]
 ```
 
 Default install path:
 
-- `~/.llm-ops/current`
+- `~/.local/llm-ops/current`
 
 Default runtime state file:
 
@@ -28,17 +28,22 @@ Default runtime state file:
 
 Default command link path:
 
-- `~/bin`
+- `~/.local/llm-ops/bin`
+
+Default public launcher path:
+
+- `~/.local/bin/llmops`
 
 What gets installed:
 
-- `scripts/` -> `~/.llm-ops/current/scripts/`
-- `bin/` -> `~/.llm-ops/current/bin/`
+- `scripts/` -> `~/.local/llm-ops/current/scripts/`
+- `bin/` -> `~/.local/llm-ops/current/bin/`
 
 What gets linked:
 
-- managed commands in `~/bin`, based on `scripts/runtime-links.manifest`
-- those links point at the installed runtime under `~/.llm-ops/current`, not back to the git checkout
+- managed commands in `~/.local/llm-ops/bin`, based on `scripts/runtime-links.manifest`
+- those links point at the installed runtime under `~/.local/llm-ops/current`, not back to the git checkout
+- `~/.local/bin/llmops` points at the installed dispatcher and is the only generic PATH entry installed by default
 
 This is useful when you do not want runtime commands to break if `~/projects/LLM-Ops-Kit` is moved or deleted.
 

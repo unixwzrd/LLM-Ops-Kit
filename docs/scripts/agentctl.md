@@ -7,18 +7,18 @@ Use it when you want a control surface that matches `modelctl` and keeps agent o
 ## Quick Examples
 
 ```bash
-~/bin/agentctl switch openclaw
-~/bin/agentctl switch hermes
-~/bin/agentctl current
-~/bin/agentctl status openclaw
+llmops agentctl switch openclaw
+llmops agentctl switch hermes
+llmops agentctl current
+llmops agentctl status openclaw
 ```
 
 ## Usage
 
 ```bash
-~/bin/agentctl [start|stop|restart|status|current|switch|logs|setup] [openclaw|hermes|all]
-~/bin/agentctl exec [openclaw|hermes] <command> [args...]
-~/bin/agentctl [launchd-install|launchd-start|launchd-stop|launchd-bootout|launchd-enable|launchd-disable|launchd-remove|launchd-status] [openclaw|hermes|all]
+llmops agentctl [start|stop|restart|status|current|switch|logs|setup] [openclaw|hermes|all]
+llmops agentctl exec [openclaw|hermes] <command> [args...]
+llmops agentctl [launchd-install|launchd-start|launchd-stop|launchd-bootout|launchd-enable|launchd-disable|launchd-remove|launchd-status] [openclaw|hermes|all]
 ```
 
 ## Notes

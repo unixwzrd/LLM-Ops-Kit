@@ -45,12 +45,27 @@ default_base_dir_for_user() {
 
 default_install_prefix() {
   local base_dir="$1"
+  printf '%s/.local/llm-ops\n' "$base_dir"
+}
+
+legacy_default_install_prefix() {
+  local base_dir="$1"
   printf '%s/.llm-ops\n' "$base_dir"
 }
 
 default_bin_dir() {
   local base_dir="$1"
+  printf '%s/.local/llm-ops/bin\n' "$base_dir"
+}
+
+legacy_default_bin_dir() {
+  local base_dir="$1"
   printf '%s/bin\n' "$base_dir"
+}
+
+default_public_bin_dir() {
+  local base_dir="$1"
+  printf '%s/.local/bin\n' "$base_dir"
 }
 
 default_state_file() {
@@ -72,10 +87,11 @@ print_template() {
 # LLMOPS_DEPLOY_HOSTS="host-a host-b"
 # LLMOPS_DEPLOY_USER="operator"
 # LLMOPS_DEPLOY_BASE_DIR="/Users/operator"
-# LLMOPS_DEPLOY_INSTALL_PREFIX="/Users/operator/.llm-ops"
-# LLMOPS_DEPLOY_BIN_DIR="/Users/operator/bin"
+# LLMOPS_DEPLOY_INSTALL_PREFIX="/Users/operator/.local/llm-ops"
+# LLMOPS_DEPLOY_BIN_DIR="/Users/operator/.local/llm-ops/bin"
+# LLMOPS_DEPLOY_PUBLIC_BIN_DIR="/Users/operator/.local/bin"
 # LLMOPS_DEPLOY_STATE_FILE="/Users/operator/.local/state/llm-ops/runtime-state.env"
-# LLMOPS_DEPLOY_VENV_PATH="/Users/operator/.llm-ops/venv"
+# LLMOPS_DEPLOY_VENV_PATH="/Users/operator/.local/llm-ops/venv"
 # LLMOPS_DEPLOY_INSTALL_SECRETS_KIT="0"
 # LLMOPS_DEPLOY_SECRETS_KIT_SOURCE="git+https://github.com/unixwzrd/Secrets-Kit.git"
 # LLMOPS_DEPLOY_SSH_KEY_PATH=""
@@ -205,6 +221,7 @@ USER_NAME="${LLMOPS_DEPLOY_USER:-$USER}"
 BASE_DIR="${LLMOPS_DEPLOY_BASE_DIR:-$(default_base_dir_for_user "$USER_NAME")}"
 INSTALL_PREFIX="${LLMOPS_DEPLOY_INSTALL_PREFIX:-$(default_install_prefix "$BASE_DIR")}"
 BIN_DIR="${LLMOPS_DEPLOY_BIN_DIR:-$(default_bin_dir "$BASE_DIR")}"
+PUBLIC_BIN_DIR="${LLMOPS_DEPLOY_PUBLIC_BIN_DIR:-$(default_public_bin_dir "$BASE_DIR")}"
 STATE_FILE="${LLMOPS_DEPLOY_STATE_FILE:-$(default_state_file "$BASE_DIR")}"
 VENV_PATH="${LLMOPS_DEPLOY_VENV_PATH:-$(default_venv_path "$INSTALL_PREFIX")}"
 HOSTS="$(deploy_host_list_normalize "${LLMOPS_DEPLOY_HOSTS:-}")"
@@ -226,14 +243,18 @@ if [[ "$RESET" -eq 1 || ! -f "$CONFIG_FILE" ]]; then
     BASE_DIR="$(default_base_dir_for_user "$USER_NAME")"
   fi
   BASE_DIR="$(prompt_value "What base directory should own this runtime?" "$BASE_DIR")"
-  if [[ -z "$INSTALL_PREFIX" || "$INSTALL_PREFIX" == "$(default_install_prefix "$old_base")" ]]; then
+  if [[ -z "$INSTALL_PREFIX" || "$INSTALL_PREFIX" == "$(default_install_prefix "$old_base")" || "$INSTALL_PREFIX" == "$(legacy_default_install_prefix "$old_base")" ]]; then
     INSTALL_PREFIX="$(default_install_prefix "$BASE_DIR")"
   fi
   INSTALL_PREFIX="$(prompt_value "Where should the runtime install root live?" "$INSTALL_PREFIX")"
-  if [[ -z "$BIN_DIR" || "$BIN_DIR" == "$(default_bin_dir "$old_base")" ]]; then
+  if [[ -z "$BIN_DIR" || "$BIN_DIR" == "$(default_bin_dir "$old_base")" || "$BIN_DIR" == "$(legacy_default_bin_dir "$old_base")" ]]; then
     BIN_DIR="$(default_bin_dir "$BASE_DIR")"
   fi
   BIN_DIR="$(prompt_value "Where should managed executables be linked?" "$BIN_DIR")"
+  if [[ -z "$PUBLIC_BIN_DIR" || "$PUBLIC_BIN_DIR" == "$(default_public_bin_dir "$old_base")" ]]; then
+    PUBLIC_BIN_DIR="$(default_public_bin_dir "$BASE_DIR")"
+  fi
+  PUBLIC_BIN_DIR="$(prompt_value "Where should the public llmops launcher be linked?" "$PUBLIC_BIN_DIR")"
   if [[ -z "$STATE_FILE" || "$STATE_FILE" == "$(default_state_file "$old_base")" ]]; then
     STATE_FILE="$(default_state_file "$BASE_DIR")"
   fi
@@ -267,6 +288,7 @@ TMP_FILE="${CONFIG_FILE}.tmp.$$"
   emit_var "LLMOPS_DEPLOY_BASE_DIR" "$BASE_DIR"
   emit_var "LLMOPS_DEPLOY_INSTALL_PREFIX" "$INSTALL_PREFIX"
   emit_var "LLMOPS_DEPLOY_BIN_DIR" "$BIN_DIR"
+  emit_var "LLMOPS_DEPLOY_PUBLIC_BIN_DIR" "$PUBLIC_BIN_DIR"
   emit_var "LLMOPS_DEPLOY_STATE_FILE" "$STATE_FILE"
   emit_var "LLMOPS_DEPLOY_VENV_PATH" "$VENV_PATH"
   emit_var "LLMOPS_DEPLOY_INSTALL_SECRETS_KIT" "$INSTALL_SECRETS_KIT"

@@ -34,7 +34,7 @@ USE_NO_WEBUI="${USE_NO_WEBUI:-1}"
 #VERBOSE_PROMPT="${VERBOSE_PROMPT:-1}"
 VERBOSE_PROMPT="${VERBOSE_PROMPT:-0}"
 USE_CUSTOM_TEMPLATE="${USE_CUSTOM_TEMPLATE:-1}"
-CHAT_TEMPLATE="${CHAT_TEMPLATE:-$HOME/.llm-ops/current/scripts/templates/Qwen-3_5-optimized-template.jinja}"
+CHAT_TEMPLATE="${CHAT_TEMPLATE:-${LLMOPS_HOME:-$HOME/.local/llm-ops}/current/scripts/templates/Qwen-3_5-optimized-template.jinja}"
 
 # Sampling defaults (external env or ~/.config/llm-ops/config.env can override directly)
 TEMP="${TEMP:-0.9}"

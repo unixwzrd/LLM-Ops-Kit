@@ -22,7 +22,7 @@ config, XDG path, deployment, Secrets Kit, and housekeeping rework.
 - [ ] Add drift detection for transitional per-model env overrides when shipped profiles gain new settings.
 - [ ] Add an opt-in helper to append missing override settings without overwriting user comments or values.
 - [ ] Add an operator command that prints effective config sources and values for model, agent, proxy, and TTS wrappers.
-- [ ] Rework installed runtime layout so `~/.llm-ops/current` can point to a versioned release directory for rollback.
+- [ ] Rework installed runtime layout so `~/.local/llm-ops/current` can point to a versioned release directory for rollback.
 
 ## Deployment
 

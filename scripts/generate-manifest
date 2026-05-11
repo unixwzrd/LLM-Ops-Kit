@@ -9,7 +9,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 is_excluded_script() {
   local name="$1"
   case "$name" in
-    modelctl|generate-manifest|deploy-runtime-links.sh|verify-runtime-links.sh|setup-ssh-deploy-key.sh|post-commit-sync.sample|jinja-snapshot.sh|model_proxy_tap.py|render_chatml_prompt.py|setup-deploy|stage-runtime|push-runtime|install-runtime.sh)
+    llmops|modelctl|generate-manifest|deploy-runtime-links.sh|verify-runtime-links.sh|setup-ssh-deploy-key.sh|post-commit-sync.sample|jinja-snapshot.sh|model_proxy_tap.py|render_chatml_prompt.py|setup-deploy|stage-runtime|push-runtime|install-runtime.sh)
       return 0
       ;;
     *.py|*.sample)
@@ -132,7 +132,7 @@ while IFS= read -r path; do
   runtime_entries+=("$target|$rel_path")
 done < <(find "$SCRIPT_DIR" -maxdepth 1 \( -type f -o -type l \) -perm -u+x | sort)
 
-# Ensure modelctl itself is always available in ~/bin.
+# Ensure modelctl itself is always available in the managed runtime bin dir.
 runtime_entries+=("modelctl|scripts/modelctl")
 
 # Auto-discover executable runtime scripts from bin/.

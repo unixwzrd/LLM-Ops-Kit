@@ -1,7 +1,7 @@
 # MLX Audio TTS Guide
 
 **Created**: 2026-03-02  
-**Updated**: 2026-05-09
+**Updated**: 2026-05-11
 
 - [MLX Audio TTS Guide](#mlx-audio-tts-guide)
   - [Purpose](#purpose)
@@ -54,10 +54,10 @@ Why:
 ## Start the TTS Server
 
 ```bash
-~/bin/Qwen3TTS settings
-~/bin/Qwen3TTS start
-~/bin/Qwen3TTS status
-~/bin/Qwen3TTS verify
+llmops Qwen3TTS settings
+llmops Qwen3TTS start
+llmops Qwen3TTS status
+llmops Qwen3TTS verify
 ```
 
 Defaults:
@@ -105,8 +105,8 @@ Important `CustomVoice` note:
 Operationally, this behaves like `model-proxy`: start/stop/restart/status via a wrapper script with PID and log tracking.
 
 ```bash
-~/bin/tts-bridge start
-~/bin/tts-bridge status
+llmops tts-bridge start
+llmops tts-bridge status
 ```
 
 Then route OpenClaw TTS to the bridge:
@@ -271,8 +271,8 @@ cp /path/to/LLM-Ops-Kit/examples/tts/voice-map.example.json ~/.llm-ops/voice-map
 Start the bridge:
 
 ```bash
-~/bin/tts-bridge start
-~/bin/tts-bridge status
+llmops tts-bridge start
+llmops tts-bridge status
 ```
 
 Bridge health check:
@@ -296,7 +296,7 @@ curl -sS http://127.0.0.1:11440/v1/audio/speech \
 
 If that passes, confirm:
 
-- `~/bin/tts-bridge status` reports bridge health as `ok`
+- `llmops tts-bridge status` reports bridge health as `ok`
 - `/health` shows the resolved config and sample paths you expect
 - the output file `/tmp/tts-bridge-guide.wav` exists
 - the bridge stderr log shows input preprocessing and alias resolution activity
@@ -390,7 +390,7 @@ If `/v1/audio/speech` returns 500:
 If server is not reachable:
 
 ```bash
-~/bin/Qwen3TTS status
+llmops Qwen3TTS status
 lsof -nP -iTCP:11439 -sTCP:LISTEN
 ```
 

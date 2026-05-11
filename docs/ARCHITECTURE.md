@@ -26,7 +26,7 @@ Back: [docs/INDEX.md](./INDEX.md)
 2. The agent runtime routes model calls through proxy tap (when enabled).
 3. LLM inference served by local/remote `llama-server` profile.
 4. Memory search/indexing uses embedding service profile.
-5. Operator controls lifecycle via `~/bin/*` symlink commands.
+5. Operator controls lifecycle through the `llmops` launcher in `~/.local/bin`.
 
 ## Script architecture
 
@@ -38,7 +38,7 @@ Back: [docs/INDEX.md](./INDEX.md)
 ## Deployment model
 
 - Source of truth: `~/projects/LLM-Ops-Kit`
-- Runtime command surface: `~/bin`
+- Runtime command surface: `~/.local/llm-ops/bin`
 - Cross-host updates via `sync-ops-scripts` + deploy/verify link scripts.
 
 ## See Also
