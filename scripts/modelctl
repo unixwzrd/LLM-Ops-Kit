@@ -329,6 +329,22 @@ list_profiles() {
   } | sort -u
 }
 
+profile_type() {
+  local profile="$1"
+  local model_file="$SCRIPT_DIR/models/$profile.sh"
+  local json_model_file
+  json_model_file="$(llmops_model_profile_path "$profile")"
+
+  unset MODEL_TYPE
+  if [[ -f "$model_file" ]]; then
+    # shellcheck disable=SC1090
+    . "$model_file"
+  elif [[ -f "$json_model_file" ]]; then
+    source_json_model_profile_defaults "$profile" "$json_model_file"
+  fi
+  printf '%s\n' "${MODEL_TYPE:-unknown}"
+}
+
 ensure_model_override_template() {
   local m="$1"
   local model_file="$SCRIPT_DIR/models/${m}.sh"
@@ -363,11 +379,7 @@ if [[ "$model_name" == "__all__" ]]; then
     list)
       while IFS= read -r profile; do
         [[ -n "$profile" ]] || continue
-        model_file="$SCRIPT_DIR/models/$profile.sh"
-        MODEL_TYPE=""
-        # shellcheck disable=SC1090
-        . "$model_file"
-        echo "$profile|${MODEL_TYPE:-unknown}"
+        echo "$profile|$(profile_type "$profile")"
       done < <(list_profiles)
       exit 0
       ;;

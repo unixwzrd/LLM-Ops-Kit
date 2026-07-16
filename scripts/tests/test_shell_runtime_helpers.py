@@ -1160,6 +1160,18 @@ class ShellRuntimeHelperTests(unittest.TestCase):
             self.assertIn("modelctl settings (Qwen3.6)", proc.stdout)
             self.assertFalse((config_home / "config" / "Qwen3.6.env").exists())
 
+            proc = self.run_bash(
+                f'"{MODELCTL}" list',
+                env={
+                    "HOME": str(root / "home"),
+                    "LLMOPS_HOME": str(root / "llm-ops"),
+                    "LLMOPS_CONFIG_HOME": str(config_home),
+                },
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertIn("Qwen3.6|llm", proc.stdout.splitlines())
+            self.assertNotIn("No such file or directory", proc.stderr)
+
     def test_modelctl_start_handles_empty_optional_flags_and_rejects_early_exit(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
