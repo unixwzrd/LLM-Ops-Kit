@@ -490,6 +490,8 @@ class LlmopsAdminTests(unittest.TestCase):
                 encoding="utf-8",
             )
             (agent_dir / "hermes.env").write_text("HERMES_GATEWAY_CMD=hermes\n", encoding="utf-8")
+            (legacy_home / "pronounce.json").write_text("{}\n", encoding="utf-8")
+            (legacy_home / "voice-map.json").write_text("{}\n", encoding="utf-8")
             output = root / "config" / "config.json"
             args = Namespace(legacy_home=str(legacy_home), output=str(output), dry_run=False, force=False)
             stdout = io.StringIO()
@@ -517,6 +519,9 @@ class LlmopsAdminTests(unittest.TestCase):
             tts_bridge = json.loads((output.parent / "services" / "tts-bridge.json").read_text(encoding="utf-8"))
             self.assertEqual(tts_bridge["runtime"]["upstream_base"], "http://127.0.0.1:11434/v1")
             self.assertEqual(tts_bridge["runtime"]["port"], "11440")
+            self.assertEqual(tts_bridge["paths"]["config_dir"], str(legacy_home))
+            self.assertEqual(tts_bridge["paths"]["pronounce_config"], str(legacy_home / "pronounce.json"))
+            self.assertEqual(tts_bridge["paths"]["voice_map_config"], str(legacy_home / "voice-map.json"))
 
     def test_migrate_config_user_model_override_wins_over_repo_profile(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

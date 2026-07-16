@@ -256,7 +256,8 @@ prune_rotated_logs() {
   fi
 
   if [[ "$keep" =~ ^[0-9]+$ ]] && (( keep >= 0 )); then
-    for path in "${rotated[@]}"; do
+    for path in "${rotated[@]-}"; do
+      [[ -n "$path" ]] || continue
       count=$((count + 1))
       if (( count > keep )); then
         rm -f "$path"
@@ -291,7 +292,8 @@ prune_runtime_backups() {
   done < <(find "$LLMOPS_BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d | sort -r)
 
   if [[ "$keep" =~ ^[0-9]+$ ]] && (( keep >= 0 )); then
-    for path in "${backups[@]}"; do
+    for path in "${backups[@]-}"; do
+      [[ -n "$path" ]] || continue
       count=$((count + 1))
       if (( count > keep )); then
         rm -rf "$path"

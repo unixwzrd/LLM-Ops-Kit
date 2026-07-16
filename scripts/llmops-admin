@@ -1045,6 +1045,14 @@ def migration_documents(legacy_home: Path) -> dict[Path, dict[str, Any]]:
     }
     documents[destinations.config_file] = config
     service_values = {**host_defaults, **config_env}
+    legacy_pronounce = legacy_home / "pronounce.json"
+    legacy_voice_map = legacy_home / "voice-map.json"
+    if legacy_pronounce.is_file() or legacy_voice_map.is_file():
+        service_values.setdefault("TTS_BRIDGE_CONFIG_DIR", str(legacy_home))
+    if legacy_pronounce.is_file():
+        service_values.setdefault("TTS_BRIDGE_PRONOUNCE_CONFIG", str(legacy_pronounce))
+    if legacy_voice_map.is_file():
+        service_values.setdefault("TTS_BRIDGE_VOICE_MAP_CONFIG", str(legacy_voice_map))
     model_proxy = build_model_proxy_service_profile(service_values)
     if model_proxy is not None:
         documents[destinations.services_dir / "model-proxy.json"] = model_proxy

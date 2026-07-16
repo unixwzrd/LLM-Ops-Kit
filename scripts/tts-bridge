@@ -209,6 +209,7 @@ status_bridge() {
 }
 
 start_bridge() {
+  local bridge_pid
   ensure_runtime_dirs
   prune_runtime_artifacts
   prepare_log_file "$log_file"
@@ -268,9 +269,10 @@ start_bridge() {
     < /dev/null \
     > "$log_file" 2>&1 &
 
-  write_pid "$pid_name" "$!"
+  bridge_pid="$!"
+  write_pid "$pid_name" "$bridge_pid"
   start_log_marktime "$pid_name" "$pid_name" "$log_file"
-  echo "Started $pid_name pid=$! log=$log_file"
+  echo "Started $pid_name pid=$bridge_pid log=$log_file"
 }
 
 stop_bridge() {

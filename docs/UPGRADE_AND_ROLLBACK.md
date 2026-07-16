@@ -49,6 +49,10 @@ migration command. Invoking the installed `bin/llmops-admin` entry point uses
 the stable `<install-root>/current` path. Durable data paths elsewhere under
 the legacy home are preserved.
 
+If legacy `pronounce.json` or `voice-map.json` files are present, the migrated
+TTS bridge profile records their existing durable paths. Relocate them only as
+a separate reviewed operation.
+
 ## Staged Upgrade
 
 Use a unique bundle ID for every release.

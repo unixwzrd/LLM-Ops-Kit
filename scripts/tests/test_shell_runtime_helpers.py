@@ -85,6 +85,26 @@ class ShellRuntimeHelperTests(unittest.TestCase):
             self.assertIn(f"backup_dir={expected_state / 'backups'}", proc.stdout)
             self.assertIn(f"state_file={expected_state / 'runtime-state.env'}", proc.stdout)
 
+    def test_retention_helpers_accept_empty_runtime_directories(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            log_file = root / "logs" / "service.log"
+            backup_dir = root / "backups"
+            log_file.parent.mkdir()
+            backup_dir.mkdir()
+            log_file.touch()
+            proc = self.run_bash(
+                f"""
+                set -u
+                . "{COMMON_SH}"
+                export LLMOPS_BACKUP_DIR="{backup_dir}"
+                prune_rotated_logs "{log_file}"
+                prune_runtime_backups
+                """
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertNotIn("unbound variable", proc.stderr)
+
     def test_load_shell_env_reads_xdg_config_env(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp) / "home"
@@ -1096,6 +1116,67 @@ class ShellRuntimeHelperTests(unittest.TestCase):
             self.assertIn("log_rotate_seconds=123", proc.stdout)
             self.assertIn("log_rotate_keep=4", proc.stdout)
 
+    def test_model_proxy_stop_accepts_no_optional_arguments(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            home = root / "home"
+            proc = self.run_bash(
+                f'"{MODEL_PROXY}" stop',
+                env={
+                    "HOME": str(home),
+                    "LLMOPS_HOME": str(root / "llm-ops"),
+                    "LLMOPS_CONFIG_HOME": str(root / "config"),
+                    "LLMOPS_STATE_HOME": str(root / "state"),
+                },
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertNotIn("unbound variable", proc.stderr)
+
+    def test_model_proxy_start_accepts_json_config_without_cli_arguments(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            home = root / "home"
+            config_home = root / "config"
+            services_dir = config_home / "services"
+            services_dir.mkdir(parents=True)
+            args_log = root / "tap-args.log"
+            fake_tap = root / "fake-model-proxy-tap"
+            fake_tap.write_text(
+                "#!/usr/bin/env bash\n"
+                f"printf '%s\\n' \"$@\" > \"{args_log}\"\n"
+                "while :; do sleep 1; done\n",
+                encoding="utf-8",
+            )
+            fake_tap.chmod(0o755)
+            (services_dir / "model-proxy.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "name": "model-proxy",
+                        "runtime": {
+                            "upstream_host": "10.0.0.5",
+                            "upstream_port": 11434,
+                            "listen_host": "127.0.0.1",
+                            "listen_port": 11999,
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            proc = self.run_bash(
+                f'"{MODEL_PROXY}" start; rc=$?; "{MODEL_PROXY}" stop --force; exit "$rc"',
+                env={
+                    "HOME": str(home),
+                    "LLMOPS_HOME": str(root / "llm-ops"),
+                    "LLMOPS_CONFIG_HOME": str(config_home),
+                    "LLMOPS_STATE_HOME": str(root / "state"),
+                    "MODEL_PROXY_TAP_BIN": str(fake_tap),
+                },
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertNotIn("unbound variable", proc.stderr)
+            self.assertIn("--upstream", args_log.read_text(encoding="utf-8").splitlines())
+
     def test_tts_bridge_status_can_load_json_service_profile(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1136,6 +1217,38 @@ class ShellRuntimeHelperTests(unittest.TestCase):
             self.assertIn("listen=http://127.0.0.1:11998/health", proc.stdout)
             self.assertIn("upstream=http://10.0.0.5:11434/v1", proc.stdout)
             self.assertIn("log_rotate_seconds=456", proc.stdout)
+
+    def test_tts_bridge_start_reports_bridge_pid_not_marktime_pid(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fake_python = root / "fake-python"
+            fake_python.write_text(
+                "#!/usr/bin/env bash\nwhile :; do sleep 1; done\n",
+                encoding="utf-8",
+            )
+            fake_python.chmod(0o755)
+            proc = self.run_bash(
+                f"""
+                output=$("{TTS_BRIDGE}" start)
+                pid=$(cat "$LLMOPS_STATE_HOME/run/tts-bridge.pid")
+                "{TTS_BRIDGE}" stop >/dev/null
+                printf '%s\\nexpected_pid=%s\\n' "$output" "$pid"
+                """,
+                env={
+                    "HOME": str(root / "home"),
+                    "LLMOPS_HOME": str(root / "llm-ops"),
+                    "LLMOPS_CONFIG_HOME": str(root / "config"),
+                    "LLMOPS_STATE_HOME": str(root / "state"),
+                    "TTS_BRIDGE_UPSTREAM_BASE": "http://127.0.0.1:65530/v1",
+                    "TTS_BRIDGE_PORT": "65531",
+                    "TTS_BRIDGE_PYTHON_BIN": str(fake_python),
+                },
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            lines = proc.stdout.splitlines()
+            reported = next(line for line in lines if line.startswith("Started tts-bridge pid="))
+            expected = next(line for line in lines if line.startswith("expected_pid="))
+            self.assertIn(f"pid={expected.split('=', 1)[1]} ", reported)
 
     def _write_fake_gateway_cmd(self, root: Path) -> Path:
         script = root / "fake-gateway"

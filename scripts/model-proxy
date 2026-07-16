@@ -254,7 +254,11 @@ start_proxy() {
   fi
 
   if ! has_upstream_arg && [[ -n "$configured_upstream_host" && -n "$configured_upstream_port" ]]; then
-    extra_args=(--upstream "http://${configured_upstream_host}:${configured_upstream_port}" "${extra_args[@]}")
+    if (( ${#extra_args[@]} > 0 )); then
+      extra_args=(--upstream "http://${configured_upstream_host}:${configured_upstream_port}" "${extra_args[@]}")
+    else
+      extra_args=(--upstream "http://${configured_upstream_host}:${configured_upstream_port}")
+    fi
   fi
 
   if [[ -n "$MODEL_PROXY_CHAT_TEMPLATE" ]] && ! arg_value --chat-template >/dev/null 2>&1; then
@@ -305,9 +309,12 @@ start_proxy() {
 }
 
 stop_proxy() {
-  local target_port
+  local target_port arg force_stop=0
   target_port="$(resolve_listen_port || true)"
-  if [[ " ${extra_args[*]} " == *" --force "* ]]; then
+  for arg in "${extra_args[@]-}"; do
+    [[ "$arg" == "--force" ]] && force_stop=1
+  done
+  if (( force_stop )); then
     pf="$(pid_file_for model-proxy)"
     if [[ -f "$pf" ]]; then
       pid="$(cat "$pf")"
@@ -441,7 +448,11 @@ render_proxy() {
     esac
   done
 
-  "$PROXY_TAP_BIN" --render-input "$render_input" "${forwarded_args[@]}"
+  if (( ${#forwarded_args[@]} > 0 )); then
+    "$PROXY_TAP_BIN" --render-input "$render_input" "${forwarded_args[@]}"
+  else
+    "$PROXY_TAP_BIN" --render-input "$render_input"
+  fi
 }
 
 case "$action" in
