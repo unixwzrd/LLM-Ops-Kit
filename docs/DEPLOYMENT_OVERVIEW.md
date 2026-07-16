@@ -70,6 +70,8 @@ Each host record must define:
 - `install_root`: remote install root, normally `~/.local/llm-ops`
 - `config_profile`: layered config profile name
 - `ssh_key`: local private key path
+- `proxy_jump`: optional OpenSSH jump destination, such as
+  `deploy@bastion.example.net`
 - `tags`: optional selectors such as `production`, `model`, or `agent`
 
 Validate inventory before staging or pushing:
@@ -80,6 +82,10 @@ scripts/llmops-admin inventory-validate --role llm
 scripts/llmops-admin inventory-validate --tag production
 scripts/llmops-admin inventory-validate --host-name llm-primary
 ```
+
+The deployment key must authenticate to the final host as well as the jump
+host. ProxyJump forwards the connection; it does not reuse the jump host's
+private key.
 
 ## SSH Bootstrap
 

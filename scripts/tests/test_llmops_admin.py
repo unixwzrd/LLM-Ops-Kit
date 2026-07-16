@@ -93,6 +93,7 @@ class LlmopsAdminTests(unittest.TestCase):
                                 "name": "llm-json",
                                 "role": "llm",
                                 "host": "llm-json.local",
+                                "proxy_jump": "deploy@bastion.local",
                                 "tags": ["prod", "model"],
                             }
                         ],
@@ -103,6 +104,9 @@ class LlmopsAdminTests(unittest.TestCase):
             hosts = self.admin.load_inventory(inventory)
             self.assertEqual([host.name for host in hosts], ["llm-json"])
             self.assertEqual(hosts[0].destination, "deploy@llm-json.local")
+            self.assertEqual(hosts[0].proxy_jump, "deploy@bastion.local")
+            self.assertIn("ProxyJump=deploy@bastion.local", hosts[0].ssh_base())
+            self.assertIn("ProxyJump=deploy@bastion.local", hosts[0].scp_base())
 
     def test_inventory_path_defaults_to_json_not_legacy_yaml(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

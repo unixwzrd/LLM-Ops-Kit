@@ -65,6 +65,7 @@ class HostRecord:
     install_root: str
     config_profile: str
     ssh_key: str
+    proxy_jump: str | None
     tags: tuple[str, ...]
 
     @property
@@ -76,7 +77,7 @@ class HostRecord:
         return Path(self.ssh_key).expanduser()
 
     def ssh_base(self) -> list[str]:
-        return [
+        command = [
             "ssh",
             "-i",
             str(self.ssh_key_path),
@@ -86,8 +87,27 @@ class HostRecord:
             "BatchMode=yes",
             "-o",
             "StrictHostKeyChecking=accept-new",
-            self.destination,
         ]
+        if self.proxy_jump:
+            command.extend(["-o", f"ProxyJump={self.proxy_jump}"])
+        command.append(self.destination)
+        return command
+
+    def scp_base(self) -> list[str]:
+        command = [
+            "scp",
+            "-i",
+            str(self.ssh_key_path),
+            "-P",
+            str(self.port),
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            "StrictHostKeyChecking=accept-new",
+        ]
+        if self.proxy_jump:
+            command.extend(["-o", f"ProxyJump={self.proxy_jump}"])
+        return command
 
 
 def _parse_scalar(raw: str) -> Any:
@@ -195,6 +215,7 @@ def load_inventory(path: Path) -> list[HostRecord]:
                 install_root=str(merged["install_root"]),
                 config_profile=str(merged["config_profile"]),
                 ssh_key=str(merged["ssh_key"]),
+                proxy_jump=str(merged["proxy_jump"]) if merged.get("proxy_jump") else None,
                 tags=tuple(str(tag) for tag in tags),
             )
         )
@@ -329,6 +350,7 @@ def write_host_config(stage_dir: Path, host: HostRecord, model: str | None) -> P
             "port": host.port,
             "install_root": host.install_root,
             "config_profile": host.config_profile,
+            "proxy_jump": host.proxy_jump,
             "tags": list(host.tags),
         },
         "model": model,
@@ -381,6 +403,7 @@ def write_manifest(stage_dir: Path, package_path: Path, hosts: list[HostRecord],
                 "install_root": host.install_root,
                 "config_profile": host.config_profile,
                 "ssh_key": host.ssh_key,
+                "proxy_jump": host.proxy_jump,
                 "tags": list(host.tags),
                 "config_env": str(config_env),
                 "config_env_sha256": file_sha256(config_env),
@@ -483,7 +506,11 @@ def cmd_bootstrap_host(args: argparse.Namespace) -> int:
         commands: list[list[str]] = []
         if not key_path.exists():
             commands.append(["ssh-keygen", "-t", "ed25519", "-f", str(key_path), "-N", "", "-C", f"llmops:{host.name}"])
-        commands.append(["ssh-copy-id", "-i", f"{key_path}.pub", "-p", str(host.port), host.destination])
+        copy_id = ["ssh-copy-id", "-i", f"{key_path}.pub", "-p", str(host.port)]
+        if host.proxy_jump:
+            copy_id.extend(["-o", f"ProxyJump={host.proxy_jump}"])
+        copy_id.append(host.destination)
+        commands.append(copy_id)
         root = remote_shell_path(host.install_root)
         remote = f"mkdir -p {root}/{{packages,run,logs,config}} && touch {root}/.llmops-ready"
         commands.append(host.ssh_base() + [remote])
@@ -532,16 +559,11 @@ def push_one(host: HostRecord, stage_dir: Path, dry_run: bool) -> tuple[str, int
     bundle = shlex.quote(stage_dir.name)
     commands = [
         host.ssh_base() + [f"mkdir -p {remote_root}/packages/{bundle} {remote_root}/config"],
-        ["scp", "-i", str(host.ssh_key_path), "-P", str(host.port), str(package), f"{host.destination}:{remote_package_dir}/"],
-        ["scp", "-i", str(host.ssh_key_path), "-P", str(host.port), str(manifest), f"{host.destination}:{remote_package_dir}/manifest.json"],
-        ["scp", "-i", str(host.ssh_key_path), "-P", str(host.port), str(host_config), f"{host.destination}:{host.install_root}/config/{host.name}.env"],
-        ["scp", "-i", str(host.ssh_key_path), "-P", str(host.port), str(host_config_json), f"{host.destination}:{host.install_root}/config/{host.name}.json"],
-        [
-            "scp",
-            "-i",
-            str(host.ssh_key_path),
-            "-P",
-            str(host.port),
+        host.scp_base() + [str(package), f"{host.destination}:{remote_package_dir}/"],
+        host.scp_base() + [str(manifest), f"{host.destination}:{remote_package_dir}/manifest.json"],
+        host.scp_base() + [str(host_config), f"{host.destination}:{host.install_root}/config/{host.name}.env"],
+        host.scp_base() + [str(host_config_json), f"{host.destination}:{host.install_root}/config/{host.name}.json"],
+        host.scp_base() + [
             str(host_config_sources),
             f"{host.destination}:{host.install_root}/config/{host.name}.sources.json",
         ],
@@ -1621,6 +1643,7 @@ def cmd_deploy_plan(args: argparse.Namespace) -> int:
             f"\trole={host.role}"
             f"\tdestination={host.destination}"
             f"\tssh_port={host.port}"
+            f"\tproxy_jump={host.proxy_jump or ''}"
             f"\tprofile={host.config_profile}"
             f"\tinstall_root={host.install_root}"
             f"\tremote_package_dir={remote_package_dir}"
