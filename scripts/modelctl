@@ -769,14 +769,14 @@ verify_model() {
 }
 
 test_model() {
-  local base payload out tmp_wav bytes request_model
+  local base payload out tmp_wav bytes request_model reply
   base="$(server_base_url)"
   verify_model
   request_model="${REPORTED_PRIMARY_MODEL:-$MODEL}"
   case "$MODEL_TYPE" in
     llm)
       payload="$(cat <<JSON
-{"model":"$request_model","messages":[{"role":"user","content":"Reply with exactly: ALIVE"}],"max_tokens":16,"temperature":0}
+{"model":"$request_model","messages":[{"role":"user","content":"Reply with exactly: ALIVE"}],"max_tokens":32,"temperature":0,"chat_template_kwargs":{"enable_thinking":false}}
 JSON
 )"
       out="$(curl -fsS --max-time 60 "$base/v1/chat/completions" -H 'Content-Type: application/json' -d "$payload")" || {
@@ -784,7 +784,12 @@ JSON
         return 1
       }
       if command -v jq >/dev/null 2>&1; then
-        printf '%s\n' "$out" | jq -r '"test: llm_model=" + ("'"$request_model"'") + " llm_reply=" + (.choices[0].message.content // "<empty>")' 2>/dev/null || true
+        reply="$(printf '%s\n' "$out" | jq -r '.choices[0].message.content // empty' 2>/dev/null || true)"
+        if [[ -z "$reply" ]]; then
+          echo "test: llm response content was empty" >&2
+          return 1
+        fi
+        echo "test: llm_model=$request_model llm_reply=$reply"
       else
         echo "test: llm request completed (model=$request_model)"
       fi
