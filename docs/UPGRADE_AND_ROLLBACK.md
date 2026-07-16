@@ -44,6 +44,11 @@ Existing destinations are refused. Use `--force` only after backing up and
 reviewing the generated JSON. Repeating a migration with unchanged inputs must
 produce identical documents.
 
+Paths under `<legacy-home>/current` are rebased to the runtime containing the
+migration command. Invoking the installed `bin/llmops-admin` entry point uses
+the stable `<install-root>/current` path. Durable data paths elsewhere under
+the legacy home are preserved.
+
 ## Staged Upgrade
 
 Use a unique bundle ID for every release.

@@ -19,6 +19,15 @@ from pathlib import Path
 from typing import Any
 
 
+def invoked_runtime_root(script_path: Path) -> Path:
+    script_path = script_path.absolute()
+    root = script_path.parents[1]
+    if script_path.parent.name == "bin":
+        return root / "current"
+    return root
+
+
+RUNTIME_ROOT = invoked_runtime_root(Path(__file__))
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "lib"))
 
@@ -966,6 +975,17 @@ def migration_processing_order(sources: list[tuple[str, Path]]) -> list[tuple[st
     return sorted(sources, key=lambda item: precedence.get(item[0], 100))
 
 
+def rebase_legacy_runtime_paths(values: dict[str, str], legacy_home: Path) -> dict[str, str]:
+    legacy_runtime = str(legacy_home / "current")
+    installed_runtime = str(RUNTIME_ROOT)
+    return {
+        key: installed_runtime + value[len(legacy_runtime) :]
+        if value == legacy_runtime or value.startswith(legacy_runtime + "/")
+        else value
+        for key, value in values.items()
+    }
+
+
 def migration_documents(legacy_home: Path) -> dict[Path, dict[str, Any]]:
     destinations = migration_destinations(None)
     documents: dict[Path, dict[str, Any]] = {}
@@ -976,7 +996,7 @@ def migration_documents(legacy_home: Path) -> dict[Path, dict[str, Any]]:
     agents: dict[str, dict[str, Any]] = {}
 
     for label, path in migration_processing_order(sources):
-        values = parse_legacy_assignment_file(path)
+        values = rebase_legacy_runtime_paths(parse_legacy_assignment_file(path), legacy_home)
         if label == "legacy global config":
             config_env.update(values)
         elif label == "repo host defaults":

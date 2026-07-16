@@ -470,6 +470,7 @@ class LlmopsAdminTests(unittest.TestCase):
                         "LLMOPS_UPSTREAM_HOST=127.0.0.1",
                         "LLMOPS_UPSTREAM_PORT=11434",
                         "MODEL_PROXY_LISTEN_PORT=11435",
+                        f"MODEL_PROXY_CHAT_TEMPLATE={legacy_home}/current/scripts/templates/chat.jinja",
                         "TTS_BRIDGE_UPSTREAM_BASE=http://127.0.0.1:11434/v1",
                         "TTS_BRIDGE_PORT=11440",
                     ]
@@ -509,6 +510,10 @@ class LlmopsAdminTests(unittest.TestCase):
             model_proxy = json.loads((output.parent / "services" / "model-proxy.json").read_text(encoding="utf-8"))
             self.assertEqual(model_proxy["runtime"]["upstream_host"], "127.0.0.1")
             self.assertEqual(model_proxy["runtime"]["listen_port"], "11435")
+            self.assertEqual(
+                model_proxy["template"]["path"],
+                str(REPO_ROOT / "scripts" / "templates" / "chat.jinja"),
+            )
             tts_bridge = json.loads((output.parent / "services" / "tts-bridge.json").read_text(encoding="utf-8"))
             self.assertEqual(tts_bridge["runtime"]["upstream_base"], "http://127.0.0.1:11434/v1")
             self.assertEqual(tts_bridge["runtime"]["port"], "11440")
@@ -525,6 +530,36 @@ class LlmopsAdminTests(unittest.TestCase):
             self.assertEqual(len(qwen_docs), 1)
             self.assertEqual(qwen_docs[0]["env"]["PORT"], "19999")
             self.assertEqual(len(qwen_docs[0]["sources"]), 2)
+
+    def test_migration_rebases_legacy_runtime_to_invoked_runtime_path(self) -> None:
+        original_runtime_root = self.admin.RUNTIME_ROOT
+        try:
+            self.admin.RUNTIME_ROOT = Path("/opt/llm-ops/current")
+            rebased = self.admin.rebase_legacy_runtime_paths(
+                {
+                    "TEMPLATE": "/legacy/.llm-ops/current/scripts/template.jinja",
+                    "DATA": "/legacy/.llm-ops/data/index.json",
+                },
+                Path("/legacy/.llm-ops"),
+            )
+        finally:
+            self.admin.RUNTIME_ROOT = original_runtime_root
+        self.assertEqual(rebased["TEMPLATE"], "/opt/llm-ops/current/scripts/template.jinja")
+        self.assertEqual(rebased["DATA"], "/legacy/.llm-ops/data/index.json")
+
+    def test_installed_bin_entrypoint_uses_stable_current_runtime(self) -> None:
+        self.assertEqual(
+            self.admin.invoked_runtime_root(Path("/opt/llm-ops/bin/llmops-admin")),
+            Path("/opt/llm-ops/current"),
+        )
+
+    def test_direct_runtime_entrypoint_uses_containing_runtime(self) -> None:
+        self.assertEqual(
+            self.admin.invoked_runtime_root(
+                Path("/opt/llm-ops/releases/release-01/scripts/llmops-admin")
+            ),
+            Path("/opt/llm-ops/releases/release-01"),
+        )
 
     def test_model_add_dry_run_renders_profile_without_writing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
