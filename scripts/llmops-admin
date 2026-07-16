@@ -932,6 +932,7 @@ def build_model_proxy_service_profile(values: dict[str, str]) -> dict[str, Any] 
         "LLMOPS_UPSTREAM_PORT",
         "MODEL_PROXY_LISTEN_HOST",
         "MODEL_PROXY_LISTEN_PORT",
+        "MODEL_PROXY_PYTHON_BIN",
         "MODEL_PROXY_CHAT_TEMPLATE",
         "MODEL_PROXY_LOG_ROTATE_SECONDS",
         "MODEL_PROXY_LOG_ROTATE_KEEP",
@@ -949,6 +950,8 @@ def build_model_proxy_service_profile(values: dict[str, str]) -> dict[str, Any] 
         runtime["listen_host"] = values["MODEL_PROXY_LISTEN_HOST"]
     if "MODEL_PROXY_LISTEN_PORT" in values:
         runtime["listen_port"] = values["MODEL_PROXY_LISTEN_PORT"]
+    if "MODEL_PROXY_PYTHON_BIN" in values:
+        runtime["python_bin"] = values["MODEL_PROXY_PYTHON_BIN"]
     if "MODEL_PROXY_CHAT_TEMPLATE" in values:
         template["path"] = values["MODEL_PROXY_CHAT_TEMPLATE"]
     if "MODEL_PROXY_LOG_ROTATE_SECONDS" in values:
@@ -1631,6 +1634,7 @@ def render_model_proxy_env(profile: dict[str, Any]) -> dict[str, str]:
         "LLMOPS_UPSTREAM_PORT": runtime.get("upstream_port"),
         "MODEL_PROXY_LISTEN_HOST": runtime.get("listen_host"),
         "MODEL_PROXY_LISTEN_PORT": runtime.get("listen_port"),
+        "MODEL_PROXY_PYTHON_BIN": runtime.get("python_bin"),
         "MODEL_PROXY_CHAT_TEMPLATE": template.get("path"),
         "MODEL_PROXY_LOG_ROTATE_SECONDS": logging.get("rotate_seconds"),
         "MODEL_PROXY_LOG_ROTATE_KEEP": logging.get("rotate_keep"),

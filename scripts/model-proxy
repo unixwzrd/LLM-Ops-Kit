@@ -19,6 +19,7 @@ load_shell_env
 source_json_service_profile_defaults model-proxy
 
 PROXY_TAP_BIN="${MODEL_PROXY_TAP_BIN:-$LLMOPS_ROOT/bin/model-proxy-tap}"
+MODEL_PROXY_PYTHON_BIN="${MODEL_PROXY_PYTHON_BIN:-}"
 MODEL_PROXY_LOG_ROTATE_SECONDS="${MODEL_PROXY_LOG_ROTATE_SECONDS:-86400}"
 MODEL_PROXY_LOG_ROTATE_KEEP="${MODEL_PROXY_LOG_ROTATE_KEEP:-5}"
 MODEL_PROXY_CHAT_TEMPLATE="${MODEL_PROXY_CHAT_TEMPLATE:-}"
@@ -253,6 +254,17 @@ start_proxy() {
     return 2
   fi
 
+  local -a proxy_cmd
+  if [[ -n "$MODEL_PROXY_PYTHON_BIN" ]]; then
+    if [[ ! -x "$MODEL_PROXY_PYTHON_BIN" ]]; then
+      echo "model-proxy: Python interpreter is not executable: $MODEL_PROXY_PYTHON_BIN" >&2
+      return 2
+    fi
+    proxy_cmd=("$MODEL_PROXY_PYTHON_BIN" "$LLMOPS_ROOT/scripts/model_proxy_tap.py")
+  else
+    proxy_cmd=("$PROXY_TAP_BIN")
+  fi
+
   if ! has_upstream_arg && [[ -n "$configured_upstream_host" && -n "$configured_upstream_port" ]]; then
     if (( ${#extra_args[@]} > 0 )); then
       extra_args=(--upstream "http://${configured_upstream_host}:${configured_upstream_port}" "${extra_args[@]}")
@@ -265,7 +277,7 @@ start_proxy() {
     extra_args=(--chat-template "$MODEL_PROXY_CHAT_TEMPLATE" "${extra_args[@]}")
   fi
 
-  nohup "$PROXY_TAP_BIN" "${extra_args[@]}" > "$LOG_OUT" 2> "$LOG_ERR" &
+  nohup "${proxy_cmd[@]}" "${extra_args[@]}" > "$LOG_OUT" 2> "$LOG_ERR" &
   pid="$!"
   sleep 0.4
   if ! is_pid_running "$pid"; then
@@ -449,9 +461,17 @@ render_proxy() {
   done
 
   if (( ${#forwarded_args[@]} > 0 )); then
-    "$PROXY_TAP_BIN" --render-input "$render_input" "${forwarded_args[@]}"
+    if [[ -n "$MODEL_PROXY_PYTHON_BIN" ]]; then
+      "$MODEL_PROXY_PYTHON_BIN" "$LLMOPS_ROOT/scripts/model_proxy_tap.py" --render-input "$render_input" "${forwarded_args[@]}"
+    else
+      "$PROXY_TAP_BIN" --render-input "$render_input" "${forwarded_args[@]}"
+    fi
   else
-    "$PROXY_TAP_BIN" --render-input "$render_input"
+    if [[ -n "$MODEL_PROXY_PYTHON_BIN" ]]; then
+      "$MODEL_PROXY_PYTHON_BIN" "$LLMOPS_ROOT/scripts/model_proxy_tap.py" --render-input "$render_input"
+    else
+      "$PROXY_TAP_BIN" --render-input "$render_input"
+    fi
   fi
 }
 

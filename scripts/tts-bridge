@@ -222,6 +222,16 @@ start_bridge() {
     return 2
   fi
 
+  if [[ "$PY_BIN" == */* ]]; then
+    if [[ ! -x "$PY_BIN" ]]; then
+      echo "tts-bridge: Python interpreter is not executable: $PY_BIN" >&2
+      return 2
+    fi
+  elif ! command -v "$PY_BIN" >/dev/null 2>&1; then
+    echo "tts-bridge: Python interpreter not found in PATH: $PY_BIN" >&2
+    return 2
+  fi
+
   if status_bridge >/dev/null 2>&1; then
     echo "$pid_name: already running"
     return 0

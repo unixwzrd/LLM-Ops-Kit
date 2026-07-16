@@ -1385,6 +1385,26 @@ class ShellRuntimeHelperTests(unittest.TestCase):
                 str(root / "home" / "LLM_Repository" / "TTS" / "Qwen3-TTS-12Hz-0.6B-Base-8bit"),
             )
 
+    def test_tts_bridge_start_rejects_missing_python_before_writing_pid(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            state_home = root / "state"
+            missing_python = root / "missing-python"
+            proc = self.run_bash(
+                f'"{TTS_BRIDGE}" start',
+                env={
+                    "HOME": str(root / "home"),
+                    "LLMOPS_HOME": str(root / "llm-ops"),
+                    "LLMOPS_CONFIG_HOME": str(root / "config"),
+                    "LLMOPS_STATE_HOME": str(state_home),
+                    "TTS_BRIDGE_UPSTREAM_BASE": "http://127.0.0.1:65530/v1",
+                    "TTS_BRIDGE_PYTHON_BIN": str(missing_python),
+                },
+            )
+            self.assertEqual(proc.returncode, 2)
+            self.assertIn("Python interpreter is not executable", proc.stderr)
+            self.assertFalse((state_home / "run" / "tts-bridge.pid").exists())
+
     def _write_fake_gateway_cmd(self, root: Path) -> Path:
         script = root / "fake-gateway"
         script.write_text(

@@ -986,6 +986,7 @@ class LlmopsAdminTests(unittest.TestCase):
                             "upstream_port": 11434,
                             "listen_host": "127.0.0.1",
                             "listen_port": 11435,
+                            "python_bin": "/opt/venv/bin/python",
                         },
                         "template": {"path": "/tmp/template.jinja"},
                         "logging": {"rotate_seconds": 60, "rotate_keep": 2},
@@ -1001,6 +1002,7 @@ class LlmopsAdminTests(unittest.TestCase):
             self.assertIn("LLMOPS_UPSTREAM_HOST=127.0.0.1", rendered)
             self.assertIn("LLMOPS_UPSTREAM_PORT=11434", rendered)
             self.assertIn("MODEL_PROXY_LISTEN_PORT=11435", rendered)
+            self.assertIn("MODEL_PROXY_PYTHON_BIN=/opt/venv/bin/python", rendered)
             self.assertIn("MODEL_PROXY_CHAT_TEMPLATE=/tmp/template.jinja", rendered)
 
     def test_service_render_env_outputs_tts_bridge_profile_env(self) -> None:
