@@ -381,7 +381,9 @@ class LlmopsAdminTests(unittest.TestCase):
 
             llm_archive = stage / "hosts" / "llm-a" / "resolved-config.tar.gz"
             with tarfile.open(llm_archive, "r:gz") as archive:
-                llm_names = set(archive.getnames())
+                llm_members = archive.getnames()
+                llm_names = set(llm_members)
+            self.assertEqual(len(llm_members), len(llm_names))
             self.assertIn("models/chat.json", llm_names)
             self.assertIn("inventory.json", llm_names)
             self.assertIn("stacks/test.json", llm_names)
@@ -390,8 +392,10 @@ class LlmopsAdminTests(unittest.TestCase):
 
             agent_archive = stage / "hosts" / "agent-a" / "resolved-config.tar.gz"
             with tarfile.open(agent_archive, "r:gz") as archive:
-                agent_names = set(archive.getnames())
+                agent_members = archive.getnames()
+                agent_names = set(agent_members)
                 proxy = json.loads(archive.extractfile("services/proxy.json").read())
+            self.assertEqual(len(agent_members), len(agent_names))
             self.assertNotIn("models/chat.json", agent_names)
             self.assertIn("services/proxy.json", agent_names)
             self.assertIn("agents/generic.json", agent_names)
