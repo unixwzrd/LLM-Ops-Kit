@@ -289,6 +289,7 @@ print_model_settings() {
   if [[ "$MODEL_TYPE" == "tts" ]]; then
     echo "  TTS_PYTHON_BIN=${TTS_PYTHON_BIN:-}"
     echo "  TTS_SERVER_MODULE=${TTS_SERVER_MODULE:-}"
+    echo "  TTS_RUNTIME_PATH=${TTS_RUNTIME_PATH:-}"
     echo "  TTS_API_KEY=${TTS_API_KEY:+<set>}"
     echo "  TTS_SERVER_ARGS=${TTS_SERVER_ARGS:-}"
   fi
@@ -669,7 +670,11 @@ start_model() {
       extra=( $TTS_SERVER_ARGS )
       tts_cmd+=( "${extra[@]}" )
     fi
-    nohup "${tts_cmd[@]}" > "$LOG_FILE" 2>&1 &
+    if [[ -n "${TTS_RUNTIME_PATH:-}" ]]; then
+      nohup env PATH="$TTS_RUNTIME_PATH:$PATH" "${tts_cmd[@]}" > "$LOG_FILE" 2>&1 &
+    else
+      nohup "${tts_cmd[@]}" > "$LOG_FILE" 2>&1 &
+    fi
     pid="$!"
   fi
 
