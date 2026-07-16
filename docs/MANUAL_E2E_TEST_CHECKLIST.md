@@ -259,7 +259,8 @@ Expected:
 
 - no `scripts/tests`
 - no `docs/`
-- no `.env`
+- no repository-root or operator-local `.env`; checked-in runtime profile
+  `.env` files under `scripts/` are expected
 - no `.openclaw`
 - no obvious secret-bearing paths
 
@@ -320,8 +321,23 @@ Expected:
 
 - remote release directory is created
 - `current` points at the new release
+- `previous` resolves to the prior release after an upgrade
 - runtime links are installed/refreshed
 - role-specific verification runs
+
+- [ ] Inject a bounded post-switch failure and verify transactional rollback.
+
+```bash
+scripts/llmops-admin apply --tag "$LLMOPS_TEST_TAG" \
+  --stage "$LLMOPS_TEST_STAGE" --restart does-not-exist
+```
+
+Expected:
+
+- apply exits nonzero
+- `current` and `previous` retain their pre-attempt targets
+- the failed release directory is removed
+- command links continue to resolve through the restored `current`
 
 ## 7. Remote Runtime Verification
 

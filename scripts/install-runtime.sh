@@ -29,7 +29,7 @@ expand_path() {
   local raw="$1"
   case "$raw" in
     "~") printf '%s\n' "$HOME" ;;
-    "~/"*) printf '%s/%s\n' "$HOME" "${raw#\~/}" ;;
+    \~/*) printf '%s/%s\n' "$HOME" "${raw#\~/}" ;;
     *) printf '%s\n' "$raw" ;;
   esac
 }
@@ -37,6 +37,7 @@ expand_path() {
 ensure_runtime_venv() {
   local venv="$1"
   local python_bin
+  local -a python_packages
   [[ -n "$venv" ]] || return 0
 
   venv="$(expand_path "$venv")"
@@ -48,7 +49,8 @@ ensure_runtime_venv() {
 
   if [[ -n "${PYTHON_PACKAGES// }" ]]; then
     echo "Installing runtime Python packages into: $venv"
-    "$python_bin" -m pip install ${PYTHON_PACKAGES}
+    read -r -a python_packages <<< "$PYTHON_PACKAGES"
+    "$python_bin" -m pip install "${python_packages[@]}"
   fi
 
   if [[ "$INSTALL_SECRETS_KIT" -eq 1 ]]; then
@@ -85,24 +87,27 @@ install_public_launcher() {
 ensure_shell_profile_path() {
   local profile_file="$1"
   local public_bin="$2"
-  local tmp_file
+  local filtered_file new_file
   [[ "$UPDATE_SHELL_PROFILE" -eq 1 ]] || return 0
   mkdir -p "$(dirname "$profile_file")"
   touch "$profile_file"
-  tmp_file="${profile_file}.tmp.$$"
+  filtered_file="${profile_file}.filtered.$$"
+  new_file="${profile_file}.tmp.$$"
   awk '
     $0 == "# >>> llm-ops path >>>" { skip=1; next }
     $0 == "# <<< llm-ops path <<<" { skip=0; next }
     skip == 1 { next }
     { print }
-  ' "$profile_file" > "$tmp_file"
+  ' "$profile_file" > "$filtered_file"
   {
-    cat "$tmp_file"
+    cat "$filtered_file"
     printf '\n# >>> llm-ops path >>>\n'
+    # shellcheck disable=SC2016
     printf 'export PATH="%s:$PATH"\n' "$public_bin"
     printf '# <<< llm-ops path <<<\n'
-  } > "$profile_file"
-  rm -f "$tmp_file"
+  } > "$new_file"
+  mv "$new_file" "$profile_file"
+  rm -f "$filtered_file"
   echo "UPDATED_SHELL_PROFILE: $profile_file"
 }
 
@@ -158,7 +163,51 @@ fi
 
 INSTALL_DIR="$INSTALL_BASE/current"
 STAGING_DIR="$INSTALL_BASE/.staging.$$"
-BACKUP_DIR="$INSTALL_BASE/backups/$(date +%Y%m%d-%H%M%S)"
+BACKUP_ROOT="${LLMOPS_BACKUP_DIR:-$STATE_HOME/backups}"
+BACKUP_DIR="$BACKUP_ROOT/$(date +%Y%m%d-%H%M%S)-$$"
+PREVIOUS_INSTALL=""
+INSTALL_SWAPPED=0
+
+remove_fresh_install_links() {
+  local manifest="$INSTALL_DIR/scripts/runtime-links.manifest"
+  local target_rel src_rel target expected actual
+  if [[ -f "$manifest" ]]; then
+    while IFS='|' read -r target_rel src_rel; do
+      [[ -n "${target_rel:-}" ]] || continue
+      [[ "$target_rel" =~ ^[[:space:]]*# ]] && continue
+      target="$BIN_DIR/$target_rel"
+      expected="$INSTALL_DIR/$src_rel"
+      if [[ -L "$target" ]]; then
+        actual="$(readlink "$target" 2>/dev/null || true)"
+        [[ "$actual" == "$expected" ]] && rm -f "$target"
+      fi
+    done < "$manifest"
+  fi
+  if [[ -L "$PUBLIC_BIN_DIR/llmops" ]]; then
+    actual="$(readlink "$PUBLIC_BIN_DIR/llmops" 2>/dev/null || true)"
+    [[ "$actual" == "$INSTALL_DIR/scripts/llmops" ]] && rm -f "$PUBLIC_BIN_DIR/llmops"
+  fi
+}
+
+rollback_install() {
+  local rc=$?
+  trap - EXIT INT TERM
+  rm -rf "$STAGING_DIR"
+  if [[ "$INSTALL_SWAPPED" -eq 1 ]]; then
+    if [[ -n "$PREVIOUS_INSTALL" && -d "$PREVIOUS_INSTALL" ]]; then
+      rm -rf "$INSTALL_DIR"
+      mv "$PREVIOUS_INSTALL" "$INSTALL_DIR"
+      echo "ROLLED_BACK_INSTALL: $INSTALL_DIR" >&2
+    else
+      remove_fresh_install_links
+      rm -rf "$INSTALL_DIR"
+      echo "ROLLED_BACK_FRESH_INSTALL: $INSTALL_DIR" >&2
+    fi
+  fi
+  exit "$rc"
+}
+
+trap rollback_install EXIT INT TERM
 
 [[ -d "$SOURCE_DIR/scripts" ]] || { echo "Missing source scripts dir: $SOURCE_DIR/scripts" >&2; exit 1; }
 [[ -d "$SOURCE_DIR/bin" ]] || { echo "Missing source bin dir: $SOURCE_DIR/bin" >&2; exit 1; }
@@ -175,20 +224,25 @@ echo "Installing runtime payload from: $SOURCE_DIR"
 rsync -a --delete "$SOURCE_DIR/scripts/" "$STAGING_DIR/scripts/"
 rsync -a --delete "$SOURCE_DIR/bin/" "$STAGING_DIR/bin/"
 
+pushd "$STAGING_DIR/scripts" >/dev/null
+./generate-manifest
+popd >/dev/null
+
+ensure_runtime_venv "$VENV_PATH"
+
 if [[ -d "$INSTALL_DIR" ]]; then
-  mkdir -p "$(dirname "$BACKUP_DIR")"
+  mkdir -p "$BACKUP_ROOT"
   mv "$INSTALL_DIR" "$BACKUP_DIR"
+  PREVIOUS_INSTALL="$BACKUP_DIR"
   echo "Backed up previous runtime to: $BACKUP_DIR"
 fi
 
 mv "$STAGING_DIR" "$INSTALL_DIR"
+INSTALL_SWAPPED=1
 echo "Installed runtime to: $INSTALL_DIR"
-
-ensure_runtime_venv "$VENV_PATH"
 
 if [[ "$NO_LINKS" -eq 0 ]]; then
   pushd "$INSTALL_DIR/scripts" >/dev/null
-  ./generate-manifest
   BIN_DIR="$BIN_DIR" RUNTIME_DIR="$INSTALL_DIR" ./deploy-runtime-links.sh --replace-managed-links
   BIN_DIR="$BIN_DIR" RUNTIME_DIR="$INSTALL_DIR" ./verify-runtime-links.sh
   popd >/dev/null
@@ -196,14 +250,9 @@ if [[ "$NO_LINKS" -eq 0 ]]; then
   ensure_shell_profile_path "$(default_shell_profile)" "$PUBLIC_BIN_DIR"
 fi
 
-if [[ -f "$INSTALL_DIR/scripts/lib/common.sh" ]]; then
-  # shellcheck disable=SC1090
-  . "$INSTALL_DIR/scripts/lib/common.sh"
-  prune_runtime_backups
-fi
-
 mkdir -p "$(dirname "$STATE_FILE")"
-cat > "$STATE_FILE" <<EOF
+STATE_FILE_TMP="${STATE_FILE}.tmp.$$"
+cat > "$STATE_FILE_TMP" <<EOF
 LLMOPS_INSTALL_MODE=installed
 LLMOPS_INSTALL_BASE=$INSTALL_BASE
 LLMOPS_INSTALL_DIR=$INSTALL_DIR
@@ -213,6 +262,18 @@ LLMOPS_SOURCE_DIR=$SOURCE_DIR
 LLMOPS_RUNTIME_VENV_PATH=$VENV_PATH
 LLMOPS_UPDATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 EOF
+mv "$STATE_FILE_TMP" "$STATE_FILE"
 echo "WROTE_STATE: $STATE_FILE"
+
+INSTALL_SWAPPED=0
+trap - EXIT INT TERM
+
+if [[ -f "$INSTALL_DIR/scripts/lib/common.sh" ]]; then
+  # shellcheck disable=SC1090
+  . "$INSTALL_DIR/scripts/lib/common.sh"
+  if ! prune_runtime_backups; then
+    echo "WARNING: runtime backup pruning failed; run 'llmops runtime-maintenance prune'" >&2
+  fi
+fi
 
 echo "Install complete."

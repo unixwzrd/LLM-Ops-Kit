@@ -46,6 +46,15 @@ class AdminError(RuntimeError):
     pass
 
 
+def remote_shell_path(path: str) -> str:
+    """Quote a remote path while preserving inventory `~/` expansion."""
+    if path == "~":
+        return '"$HOME"'
+    if path.startswith("~/"):
+        return '"$HOME"/' + shlex.quote(path[2:])
+    return shlex.quote(path)
+
+
 @dataclass(frozen=True)
 class HostRecord:
     name: str
@@ -335,14 +344,19 @@ def write_host_config(stage_dir: Path, host: HostRecord, model: str | None) -> P
 def build_package(stage_dir: Path) -> Path:
     package_path = stage_dir / "package" / "llm-ops-kit.tar.gz"
     package_path.parent.mkdir(parents=True, exist_ok=True)
+
+    def package_filter(info: tarfile.TarInfo) -> tarfile.TarInfo | None:
+        parts = Path(info.name).parts
+        if "tests" in parts or "__pycache__" in parts:
+            return None
+        if info.name.endswith(("/.DS_Store", ".pyc", ".pyo")):
+            return None
+        return info
+
     with tarfile.open(package_path, "w:gz") as tar:
-        for path in REPO_ROOT.rglob("*"):
-            rel = path.relative_to(REPO_ROOT)
-            if any(part in {".git", "__pycache__", ".pytest_cache"} for part in rel.parts):
-                continue
-            if stage_dir in path.parents:
-                continue
-            tar.add(path, arcname=Path("LLM-Ops-Kit") / rel)
+        for name in ("scripts", "bin"):
+            path = REPO_ROOT / name
+            tar.add(path, arcname=Path("LLM-Ops-Kit") / name, filter=package_filter)
     return package_path
 
 
@@ -356,6 +370,7 @@ def write_manifest(stage_dir: Path, package_path: Path, hosts: list[HostRecord],
         host_dir = stage_dir / "hosts" / host.name
         config_env = host_dir / "config.env"
         config_json = host_dir / "config.json"
+        config_sources = host_dir / "config-sources.json"
         host_entries.append(
             {
                 "name": host.name,
@@ -371,6 +386,8 @@ def write_manifest(stage_dir: Path, package_path: Path, hosts: list[HostRecord],
                 "config_env_sha256": file_sha256(config_env),
                 "config_json": str(config_json),
                 "config_json_sha256": file_sha256(config_json),
+                "config_sources": str(config_sources),
+                "config_sources_sha256": file_sha256(config_sources),
             }
         )
     manifest = {
@@ -434,10 +451,13 @@ def validate_stage_bundle(stage_dir: Path, hosts: list[HostRecord], *, require_p
         host_dir = stage_dir / "hosts" / host.name
         config_env = host_dir / "config.env"
         config_json = host_dir / "config.json"
+        config_sources = host_dir / "config-sources.json"
         if item.get("config_env_sha256") != file_sha256(config_env):
             raise AdminError(f"stage config.env checksum mismatch: {config_env}")
         if item.get("config_json_sha256") != file_sha256(config_json):
             raise AdminError(f"stage config.json checksum mismatch: {config_json}")
+        if item.get("config_sources_sha256") != file_sha256(config_sources):
+            raise AdminError(f"stage config-sources.json checksum mismatch: {config_sources}")
 
 
 def latest_stage(stage_root: Path) -> Path:
@@ -464,7 +484,8 @@ def cmd_bootstrap_host(args: argparse.Namespace) -> int:
         if not key_path.exists():
             commands.append(["ssh-keygen", "-t", "ed25519", "-f", str(key_path), "-N", "", "-C", f"llmops:{host.name}"])
         commands.append(["ssh-copy-id", "-i", f"{key_path}.pub", "-p", str(host.port), host.destination])
-        remote = f"mkdir -p {shlex.quote(host.install_root)}/{{packages,run,logs,config}} && touch {shlex.quote(host.install_root)}/.llmops-ready"
+        root = remote_shell_path(host.install_root)
+        remote = f"mkdir -p {root}/{{packages,run,logs,config}} && touch {root}/.llmops-ready"
         commands.append(host.ssh_base() + [remote])
         for command in commands:
             code, output = run_command(command, dry_run=args.dry_run)
@@ -507,8 +528,10 @@ def push_one(host: HostRecord, stage_dir: Path, dry_run: bool) -> tuple[str, int
     host_config_json = stage_dir / "hosts" / host.name / "config.json"
     host_config_sources = stage_dir / "hosts" / host.name / "config-sources.json"
     remote_package_dir = f"{host.install_root}/packages/{stage_dir.name}"
+    remote_root = remote_shell_path(host.install_root)
+    bundle = shlex.quote(stage_dir.name)
     commands = [
-        host.ssh_base() + [f"mkdir -p {shlex.quote(remote_package_dir)} {shlex.quote(host.install_root)}/config"],
+        host.ssh_base() + [f"mkdir -p {remote_root}/packages/{bundle} {remote_root}/config"],
         ["scp", "-i", str(host.ssh_key_path), "-P", str(host.port), str(package), f"{host.destination}:{remote_package_dir}/"],
         ["scp", "-i", str(host.ssh_key_path), "-P", str(host.port), str(manifest), f"{host.destination}:{remote_package_dir}/manifest.json"],
         ["scp", "-i", str(host.ssh_key_path), "-P", str(host.port), str(host_config), f"{host.destination}:{host.install_root}/config/{host.name}.env"],
@@ -552,40 +575,93 @@ def cmd_push(args: argparse.Namespace) -> int:
 
 
 def apply_one(host: HostRecord, stage_dir: Path, dry_run: bool, restart: str | None) -> tuple[str, int, str]:
-    package = f"{host.install_root}/packages/{stage_dir.name}/llm-ops-kit.tar.gz"
-    manifest = f"{host.install_root}/packages/{stage_dir.name}/manifest.json"
-    remote_config_env = f"{host.install_root}/config/{host.name}.env"
-    remote_config_json = f"{host.install_root}/config/{host.name}.json"
-    remote_config_sources = f"{host.install_root}/config/{host.name}.sources.json"
-    release = f"{host.install_root}/releases/{stage_dir.name}"
-    release_config = f"{release}/config"
-    current = f"{host.install_root}/current"
+    manifest_path = stage_dir / "manifest.json"
+    manifest_data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    host_data = next(item for item in manifest_data["hosts"] if item["name"] == host.name)
+    root = remote_shell_path(host.install_root)
+    bundle = shlex.quote(stage_dir.name)
+    host_name = shlex.quote(host.name)
+    package_sha256 = shlex.quote(str(manifest_data["package_sha256"]))
+    manifest_sha256 = shlex.quote(file_sha256(manifest_path))
+    config_env_sha256 = shlex.quote(str(host_data["config_env_sha256"]))
+    config_json_sha256 = shlex.quote(str(host_data["config_json_sha256"]))
+    config_sources_sha256 = shlex.quote(str(host_data["config_sources_sha256"]))
     commands = [
-        f"test -f {shlex.quote(package)}",
-        f"test -f {shlex.quote(manifest)}",
-        f"test -f {shlex.quote(remote_config_env)}",
-        f"test -f {shlex.quote(remote_config_json)}",
-        f"test -f {shlex.quote(remote_config_sources)}",
-        f"mkdir -p {shlex.quote(release)}",
-        f"tar -xzf {shlex.quote(package)} -C {shlex.quote(release)} --strip-components=1",
-        f"cp {shlex.quote(manifest)} {shlex.quote(release)}/manifest.json",
-        f"mkdir -p {shlex.quote(release_config)}",
-        f"cp {shlex.quote(remote_config_env)} {shlex.quote(release_config)}/{host.name}.env",
-        f"cp {shlex.quote(remote_config_json)} {shlex.quote(release_config)}/{host.name}.json",
-        f"cp {shlex.quote(remote_config_sources)} {shlex.quote(release_config)}/{host.name}.sources.json",
-        f"printf '%s\\n' {shlex.quote(stage_dir.name)} > {shlex.quote(release)}/BUNDLE_ID",
-        f"printf '%s\\n' {shlex.quote(host.name)} > {shlex.quote(release)}/HOST_NAME",
-        f"test ! -e {shlex.quote(current)} || ln -sfn {shlex.quote(current)} {shlex.quote(host.install_root)}/previous",
-        f"ln -sfn {shlex.quote(release)} {shlex.quote(current)}",
-        f"bash {shlex.quote(current)}/scripts/deploy-runtime-links.sh",
+        "set -eu",
+        f"root={root}",
+        f"bundle={bundle}",
+        f"host_name={host_name}",
+        f"expected_package_sha256={package_sha256}",
+        f"expected_manifest_sha256={manifest_sha256}",
+        f"expected_config_env_sha256={config_env_sha256}",
+        f"expected_config_json_sha256={config_json_sha256}",
+        f"expected_config_sources_sha256={config_sources_sha256}",
+        'package="$root/packages/$bundle/llm-ops-kit.tar.gz"',
+        'manifest="$root/packages/$bundle/manifest.json"',
+        'remote_config_env="$root/config/$host_name.env"',
+        'remote_config_json="$root/config/$host_name.json"',
+        'remote_config_sources="$root/config/$host_name.sources.json"',
+        'release="$root/releases/$bundle"',
+        'release_config="$release/config"',
+        'current="$root/current"',
+        'old_target=""',
+        'previous_old_target=""',
+        'previous_existed=0',
+        'switched=0',
+        'release_created=0',
+        'checksum() { if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | awk \'{print $1}\'; '
+        'else sha256sum "$1" | awk \'{print $1}\'; fi; }',
+        'replace_link() { src=$1; dst=$2; '
+        'if mv -fh "$src" "$dst" 2>/dev/null; then return 0; fi; '
+        'if mv -fT "$src" "$dst" 2>/dev/null; then return 0; fi; '
+        'rm -f "$dst"; mv -f "$src" "$dst"; }',
+        'rollback() { rc=$?; trap - EXIT HUP INT TERM; '
+        'if [ "$switched" -eq 1 ]; then '
+        'if [ -n "$old_target" ]; then ln -s "$old_target" "$root/.current.rollback.$$"; '
+        'replace_link "$root/.current.rollback.$$" "$current"; else rm -f "$current"; fi; '
+        'if [ "$previous_existed" -eq 1 ]; then ln -s "$previous_old_target" "$root/.previous.rollback.$$"; '
+        'replace_link "$root/.previous.rollback.$$" "$root/previous"; else rm -f "$root/previous"; fi; fi; '
+        'if [ "$release_created" -eq 1 ]; then rm -rf "$release"; fi; exit "$rc"; }',
+        'trap rollback EXIT HUP INT TERM',
+        'test -f "$package"',
+        'test -f "$manifest"',
+        'test -f "$remote_config_env"',
+        'test -f "$remote_config_json"',
+        'test -f "$remote_config_sources"',
+        'test "$(checksum "$package")" = "$expected_package_sha256"',
+        'test "$(checksum "$manifest")" = "$expected_manifest_sha256"',
+        'test "$(checksum "$remote_config_env")" = "$expected_config_env_sha256"',
+        'test "$(checksum "$remote_config_json")" = "$expected_config_json_sha256"',
+        'test "$(checksum "$remote_config_sources")" = "$expected_config_sources_sha256"',
+        'test ! -e "$release"',
+        'mkdir -p "$release_config"',
+        'release_created=1',
+        'tar -xzf "$package" -C "$release" --strip-components=1',
+        'cp "$manifest" "$release/manifest.json"',
+        'cp "$remote_config_env" "$release_config/$host_name.env"',
+        'cp "$remote_config_json" "$release_config/$host_name.json"',
+        'cp "$remote_config_sources" "$release_config/$host_name.sources.json"',
+        'printf \'%s\\n\' "$bundle" > "$release/BUNDLE_ID"',
+        'printf \'%s\\n\' "$host_name" > "$release/HOST_NAME"',
+        'if [ -L "$current" ]; then old_target=$(readlink "$current"); '
+        'elif [ -e "$current" ]; then old_target="$root/releases/legacy-current-$(date +%Y%m%d-%H%M%S)-$$"; '
+        'mv "$current" "$old_target"; fi',
+        'if [ -L "$root/previous" ]; then previous_old_target=$(readlink "$root/previous"); previous_existed=1; fi',
+        'switched=1',
+        'if [ -n "$old_target" ]; then ln -s "$old_target" "$root/.previous.new.$$"; '
+        'replace_link "$root/.previous.new.$$" "$root/previous"; fi',
+        'ln -s "$release" "$root/.current.new.$$"',
+        'replace_link "$root/.current.new.$$" "$current"',
+        'BIN_DIR="$root/bin" RUNTIME_DIR="$current" bash "$current/scripts/deploy-runtime-links.sh" --replace-managed-links',
     ]
     if restart:
-        commands.append(f"bash {shlex.quote(current)}/scripts/{shlex.quote(restart)} restart")
+        commands.append(f'bash "$current/scripts/{shlex.quote(restart)}" restart')
     if host.role in {"llm", "hybrid"}:
-        commands.append(f"test -x {shlex.quote(current)}/scripts/modelctl")
+        commands.append('test -x "$current/scripts/modelctl"')
     if host.role in {"agent", "hybrid"}:
-        commands.append(f"test -x {shlex.quote(current)}/scripts/agentctl")
-    code, output = run_command(host.ssh_base() + [" && ".join(commands)], dry_run=dry_run)
+        commands.append('test -x "$current/scripts/agentctl"')
+    commands.extend(["trap - EXIT HUP INT TERM", "exit 0"])
+    code, output = run_command(host.ssh_base() + ["; ".join(commands)], dry_run=dry_run)
     return host.name, code, output
 
 
@@ -645,6 +721,7 @@ def cmd_deploy_report(args: argparse.Namespace) -> int:
             f"\trelease_config_dir={release_dir}/config"
             f"\tconfig_env_sha256={item.get('config_env_sha256')}"
             f"\tconfig_json_sha256={item.get('config_json_sha256')}"
+            f"\tconfig_sources_sha256={item.get('config_sources_sha256')}"
         )
     return 0
 

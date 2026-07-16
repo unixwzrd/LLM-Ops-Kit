@@ -440,6 +440,128 @@ class ShellRuntimeHelperTests(unittest.TestCase):
             profile_text = shell_profile.read_text(encoding="utf-8")
             self.assertEqual(profile_text.count("# >>> llm-ops path >>>"), 1)
 
+    def test_install_runtime_stores_upgrade_backup_under_state_home(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "repo"
+            home = Path(tmp) / "home"
+            install_base = home / ".local" / "llm-ops"
+            state_home = home / ".local" / "state" / "llm-ops"
+            root.mkdir()
+            copy = self.run_bash(f'rsync -a --exclude .git "{REPO_ROOT}/" "{root}/"')
+            self.assertEqual(copy.returncode, 0, copy.stderr)
+
+            command = (
+                f'"{root / "scripts" / "install-runtime.sh"}" '
+                f'--source "{root}" --prefix "{install_base}" --no-shell-profile'
+            )
+            env = {
+                "HOME": str(home),
+                "LLMOPS_STATE_HOME": str(state_home),
+                "LLMOPS_RUNTIME_VENV_PACKAGES": "",
+            }
+            first = self.run_bash(command, env=env)
+            self.assertEqual(first.returncode, 0, first.stderr)
+            (install_base / "current" / "upgrade-marker").write_text("old\n", encoding="utf-8")
+
+            second = self.run_bash(command, env=env)
+            self.assertEqual(second.returncode, 0, second.stderr)
+            backups = list((state_home / "backups").glob("*"))
+            self.assertEqual(len(backups), 1)
+            self.assertTrue((backups[0] / "upgrade-marker").exists())
+            self.assertFalse((install_base / "backups").exists())
+
+    def test_install_runtime_restores_previous_runtime_after_failed_upgrade(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "repo"
+            home = Path(tmp) / "home"
+            install_base = home / ".local" / "llm-ops"
+            state_home = home / ".local" / "state" / "llm-ops"
+            state_file = state_home / "runtime-state.env"
+            root.mkdir()
+            copy = self.run_bash(f'rsync -a --exclude .git "{REPO_ROOT}/" "{root}/"')
+            self.assertEqual(copy.returncode, 0, copy.stderr)
+
+            command = (
+                f'"{root / "scripts" / "install-runtime.sh"}" '
+                f'--source "{root}" --prefix "{install_base}" --no-shell-profile'
+            )
+            env = {
+                "HOME": str(home),
+                "LLMOPS_STATE_HOME": str(state_home),
+                "LLMOPS_RUNTIME_VENV_PACKAGES": "",
+            }
+            first = self.run_bash(command, env=env)
+            self.assertEqual(first.returncode, 0, first.stderr)
+            marker = install_base / "current" / "upgrade-marker"
+            marker.write_text("known-good\n", encoding="utf-8")
+            previous_state = state_file.read_text(encoding="utf-8")
+
+            deploy = root / "scripts" / "deploy-runtime-links.sh"
+            deploy.write_text("#!/usr/bin/env bash\nexit 19\n", encoding="utf-8")
+            deploy.chmod(0o755)
+
+            failed = self.run_bash(command, env=env)
+            self.assertEqual(failed.returncode, 19)
+            self.assertTrue(marker.exists())
+            self.assertEqual(marker.read_text(encoding="utf-8"), "known-good\n")
+            self.assertEqual(state_file.read_text(encoding="utf-8"), previous_state)
+            self.assertTrue((home / ".local" / "bin" / "llmops").is_symlink())
+
+    def test_failed_fresh_install_removes_partial_runtime_and_links(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "repo"
+            home = Path(tmp) / "home"
+            install_base = home / ".local" / "llm-ops"
+            root.mkdir()
+            copy = self.run_bash(f'rsync -a --exclude .git "{REPO_ROOT}/" "{root}/"')
+            self.assertEqual(copy.returncode, 0, copy.stderr)
+            verify = root / "scripts" / "verify-runtime-links.sh"
+            verify.write_text("#!/usr/bin/env bash\nexit 23\n", encoding="utf-8")
+            verify.chmod(0o755)
+
+            failed = self.run_bash(
+                f'"{root / "scripts" / "install-runtime.sh"}" '
+                f'--source "{root}" --prefix "{install_base}" --no-shell-profile',
+                env={"HOME": str(home), "LLMOPS_RUNTIME_VENV_PACKAGES": ""},
+            )
+            self.assertEqual(failed.returncode, 23)
+            self.assertFalse((install_base / "current").exists())
+            self.assertFalse((home / ".local" / "bin" / "llmops").exists())
+            managed_bin = install_base / "bin"
+            self.assertFalse(any(managed_bin.iterdir()))
+
+    def test_uninstall_recovers_when_runtime_manifest_is_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "repo"
+            home = Path(tmp) / "home"
+            install_base = home / ".local" / "llm-ops"
+            state_home = home / ".local" / "state" / "llm-ops"
+            root.mkdir()
+            copy = self.run_bash(f'rsync -a --exclude .git "{REPO_ROOT}/" "{root}/"')
+            self.assertEqual(copy.returncode, 0, copy.stderr)
+            env = {
+                "HOME": str(home),
+                "LLMOPS_STATE_HOME": str(state_home),
+                "LLMOPS_RUNTIME_VENV_PACKAGES": "",
+            }
+            installed = self.run_bash(
+                f'"{root / "scripts" / "install-runtime.sh"}" '
+                f'--source "{root}" --prefix "{install_base}" --no-shell-profile',
+                env=env,
+            )
+            self.assertEqual(installed.returncode, 0, installed.stderr)
+            (install_base / "current" / "scripts" / "runtime-links.manifest").unlink()
+
+            removed = self.run_bash(
+                f'"{root / "scripts" / "uninstall-runtime.sh"}" --prefix "{install_base}"',
+                env=env,
+            )
+            self.assertEqual(removed.returncode, 0, removed.stderr)
+            self.assertFalse((install_base / "current").exists())
+            self.assertFalse((home / ".local" / "bin" / "llmops").exists())
+            self.assertFalse((state_home / "runtime-state.env").exists())
+            self.assertFalse(any((install_base / "bin").iterdir()))
+
     def test_setup_deploy_writes_named_config(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

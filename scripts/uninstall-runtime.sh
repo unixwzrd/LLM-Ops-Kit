@@ -40,29 +40,38 @@ done
 INSTALL_DIR="$INSTALL_BASE/current"
 MANIFEST_FILE="$INSTALL_DIR/scripts/runtime-links.manifest"
 
-if [[ ! -f "$MANIFEST_FILE" ]]; then
-  echo "Manifest not found: $MANIFEST_FILE" >&2
-  echo "Nothing to uninstall."
-  exit 0
-fi
-
 removed=0
 
-while IFS='|' read -r target_rel src_rel; do
-  [[ -z "${target_rel:-}" ]] && continue
-  [[ "$target_rel" =~ ^[[:space:]]*# ]] && continue
+if [[ -f "$MANIFEST_FILE" ]]; then
+  while IFS='|' read -r target_rel src_rel; do
+    [[ -z "${target_rel:-}" ]] && continue
+    [[ "$target_rel" =~ ^[[:space:]]*# ]] && continue
 
-  target="$BIN_DIR/$target_rel"
-  expected="$INSTALL_DIR/$src_rel"
-  if [[ -L "$target" ]]; then
-    actual="$(readlink "$target" 2>/dev/null || true)"
-    if [[ "$actual" == "$expected" ]]; then
-      rm -f "$target"
-      echo "REMOVED_LINK: $target -> $actual"
-      removed=$((removed + 1))
+    target="$BIN_DIR/$target_rel"
+    expected="$INSTALL_DIR/$src_rel"
+    if [[ -L "$target" ]]; then
+      actual="$(readlink "$target" 2>/dev/null || true)"
+      if [[ "$actual" == "$expected" ]]; then
+        rm -f "$target"
+        echo "REMOVED_LINK: $target -> $actual"
+        removed=$((removed + 1))
+      fi
     fi
-  fi
-done < "$MANIFEST_FILE"
+  done < "$MANIFEST_FILE"
+else
+  echo "WARNING: manifest not found; removing only links targeting $INSTALL_DIR" >&2
+  for target in "$BIN_DIR"/*; do
+    [[ -L "$target" ]] || continue
+    actual="$(readlink "$target" 2>/dev/null || true)"
+    case "$actual" in
+      "$INSTALL_DIR"/*)
+        rm -f "$target"
+        echo "REMOVED_LINK_WITHOUT_MANIFEST: $target -> $actual"
+        removed=$((removed + 1))
+        ;;
+    esac
+  done
+fi
 
 if [[ "$KEEP_FILES" -eq 0 ]]; then
   rm -rf "$INSTALL_DIR"

@@ -17,5 +17,7 @@ Notes:
 - Also removes runtime state:
   - `~/.local/state/llm-ops/runtime-state.env`
 - Use `--keep-files` to remove links only.
+- If the runtime manifest is missing, uninstall removes only command links that
+  point into the managed runtime, then removes the requested runtime/state.
 - To clean up old managed links from a legacy `~/bin` install without deleting
   the current runtime or public launcher, run `scripts/uninstall-runtime.sh --bin-dir "$HOME/bin" --keep-files`.

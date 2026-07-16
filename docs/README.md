@@ -28,6 +28,7 @@ Back: [docs/INDEX.md](./INDEX.md)
 ## Runtime and Deployment
 
 - [`DEPLOYMENT_OVERVIEW.md`](./DEPLOYMENT_OVERVIEW.md) — current deployment model and admin workflow
+- [`UPGRADE_AND_ROLLBACK.md`](./UPGRADE_AND_ROLLBACK.md) — migration, transactional upgrade, verification, and rollback
 - [`MANUAL_E2E_TEST_CHECKLIST.md`](./MANUAL_E2E_TEST_CHECKLIST.md) — step-by-step release validation checklist
 - [`INSTALLATION_REWORK_CHECKLIST.md`](./INSTALLATION_REWORK_CHECKLIST.md) — migration checklist for the installation rework
 - [`SSH_SETUP_RUNBOOK.md`](./SSH_SETUP_RUNBOOK.md) — SSH key setup and deployment auth flow

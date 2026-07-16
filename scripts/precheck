@@ -18,6 +18,8 @@ shell_targets=(
   "scripts/modelctl"
   "scripts/tts-bridge"
   "scripts/model-proxy"
+  "scripts/install-runtime.sh"
+  "scripts/uninstall-runtime.sh"
 )
 
 echo "==> Shell syntax checks"

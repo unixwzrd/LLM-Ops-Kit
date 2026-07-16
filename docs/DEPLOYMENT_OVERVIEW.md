@@ -67,7 +67,7 @@ Each host record must define:
 - `host`: DNS name or IP address
 - `user`: SSH user
 - `port`: SSH port
-- `install_root`: remote install root, normally `~/.llm-ops`
+- `install_root`: remote install root, normally `~/.local/llm-ops`
 - `config_profile`: layered config profile name
 - `ssh_key`: local private key path
 - `tags`: optional selectors such as `production`, `model`, or `agent`
@@ -197,12 +197,16 @@ Apply runs remote installation commands after a package has been pushed. It:
 - creates a release directory under the remote install root
 - verifies the pushed package and manifest are present
 - verifies pushed host config artifacts are present
+- verifies remote package, manifest, and host config checksums against the
+  validated local stage
 - unpacks the pushed package
 - copies the pushed manifest into the release directory
 - copies host-specific config artifacts into the release directory
 - writes `BUNDLE_ID` and `HOST_NAME` marker files into the release directory
 - updates the `current` symlink
 - preserves the previous install pointer
+- preserves a directory-style legacy `current` as a release during migration
+- restores both `current` and `previous` if post-switch validation fails
 - installs or refreshes runtime command links
 - optionally restarts a selected script
 - verifies `modelctl` on `llm` and `hybrid` hosts
@@ -275,6 +279,10 @@ scripts/llmops-admin apply --tag production --stage ~/.local/share/llm-ops/stage
 ```
 
 Use `--dry-run` before any bootstrap, push, or apply that affects real hosts.
+Use a unique bundle ID for each apply; release directories are immutable.
+
+For checkout preservation, legacy configuration migration, directory-style
+install conversion, and rollback, see [Upgrade and Rollback](./UPGRADE_AND_ROLLBACK.md).
 
 ## Related Docs
 

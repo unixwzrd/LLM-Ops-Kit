@@ -8,6 +8,7 @@ import io
 import json
 import sys
 import tempfile
+import tarfile
 import unittest
 from argparse import Namespace
 from pathlib import Path
@@ -67,6 +68,10 @@ class LlmopsAdminTests(unittest.TestCase):
             self.assertEqual([host.name for host in hosts], ["llm-a", "agent-a"])
             selected = self.admin.select_hosts(hosts, Namespace(role="llm", tag=None, host_name=None))
             self.assertEqual([host.name for host in selected], ["llm-a"])
+
+    def test_remote_shell_path_expands_inventory_home_safely(self) -> None:
+        self.assertEqual(self.admin.remote_shell_path("~/llmops"), '"$HOME"/llmops')
+        self.assertEqual(self.admin.remote_shell_path("/opt/llm ops"), "'/opt/llm ops'")
 
     def test_inventory_json_parsing_and_selection(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -186,6 +191,21 @@ class LlmopsAdminTests(unittest.TestCase):
             finally:
                 self.admin.build_package = original_build_package
 
+    def test_build_package_contains_runtime_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            package = self.admin.build_package(Path(tmp) / "stage" / "bundle")
+            with tarfile.open(package, "r:gz") as archive:
+                names = archive.getnames()
+            self.assertIn("LLM-Ops-Kit/scripts/llmops-admin", names)
+            self.assertIn("LLM-Ops-Kit/bin/model-proxy-tap", names)
+            self.assertTrue(any(name.startswith("LLM-Ops-Kit/scripts/templates/") for name in names))
+            self.assertFalse(any("/scripts/tests/" in name for name in names))
+            self.assertFalse(any(name.startswith("LLM-Ops-Kit/docs/") for name in names))
+            self.assertFalse(any(name.startswith("LLM-Ops-Kit/stage/") for name in names))
+            self.assertNotIn("LLM-Ops-Kit/.env", names)
+            self.assertNotIn("LLM-Ops-Kit/.env.example", names)
+            self.assertFalse(any(name.endswith((".DS_Store", ".pyc")) for name in names))
+
     def test_write_host_config_writes_env_and_json(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -218,8 +238,13 @@ class LlmopsAdminTests(unittest.TestCase):
             for host in manifest["hosts"]:
                 self.assertTrue(Path(host["config_env"]).exists())
                 self.assertTrue(Path(host["config_json"]).exists())
+                self.assertTrue(Path(host["config_sources"]).exists())
                 self.assertEqual(host["config_env_sha256"], self.admin.file_sha256(Path(host["config_env"])))
                 self.assertEqual(host["config_json_sha256"], self.admin.file_sha256(Path(host["config_json"])))
+                self.assertEqual(
+                    host["config_sources_sha256"],
+                    self.admin.file_sha256(Path(host["config_sources"])),
+                )
 
     def test_push_dry_run_aggregates_parallel_results(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -299,18 +324,29 @@ class LlmopsAdminTests(unittest.TestCase):
                 self.assertEqual(self.admin.cmd_apply(args), 0)
             rendered = stdout.getvalue()
             self.assertIn("test -f", rendered)
-            self.assertIn("~/llmops/packages/bundle/manifest.json", rendered)
+            self.assertIn('root="$HOME"/llmops', rendered)
+            self.assertIn('manifest="$root/packages/$bundle/manifest.json"', rendered)
             self.assertIn("cp", rendered)
-            self.assertIn("~/llmops/releases/bundle", rendered)
-            self.assertIn("~/llmops/config/llm-a.env", rendered)
-            self.assertIn("~/llmops/config/llm-a.json", rendered)
-            self.assertIn("~/llmops/config/llm-a.sources.json", rendered)
-            self.assertIn("~/llmops/releases/bundle/config", rendered)
-            self.assertIn("/llm-a.env", rendered)
-            self.assertIn("/llm-a.json", rendered)
-            self.assertIn("/llm-a.sources.json", rendered)
+            self.assertIn('release="$root/releases/$bundle"', rendered)
+            self.assertIn('remote_config_env="$root/config/$host_name.env"', rendered)
+            self.assertIn('remote_config_json="$root/config/$host_name.json"', rendered)
+            self.assertIn('remote_config_sources="$root/config/$host_name.sources.json"', rendered)
+            self.assertIn('release_config="$release/config"', rendered)
             self.assertIn("BUNDLE_ID", rendered)
             self.assertIn("HOST_NAME", rendered)
+            self.assertIn('old_target=$(readlink "$current")', rendered)
+            self.assertIn('replace_link() {', rendered)
+            self.assertIn('mv -fh "$src" "$dst"', rendered)
+            self.assertIn('mv -fT "$src" "$dst"', rendered)
+            self.assertIn('trap rollback EXIT HUP INT TERM', rendered)
+            self.assertIn('previous_old_target=$(readlink "$root/previous")', rendered)
+            self.assertIn('replace_link "$root/.previous.rollback.$$" "$root/previous"', rendered)
+            self.assertIn('release_created=1', rendered)
+            self.assertIn('if [ "$switched" -eq 1 ]', rendered)
+            self.assertIn('if [ "$release_created" -eq 1 ]; then rm -rf "$release"', rendered)
+            self.assertIn('test "$(checksum "$package")" = "$expected_package_sha256"', rendered)
+            self.assertIn('test "$(checksum "$remote_config_sources")" = "$expected_config_sources_sha256"', rendered)
+            self.assertIn('BIN_DIR="$root/bin" RUNTIME_DIR="$current"', rendered)
 
     def test_push_dry_run_fails_for_config_checksum_mismatch(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -66,5 +66,7 @@
 - [x] Unit test parallel push result aggregation.
 - [x] Integration test local staging layout.
 - [x] Integration test dry-run deploy to multiple fake hosts.
-- [ ] Regression test existing single-host install flow.
-- [ ] Document manual acceptance test steps.
+- [x] Regression test existing single-host install flow.
+- [x] Document manual acceptance test steps.
+- [x] Test remote first install, upgrade, failed-upgrade rollback, and legacy
+  directory migration on macOS.

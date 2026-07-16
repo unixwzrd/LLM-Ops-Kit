@@ -47,6 +47,13 @@ What gets linked:
 
 This is useful when you do not want runtime commands to break if `~/projects/LLM-Ops-Kit` is moved or deleted.
 
+Upgrade behavior:
+
+- the new payload and manifest are prepared before `current` is replaced
+- the previous payload is backed up under `~/.local/state/llm-ops/backups`
+- failed link deployment restores the previous payload and state file
+- runtime state is written atomically after link verification
+
 Deployment note:
 
 - administrator workstation deployment uses `scripts/llmops-admin`
