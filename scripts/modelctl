@@ -682,7 +682,7 @@ start_model() {
     llama_cmd+=(--log-timestamps --log-file "$LOG_FILE")
     (( ${#MODE_FLAGS[@]} > 0 )) && llama_cmd+=("${MODE_FLAGS[@]}")
     (( ${#EXTRA_ARGS[@]} > 0 )) && llama_cmd+=("${EXTRA_ARGS[@]}")
-    nohup "${llama_cmd[@]}" &
+    nohup "${llama_cmd[@]}" >/dev/null 2>&1 &
     pid="$!"
   fi
 
