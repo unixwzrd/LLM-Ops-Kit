@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "defaults": {
+    "user": "operator",
+    "port": 22,
+    "install_root": "~/.local/llm-ops",
+    "config_profile": "default",
+    "ssh_key": "~/.ssh/llmops_ed25519"
+  },
+  "hosts": [
+    {
+      "name": "model-host",
+      "role": "llm",
+      "host": "model-host.local"
+    },
+    {
+      "name": "agent-host",
+      "role": "agent",
+      "host": "agent-host.local"
+    }
+  ]
+}

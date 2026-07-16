@@ -1,7 +1,7 @@
 # Consolidated TODO
 
 **Created**: 2026-05-10
-**Updated**: 2026-05-10
+**Updated**: 2026-07-16
 
 Back: [docs/INDEX.md](./INDEX.md)
 
@@ -22,12 +22,14 @@ config, XDG path, deployment, Secrets Kit, and housekeeping rework.
 - [ ] Add drift detection for transitional per-model env overrides when shipped profiles gain new settings.
 - [ ] Add an opt-in helper to append missing override settings without overwriting user comments or values.
 - [ ] Add an operator command that prints effective config sources and values for model, agent, proxy, and TTS wrappers.
-- [ ] Rework installed runtime layout so `~/.local/llm-ops/current` can point to a versioned release directory for rollback.
+- [x] Rework installed runtime layout so `~/.local/llm-ops/current` points to a versioned release directory with code-and-config rollback.
 
 ## Deployment
 
 - [ ] Document bootstrap recovery steps for failed or partially configured hosts.
-- [ ] Add retry support for failed hosts in push/apply workflows.
+- [x] Add bounded retry for failed transport commands in push/apply workflows.
+- [x] Add desired-state drift detection and atomic `current`/`previous` rollback.
+- [ ] Complete side-by-side runtime 20 canaries and retain runtime 20 for two successful reporting cycles.
 - [ ] Document manual acceptance test steps for admin-to-satellite deployment.
 - [ ] Regression-test the existing single-host local install flow after deployment changes.
 
@@ -41,7 +43,7 @@ config, XDG path, deployment, Secrets Kit, and housekeeping rework.
 
 ## Documentation
 
-- [ ] Keep public docs focused on `README.md`, `docs/INDEX.md`, `docs/QUICKSTART.md`, and `docs/DEPLOYMENT_OVERVIEW.md`.
-- [ ] Keep historical/internal notes out of the public operator path unless they are promoted into this TODO or current docs.
+- [x] Keep public docs focused on `README.md`, `docs/INDEX.md`, `docs/QUICKSTART.md`, and `docs/DEPLOYMENT_OVERVIEW.md`.
+- [x] Keep historical/internal notes out of the public operator path unless they are promoted into this TODO or current docs.
 - [ ] Add minimal copy/paste profile examples for `llm`, `embedding`, and `tts` in `docs/ADDING_MODEL_PROFILE.md`.
 - [ ] Add common failure modes to proxy and TTS docs as they are found during real validation.

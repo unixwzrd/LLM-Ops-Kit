@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "model_type": "llm",
+  "model_path": "/path/to/chat-model.gguf",
+  "server": {
+    "host": "127.0.0.1",
+    "port": 11434
+  }
+}

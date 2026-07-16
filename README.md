@@ -1,330 +1,100 @@
 # LLM-Ops-Kit
 
-**Created**: 2026-02-20
-**Updated**: 2026-03-27
+LLM-Ops-Kit is a macOS-first operations toolkit for running models, agents, proxies, bridges, tunnels, dashboards, and supporting services on one Apple Silicon Mac or across a local LAN.
 
+It provides dependency-aware component control without requiring Docker or Kubernetes. Components remain independently manageable; stacks are named dependency groupings for coordinated operations.
 
-Operational toolkit for running, deploying, and maintaining a local OpenClaw stack across hosts.
+## Supported Platform
 
-Note: `agentctl` is the supported command for agent runtime control. `modelctl` is the supported command for model runtime control.
+- macOS on Apple Silicon
+- Python 3.9 or newer
+- Bash 3.2 compatibility for runtime wrappers
+- SSH for LAN operation
+- launchd for supervised macOS services
 
-Docs index: [docs/INDEX.md](docs/INDEX.md)
+Linux is not a supported or tested platform for this release.
 
-![LLM Ops Kit](docs/images/LLM-OPS-Kit-banner.png)
-
-[![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-informational)](#) [![Shell](https://img.shields.io/badge/Shell-bash-blue)](#) [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-
-- [LLM-Ops-Kit](#llm-ops-kit)
-  - [Why This Repo Exists](#why-this-repo-exists)
-  - [Requirements](#requirements)
-  - [Recommended Models](#recommended-models)
-    - [Notes:](#notes)
-  - [MLX Audio TTS API (Voice Clone)](#mlx-audio-tts-api-voice-clone)
-  - [Quick Start](#quick-start)
-  - [Runtime Command Surface](#runtime-command-surface)
-  - [Link Management (Single Source of Truth)](#link-management-single-source-of-truth)
-  - [Model Profiles](#model-profiles)
-  - [Packaging Status](#packaging-status)
-  - [Documentation Map](#documentation-map)
-  - [Repository Scope](#repository-scope)
-  - [Acknowledgements](#acknowledgements)
-  - [Contributing](#contributing)
-  - [Support This Work](#support-this-work)
-  - [Contact](#contact)
-  - [License](#license)
-
-
-## Why This Repo Exists
-
-`LLM-Ops-Kit` is the operator layer around a local OpenClaw install:
-
-- Unified startup/shutdown/status scripts for agent runtimes, model-proxy, TTS, LLM, and embeddings
-- Model profile management (`Qwen3`, `Qwen3.5`, `BGEm3`) via one launcher architecture
-- Deployment helpers for staged SSH rollout and runtime link management
-- Installed-runtime defaults under `~/.local/llm-ops/current`, with repo mode kept for explicit developer workflows
-- Built-in runtime maintenance for log rotation and install-backup retention
-- Practical runbooks and changelog-driven operations
-- Prompt/template and observability tooling for debugging real runtime behavior
-
-This repo is intentionally focused on **operations and reproducibility**, not raw app source.
-
-## Requirements
-
-- OpenClaw installed and configured on the host
-- Python 3.9+
-- Python package: `jinja2` for prompt/template rendering and `model-proxy` prompt diagnostics
-- `llama.cpp` server binary available at `/usr/local/bin/llama-server` (project: <https://github.com/ggml-org/llama.cpp>)
-- `mlx-audio` installed for local TTS server (`python -m mlx_audio.server`) (project: <https://github.com/Blaizzy/mlx-audio>)
-  - See [Notes:](#notes) on PR for OpenAI API compatability and better voice cloning.
-- Optional but recommended for secret handling: `seckit` from `Secrets-Kit` (<https://github.com/unixwzrd/Secrets-Kit>)
-- Bash scripts use `#!/usr/bin/env bash`
-- Compatibility target: Bash 3.2+ (macOS system bash), Bash 5+ recommended
-- Standard CLI tools: `ssh`, `rsync`, `jq`, `sed`, `awk`, `perl`
-- Python helper scripts use `#!/usr/bin/env python`
-
-Minimal Python bootstrap for the toolkit-side helpers:
+## Main Commands
 
 ```bash
-python3 -m pip install jinja2
+llmops init --preset single-host
+llmops doctor
+llmops config show --json
+llmops plan --action start
+
+llmops component list
+llmops component plan restart <component>
+llmops component start <component>
+llmops component stop <component> [--force|--cascade]
+llmops component restart <component> [--cascade]
+llmops component status <component>
+llmops component logs <component>
+
+llmops stack list
+llmops stack plan start <stack>
+llmops stack start <stack>
+llmops stack stop <stack>
+llmops stack restart <stack>
+llmops stack status <stack>
+
+llmops deploy --config-home ~/.config/llm-ops
+llmops drift
+llmops rollback
 ```
 
-If you plan to run local TTS through MLX Audio, also install `mlx-audio` and its documented dependencies on the model host.
+Every lifecycle operation has a non-mutating plan form. Component restart affects only the selected component by default. `--cascade` includes active dependents in dependency-safe order.
 
-## Recommended Models
+## Configuration
 
-These are the profiles currently documented and validated in this toolkit:
+Authoritative JSON configuration lives under `~/.config/llm-ops/`:
 
-- LLM (chat/tools): `unsloth/Qwen3.5-35B-A3B-GGUF`
-  - <https://huggingface.co/unsloth/Qwen3.5-35B-A3B-GGUF>
-- TTS (voice cloning): `mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit`
-  - <https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit>
-- Optional larger TTS model: `mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit`
-  - <https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit>
-- Embeddings: `bge-m3-Q8_0-GGUF/bge-m3-q8_0.gguf`
-  - served by the `BGEm3` profile on port `11435`
-
-### Notes:
-
-- `Qwen3TTS` and `tts-bridge` default to the 0.6B Base model.
-- Voice cloning uses the Base model with `ref_audio` and `ref_text`; CustomVoice models require a supported built-in speaker name.
-- In this deployment, `tts-bridge` forwards server-side clone reference paths and keeps the OpenAI-style TTS surface stable for OpenClaw.
-- Until upstream `mlx-audio` PR `#558` merges, the validated source for this deployment is:
-  - <https://github.com/unixwzrd/mlx-audio>
-  - upstream PR: <https://github.com/Blaizzy/mlx-audio/pull/558>
-- For Qwen3.5 LLM profile details and overrides, see `scripts/models/Qwen3.5.sh`.
-- For TTS profile defaults and host/port, see `scripts/models/Qwen3TTS.sh`.
-
-## MLX Audio TTS API (Voice Clone)
-
-`llmops tts` and `llmops Qwen3TTS` wrap `mlx_audio.server` and expose an OpenAI-compatible endpoint:
-
-- `POST /v1/audio/speech`
-
-Quick direct MLX Audio clone request:
-
-```bash
-AUDIO="$HOME/LLM_Repository/TTS/Samples/speaker-reference-a.wav"
-TEXT="${AUDIO%.wav}.txt"
-MODEL="$HOME/LLM_Repository/TTS/Qwen3-TTS-12Hz-0.6B-Base-8bit"
-VOICE="serena"
-OUT="/tmp/tts-clone.wav"
-
-curl -sS http://127.0.0.1:11439/v1/audio/speech \
-  -H 'Content-Type: application/json' \
-  -d "$(jq -n \
-    --arg model "$MODEL" \
-    --arg input "Hello, this is a quick clone check." \
-    --arg voice "$VOICE" \
-    --arg ref_audio "$AUDIO" \
-    --arg ref_text "$TEXT" \
-    --arg response_format "wav" \
-    '{model:$model,input:$input,voice:$voice,ref_audio:$ref_audio,ref_text:$ref_text,response_format:$response_format}')" \
-  --output "$OUT"
+```text
+config.json
+inventory.json
+stacks/*.json
+models/*.json
+agents/*.json
+services/*.json
 ```
 
-Full setup + troubleshooting guide:
+Run `llmops init --preset single-host` or `llmops init --preset local-lan` to create a disabled starter configuration. Initialization refuses to overwrite existing files unless `--force` is supplied.
 
-- [MLX_AUDIO_TTS_GUIDE](docs/MLX_AUDIO_TTS_GUIDE.md)
+Real topology, credentials, model paths, and host profiles should remain untracked. Sanitized examples are under [`docs/examples`](docs/examples).
 
-The `127.0.0.1:11439` endpoint above is a direct `mlx_audio.server` example for a model host running on the same machine. If your MLX TTS server runs on a different host, replace `127.0.0.1` with that remote host. If you are testing the OpenClaw bridge path, use the local bridge listener URL from `~/.config/llm-ops/config.env` instead.
+## Agent Independence
 
-Bridge compatibility notes:
+Hermes and OpenClaw are compatibility adapters, not implicit defaults. No agent starts unless an agent component or explicit compatibility target is configured. Other agents use generic process, launchd, or explicitly enabled argv-based command profiles.
 
-- `tts-bridge` keeps OpenClaw on an OpenAI-compatible TTS surface while translating MLX-specific defaults.
-- In this deployment, `ref_audio` and `ref_text` are sent as server-side paths on the MLX host.
-- The validated end-to-end clone path depends on the upstream `mlx-audio` fix that resolves `ref_text` server-side and prefers the ICL clone path when clone refs are present.
-- Unsupported request formats such as `opus` and `ogg` are normalized to `wav`.
-- The current MLX build reports these predefined speaker names for non-clone speaker-mode requests:
-  - `serena`, `vivian`, `uncle_fu`, `ryan`, `aiden`, `ono_anna`, `sohee`, `eric`, `dylan`
+## Deployment
 
-## Quick Start
+The administrator checkout is the one-way desired-state authority. An authoritative deployment creates a checksummed package plus a role-filtered configuration snapshot for each host, pushes both, and applies them as one immutable release.
 
-```bash
-# 1) Clone the repo
-git clone https://github.com/unixwzrd/LLM-Ops-Kit.git ~/projects/LLM-Ops-Kit
-cd ~/projects/LLM-Ops-Kit
+The active release is selected by `<install_root>/current`; the prior release is retained at `<install_root>/previous`. `llmops rollback` atomically exchanges those pointers and refreshes managed runtime links.
 
-# 2) Validate inventory and stage an admin deployment bundle
-scripts/llmops-admin inventory-validate
-scripts/llmops-admin stage --dry-run --bundle-id smoke
+Dirty deployments are refused by default. Use `--allow-dirty` only for an intentional canary; the manifest records the dirty state, Git commit, toolkit version, and content hashes.
 
-# 3) Push and apply the bundle to selected hosts
-scripts/llmops-admin push --stage ~/.local/share/llm-ops/stage/<bundle_id> --workers 4
-scripts/llmops-admin apply --stage ~/.local/share/llm-ops/stage/<bundle_id> --workers 4
+## Included Runtime Tools
 
-# 4) Verify model settings / runtime root on the target
-llmops Qwen3.5 settings
-llmops Qwen3 settings
+- `modelctl` for model runner profiles
+- `model-proxy` for request tapping, prompt rendering, and upstream routing
+- `tts-bridge` for stable voice names and TTS request adaptation
+- `agentctl` compatibility adapters for Hermes and OpenClaw
+- immutable deployment, drift reporting, rollback, and runtime maintenance
 
-# 5) Start services
-llmops agentctl start
-llmops Qwen3 start
-llmops BGEm3 start
-llmops model-proxy start
-```
+## Documentation
 
-The administrator repo checkout is the control point, not the runtime install root.
-Deployment bundles are built under `~/.local/share/llm-ops/stage/<bundle_id>/`, pushed to
-selected hosts from inventory, then applied on each remote host. Remote apply
-installs the scripts/programs under the host `install_root`, updates the
-`current` release pointer, and refreshes runtime command links.
+- [Quickstart](docs/QUICKSTART.md)
+- [Configuration](docs/CONFIGURATION.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Deployment](docs/DEPLOYMENT_OVERVIEW.md)
+- [Upgrade and Rollback](docs/UPGRADE_AND_ROLLBACK.md)
+- [Troubleshooting](docs/TROUBLESHOOTING.md)
+- [Documentation Index](docs/INDEX.md)
 
-## Runtime Command Surface
+## Optional UI Direction
 
-```bash
-llmops agentctl [start|stop|restart|status] [openclaw|hermes|all]
-llmops agentctl [current|switch] [openclaw|hermes|all]
-llmops agentctl logs
-llmops agentctl [launchd-install|launchd-start|launchd-stop|launchd-bootout|launchd-enable|launchd-disable|launchd-remove|launchd-status] [openclaw|hermes|all]
-llmops model-proxy [start|stop|restart|status]
-llmops tts [start|stop|restart|status]
-llmops tts-bridge [start|stop|restart|status]
-llmops Qwen3TTS [start|stop|restart|status|settings|verify|test]
-llmops Qwen3 [start|stop|restart|status|settings|verify|test]
-llmops Qwen3.5 [start|stop|restart|status|settings|verify|test]
-llmops BGEm3 [start|stop|restart|status|settings|verify|test]
-llmops modelctl list
-llmops modelctl status
-llmops modelctl add --model <path> --name <label>
-llmops modelctl <ModelProfile> [start|stop|restart|status|settings|verify|test]
-llmops uninstall-runtime [--prefix <install-base>] [--bin-dir <bin-dir>] [--state-file <path>] [--keep-files]
-llmops openclaw-report
-llmops runtime-maintenance [status|rotate|prune|run]
-```
-
-Operational notes:
-
-- `modelctl settings` now prints `RUNTIME_MODE` and `RUNTIME_ROOT`.
-- `agentctl`, `model-proxy`, and `tts-bridge` status now print retention settings.
-- `agentctl` now seeds backend override templates under `~/.config/llm-ops/config/agents/` and provides an internal `launchd-run` path. For OpenClaw, that path can wrap startup with `seckit run` when explicitly enabled.
-- Runtime logs rotate in place and install backups under `~/.local/state/llm-ops/backups` are pruned by policy.
-- In the current direct-run agent wrapper mode, use `llmops agentctl logs` instead of relying on `openclaw logs --follow`.
-- `agentctl` owns agent runtime lifecycle across OpenClaw and Hermes.
-- `modelctl` owns model runtime lifecycle; the older bundled stack wrapper is gone.
-- `llmops-admin` is the deployment entrypoint for inventory validation, SSH bootstrap, local staging, parallel push, and remote apply from the administrator workstation.
-- Lower-level deployment helpers under `scripts/` are implementation details for packaging, linking, and validation. Operators should drive deployments through `llmops-admin`.
-
-## Local Precheck
-
-Before committing or pushing, run:
-
-```bash
-./scripts/precheck
-```
-
-It mirrors the core CI checks:
-
-- shell syntax checks for the main wrappers
-- `shellcheck`
-- Python regression tests under `scripts/tests`
-
-## Link Management (Single Source of Truth)
-
-Runtime link mappings are centralized in:
-
-- `scripts/runtime-links.manifest`
-
-Both scripts consume this same manifest:
-
-- `scripts/deploy-runtime-links.sh`
-- `scripts/verify-runtime-links.sh`
-
-New model launchers are discovered from `scripts/` symlinks to `modelctl`. Regenerate with `scripts/generate-manifest` (also run automatically by `sync-ops-scripts`).
-
-## Model Profiles
-
-Model defaults live under:
-
-- `scripts/models/`
-- `scripts/defaults/`
-
-Current profiles:
-
-- `Qwen3` (LLM)
-- `Qwen3.5` (LLM)
-- `BGEm3` (embeddings)
-- `Qwen3TTS` (TTS via MLX Audio server)
-
-The launcher resolves profile defaults and prints active runtime settings with:
-
-```bash
-llmops Qwen3 settings
-llmops Qwen3.5 settings
-llmops BGEm3 settings
-```
-
-## Packaging Status
-
-This repo currently ships as script-first operations tooling.
-
-A future optional path is to add `pyproject.toml` and package wrappers for installer-driven deployment (`pipx`/`pip`) while keeping shell scripts as the canonical runtime layer.
-
-## Documentation Map
-
-- [DOCS INDEX](docs/INDEX.md) — primary documentation index
-- [DEPLOYMENT_OVERVIEW](docs/DEPLOYMENT_OVERVIEW.md) — current deployment model and admin workflow
-- [INSTALLATION_REWORK_CHECKLIST](docs/INSTALLATION_REWORK_CHECKLIST.md) — checklist for the deployment and install refactor
-- [RELEASE_AUDIT_CHECKLIST](docs/RELEASE_AUDIT_CHECKLIST.md) — cleanup and audit pass before final release tag
-- [PROXY_TAP_RUNBOOK](docs/PROXY_TAP_RUNBOOK.md) — proxy request/response visibility + jq recipes
-- [CHANGELOG](CHANGELOG.md) — chronological operational changes
-- [QUICKSTART](docs/QUICKSTART.md) — fast path setup and startup
-- [HOW_IT_WORKS](docs/HOW_IT_WORKS.md) — plain-language system overview
-- [SWITCHING](docs/SWITCHING.md) — switching models and agents
-- [CONFIGURATION](docs/CONFIGURATION.md) — environment overrides, host/path defaults, and optional `seckit run` integration
-- [SSH_SETUP_RUNBOOK](docs/SSH_SETUP_RUNBOOK.md) — SSH key setup and deployment auth flow
-- [TROUBLESHOOTING](docs/TROUBLESHOOTING.md) — symptom-driven fixes
-- [ARCHITECTURE](docs/ARCHITECTURE.md) — component and runtime flow overview
-- [GLOSSARY](docs/GLOSSARY.md) — core terms used across docs
-- [Documentation Index](docs/README.md) — full operator-facing docs map
-- [SAFE_PUBLISH_CHECKLIST](docs/internal/SAFE_PUBLISH_CHECKLIST.md) — canonical pre-publish safety checks (internal)
-- [Scripts README](docs/scripts/README.md) — per-command script guides
-- [`docs/scripts/tts-bridge.md`](docs/scripts/tts-bridge.md) — bridge behavior, CustomVoice compatibility, and status fields
-- [MLX_AUDIO_TTS_GUIDE](docs/MLX_AUDIO_TTS_GUIDE.md) — end-to-end MLX Audio setup and voice-clone workflow
-
-Internal planning/docs are kept under `docs/internal/` and are not required for runtime operation.
-
-## Repository Scope
-
-This repo is safe to publish as an ops/project artifact.
-
-Keep private runtime state out of this repo (for example: local sessions, secrets, raw `.openclaw` data, private memory files).
-
-## Acknowledgements
-
-This toolkit depends on excellent upstream work:
-
-- `llama.cpp` for local GGUF inference
-- `mlx-audio` for local OpenAI-compatible TTS/STT APIs
-- Hugging Face for model and artifact distribution
-
-## Contributing
-
-Issues and PRs are welcome for:
-
-- script hardening
-- cross-platform compatibility
-- runbook clarity
-- model/profile improvements
-
-## Support This Work
-
-If this project saves you time or helps you run local AI infrastructure more reliably, consider supporting independent development:
-
-- [Patreon](https://patreon.com/unixwzrd)
-- [Ko-Fi](https://ko-fi.com/unixwzrd)
-- [Buy Me a Coffee](https://buymeacoffee.com/unixwzrd)
-
-## Contact
-
-- [unixwzrd@unixwzrd.ai](mailto:unixwzrd@unixwzrd.ai)
+The CLI and shared Python control modules are the authoritative orchestration interfaces. A future optional UI may use a separate loopback-only FastAPI process with static HTML, CSS, vanilla JavaScript, REST commands, and SSE events. It must remain usable while every model and agent is stopped and must not initialize model engines.
 
 ## License
 
-Copyright 2026  
-[unixwzrd@unixwzrd.ai](mailto:unixwzrd@unixwzrd.ai)
-
-[MIT License](LICENSE.md)
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+See [LICENSE](LICENSE).

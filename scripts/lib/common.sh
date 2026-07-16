@@ -128,16 +128,28 @@ llmops_config_home() {
 
 llmops_service_profile_path() {
   local service="$1"
+  if [[ -f "$LLMOPS_ROOT/config/services/$service.json" ]]; then
+    printf '%s/config/services/%s.json\n' "$LLMOPS_ROOT" "$service"
+    return 0
+  fi
   printf '%s/services/%s.json\n' "$(llmops_config_home)" "$service"
 }
 
 llmops_model_profile_path() {
   local model="$1"
+  if [[ -f "$LLMOPS_ROOT/config/models/$model.json" ]]; then
+    printf '%s/config/models/%s.json\n' "$LLMOPS_ROOT" "$model"
+    return 0
+  fi
   printf '%s/models/%s.json\n' "$(llmops_config_home)" "$model"
 }
 
 llmops_agent_profile_path() {
   local backend="$1"
+  if [[ -f "$LLMOPS_ROOT/config/agents/$backend.json" ]]; then
+    printf '%s/config/agents/%s.json\n' "$LLMOPS_ROOT" "$backend"
+    return 0
+  fi
   printf '%s/agents/%s.json\n' "$(llmops_config_home)" "$backend"
 }
 

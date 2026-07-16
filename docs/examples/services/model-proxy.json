@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "listen": {
+    "host": "127.0.0.1",
+    "port": 11434
+  },
+  "upstream": "http://model-host.local:11434"
+}

@@ -3,12 +3,23 @@ set -euo pipefail
 
 LLMOPS_HOME="${LLMOPS_HOME:-$HOME/.local/llm-ops}"
 LLMOPS_BIN_DIR="${LLMOPS_BIN_DIR:-$LLMOPS_HOME/bin}"
+if [[ -z "${LLMOPS_CONFIG_HOME:-}" && -f "$LLMOPS_HOME/current/config/config.json" ]]; then
+  export LLMOPS_CONFIG_HOME="$LLMOPS_HOME/current/config"
+fi
 
 usage() {
   cat <<'USAGE'
 Usage: llmops <command> [args...]
 
 Commands:
+  component
+  config
+  deploy
+  doctor
+  drift
+  init
+  plan
+  rollback
   agentctl
   llmops-admin
   model-proxy
@@ -16,6 +27,7 @@ Commands:
   runtime-maintenance
   tts
   tts-bridge
+  stack
 
 Run `llmops <command> --help` for command-specific help.
 Installed model launchers under LLMOPS_BIN_DIR are also accepted.
@@ -27,6 +39,17 @@ case "$cmd" in
   ""|-h|--help|help)
     usage
     exit 0
+    ;;
+esac
+
+case "$cmd" in
+  component|config|doctor|init|plan|stack)
+    shift
+    exec "$LLMOPS_BIN_DIR/llmops-control" "$cmd" "$@"
+    ;;
+  deploy|drift|rollback)
+    shift
+    exec "$LLMOPS_BIN_DIR/llmops-admin" "$cmd" "$@"
     ;;
 esac
 

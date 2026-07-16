@@ -1,298 +1,74 @@
 # Deployment Overview
 
-**Created**: 2026-04-27
-**Updated**: 2026-05-07
-
 Back: [Documentation Index](./INDEX.md)
 
-## Purpose
+## Authority
 
-This document is the operator-level map for deploying `LLM-Ops-Kit`.
+The administrator checkout and its canonical JSON configuration are the one-way desired-state authority. Managed hosts do not need source checkouts and their local configuration changes are never merged automatically.
 
-The deployment model is an administrator workstation flow:
-
-1. maintain host inventory and deployment config locally
-2. bootstrap SSH access to each target host once
-3. build a local staged package
-4. push package and host config to selected hosts in parallel
-5. apply the staged package on each remote host
-6. install or refresh the runtime command links on each host
-
-## Deployment Entry Point
-
-Use `llmops-admin` for deployment work:
+## Authoritative Deployment
 
 ```bash
-scripts/llmops-admin inventory-validate
-scripts/llmops-admin bootstrap-host --role llm --dry-run
-scripts/llmops-admin deploy-plan --dry-run --bundle-id smoke
-scripts/llmops-admin stage --dry-run --bundle-id smoke
-scripts/llmops-admin push --dry-run --workers 4
-scripts/llmops-admin apply --dry-run --workers 4
+scripts/llmops-admin deploy --config-home ~/.config/llm-ops --bundle-id <bundle-id> --dry-run
+scripts/llmops-admin deploy --config-home ~/.config/llm-ops --bundle-id <bundle-id>
 ```
 
-Lower-level scripts may exist in the repo because `llmops-admin` uses them for
-packaging, linking, and verification. They are implementation details, not a
-separate operator deployment flow.
+`deploy` performs these steps:
 
-## Inventory
+1. Validate inventory, stacks, components, dependencies, profiles, feature gates, and port bindings.
+2. Refuse a dirty source checkout unless `--allow-dirty` is explicit.
+3. Build the runtime package.
+4. Build a checksummed, secret-free, role-filtered configuration snapshot for each selected host.
+5. Record the Git commit, dirty state, toolkit version, schema version, package hash, and configuration hashes in the manifest.
+6. Push package, manifest, compatibility config, and authoritative snapshot with bounded retry.
+7. Verify every remote hash before extraction.
+8. Extract code and configuration into one immutable release.
+9. Atomically update `current` and preserve the old target as `previous`.
+10. Refresh managed runtime links and verify the role-specific command surface.
+11. Compare the active release with the desired bundle and report drift.
 
-The admin workflow is inventory driven. The preferred live inventory path is:
+## Separate Phases
 
-```text
-~/.config/llm-ops/inventory.json
-```
-
-If that file is missing, `llmops-admin` falls back to the checked-in JSON
-example:
-
-```text
-deploy/inventory.json
-```
-
-The docs copy lives at:
-
-```text
-docs/inventory.example.json
-```
-
-Legacy YAML inventories are migration input only. Pass one explicitly with
-`--inventory <path>` or run `scripts/llmops-admin migrate-config --dry-run` to
-plan conversion to `~/.config/llm-ops/inventory.json`.
-
-Each host record must define:
-
-- `name`: stable inventory name
-- `role`: one of `admin`, `llm`, `agent`, or `hybrid`
-- `host`: DNS name or IP address
-- `user`: SSH user
-- `port`: SSH port
-- `install_root`: remote install root, normally `~/.local/llm-ops`
-- `config_profile`: layered config profile name
-- `ssh_key`: local private key path
-- `proxy_jump`: optional OpenSSH jump destination, such as
-  `deploy@bastion.example.net`
-- `tags`: optional selectors such as `production`, `model`, or `agent`
-
-Validate inventory before staging or pushing:
+The phases remain available for controlled rollout:
 
 ```bash
-scripts/llmops-admin inventory-validate
-scripts/llmops-admin inventory-validate --role llm
-scripts/llmops-admin inventory-validate --tag production
-scripts/llmops-admin inventory-validate --host-name llm-primary
+scripts/llmops-admin stage --config-home ~/.config/llm-ops --require-authoritative-config --bundle-id <bundle-id>
+scripts/llmops-admin push --stage ~/.local/share/llm-ops/stage/<bundle-id>
+scripts/llmops-admin apply --stage ~/.local/share/llm-ops/stage/<bundle-id>
+scripts/llmops-admin drift --stage ~/.local/share/llm-ops/stage/<bundle-id>
 ```
 
-The deployment key must authenticate to the final host as well as the jump
-host. ProxyJump forwards the connection; it does not reuse the jump host's
-private key.
+Use separate phases for side-by-side canaries and host-by-host migration.
 
-## SSH Bootstrap
+## Host Filtering
 
-SSH setup is explicit and separate from package deployment. For each selected
-host, `bootstrap-host` plans or performs:
+Use `--host-name`, `--role`, or `--tag` to select deployment targets. Each host receives only the profiles for its enabled components. Model weights, runtime logs, state databases, `.env` files, and secret values are never included.
 
-- deploy key creation when the configured key is missing
-- public key installation with `ssh-copy-id`
-- noninteractive SSH verification
-- remote runtime directory creation
-- `.llmops-ready` marker creation under the remote install root
+## Dirty Canaries
 
-Dry run first:
+`--allow-dirty` exists for intentional testing before a commit. The deployment manifest records the dirty state and should not be treated as a publishable release. Normal deployments should use a clean commit.
+
+## Failure Behavior
+
+Push and apply retry failed transport commands up to three times with bounded exponential delay. Apply verifies all content before switching `current`. If post-switch setup fails, it restores both `current` and `previous` and removes the failed release.
+
+Pre-existing services are not restarted unless explicitly requested. Deployment changes installed code and configuration; component lifecycle remains a separate operation.
+
+## Drift
 
 ```bash
-scripts/llmops-admin bootstrap-host --role llm --dry-run
+llmops drift --stage ~/.local/share/llm-ops/stage/<bundle-id> --json
 ```
 
-Then bootstrap the target set:
+Drift compares the desired bundle ID, manifest hash, and active compatibility configuration hashes with each selected host. It is read-only.
+
+## Rollback
 
 ```bash
-scripts/llmops-admin bootstrap-host --role llm
-scripts/llmops-admin bootstrap-host --role agent
+llmops rollback --dry-run
+llmops rollback
 ```
 
-For manual SSH details and troubleshooting, see
-[SSH Setup Runbook](./SSH_SETUP_RUNBOOK.md).
+Rollback atomically exchanges `current` and `previous` on each selected host and refreshes runtime links. Because configuration is inside the release, code and configuration roll back together.
 
-## Staging
-
-Preview selected hosts, local stage paths, remote package/release directories,
-rendered config destinations, and audit artifacts without building a package or
-opening SSH:
-
-```bash
-scripts/llmops-admin deploy-plan --dry-run --bundle-id smoke
-```
-
-Staging creates a local bundle under:
-
-```text
-~/.local/share/llm-ops/stage/<bundle_id>/
-```
-
-The stage contains:
-
-- `package/llm-ops-kit.tar.gz`: packaged runtime payload
-- `manifest.json`: bundle metadata, target hosts, package checksum, and host config checksums
-- `hosts/<host>/config.env`: rendered host config
-- `hosts/<host>/config.json`: host-specific JSON config and source metadata
-- `hosts/<host>/config-sources.json`: effective config with source reporting
-
-Dry run:
-
-```bash
-scripts/llmops-admin stage --dry-run --bundle-id smoke
-```
-
-Create a real bundle:
-
-```bash
-scripts/llmops-admin stage --bundle-id 20260427-prod
-```
-
-`stage` validates the bundle after writing it, including package and host config
-checksums.
-
-Validate an existing staged bundle before push or apply:
-
-```bash
-scripts/llmops-admin stage-validate --stage ~/.local/share/llm-ops/stage/20260427-prod
-```
-
-Report the staged bundle, host checksum, remote package, and release mapping:
-
-```bash
-scripts/llmops-admin deploy-report --stage ~/.local/share/llm-ops/stage/20260427-prod
-```
-
-Limit staging to a host subset when needed:
-
-```bash
-scripts/llmops-admin stage --role llm --bundle-id 20260427-llm
-scripts/llmops-admin stage --tag production --bundle-id 20260427-prod
-```
-
-## Parallel Push
-
-Push transfers the staged package, manifest, and each host's rendered config
-to selected hosts. Push runs in parallel and keeps per-host success or failure
-isolated.
-Before any transfer, `push` validates that the stage contains the package,
-manifest, each selected host's env/json config artifacts, and matching
-checksums.
-
-Dry run:
-
-```bash
-scripts/llmops-admin push --stage ~/.local/share/llm-ops/stage/20260427-prod --dry-run
-```
-
-Push with a worker limit:
-
-```bash
-scripts/llmops-admin push --stage ~/.local/share/llm-ops/stage/20260427-prod --workers 4
-```
-
-If `--stage` is omitted, the newest directory under
-`~/.local/share/llm-ops/stage/` is used.
-
-## Remote Apply
-
-Apply runs remote installation commands after a package has been pushed. It:
-
-- creates a release directory under the remote install root
-- verifies the pushed package and manifest are present
-- verifies pushed host config artifacts are present
-- verifies remote package, manifest, and host config checksums against the
-  validated local stage
-- unpacks the pushed package
-- copies the pushed manifest into the release directory
-- copies host-specific config artifacts into the release directory
-- writes `BUNDLE_ID` and `HOST_NAME` marker files into the release directory
-- updates the `current` symlink
-- preserves the previous install pointer
-- preserves a directory-style legacy `current` as a release during migration
-- restores both `current` and `previous` if post-switch validation fails
-- installs or refreshes runtime command links
-- optionally restarts a selected script
-- verifies `modelctl` on `llm` and `hybrid` hosts
-- verifies `agentctl` on `agent` and `hybrid` hosts
-
-Before any remote command, `apply` validates that the local stage still has the
-manifest and selected host config artifacts used to plan the deployment.
-
-Dry run:
-
-```bash
-scripts/llmops-admin apply --stage ~/.local/share/llm-ops/stage/20260427-prod --dry-run
-```
-
-Apply in parallel:
-
-```bash
-scripts/llmops-admin apply --stage ~/.local/share/llm-ops/stage/20260427-prod --workers 4
-```
-
-Optionally restart one deployed script:
-
-```bash
-scripts/llmops-admin apply --stage ~/.local/share/llm-ops/stage/20260427-prod --restart modelctl
-```
-
-## Configuration Layers
-
-The admin workflow renders host config with deterministic precedence:
-
-```text
-global defaults
-role defaults
-model defaults
-profile config
-host config
-runtime environment
-CLI flags
-```
-
-Use source reporting to inspect what will be applied:
-
-```bash
-scripts/llmops-admin config-settings --host-name llm-primary
-scripts/llmops-admin config-settings --role llm --model Qwen3.5
-```
-
-Run config validation before staging:
-
-```bash
-scripts/llmops-admin config-doctor --role llm --model Qwen3.5
-```
-
-The `modelctl` internals still need to be refactored to consume this layered
-configuration directly. Track that work in
-[Installation Rework Checklist](./INSTALLATION_REWORK_CHECKLIST.md).
-
-## Operational Sequence
-
-Recommended deployment sequence:
-
-```bash
-scripts/llmops-admin inventory-validate
-scripts/llmops-admin config-doctor --tag production
-scripts/llmops-admin bootstrap-host --tag production --dry-run
-scripts/llmops-admin bootstrap-host --tag production
-scripts/llmops-admin stage --tag production --bundle-id <bundle_id>
-scripts/llmops-admin push --tag production --stage ~/.local/share/llm-ops/stage/<bundle_id> --workers 4
-scripts/llmops-admin apply --tag production --stage ~/.local/share/llm-ops/stage/<bundle_id> --workers 4
-```
-
-Use `--dry-run` before any bootstrap, push, or apply that affects real hosts.
-Use a unique bundle ID for each apply; release directories are immutable.
-
-For checkout preservation, legacy configuration migration, directory-style
-install conversion, and rollback, see [Upgrade and Rollback](./UPGRADE_AND_ROLLBACK.md).
-
-## Related Docs
-
-- [Installation Rework Checklist](./INSTALLATION_REWORK_CHECKLIST.md)
-- [SSH Setup Runbook](./SSH_SETUP_RUNBOOK.md)
-- [Configuration](./CONFIGURATION.md)
-- [modelctl Guide](./MODELCTL_GUIDE.md)
+See [Upgrade and Rollback](./UPGRADE_AND_ROLLBACK.md) for acceptance checks.

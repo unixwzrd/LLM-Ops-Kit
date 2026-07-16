@@ -10,6 +10,7 @@ Qwen3|scripts/Qwen3
 agentctl|scripts/agentctl
 deploy-runtime|scripts/deploy-runtime
 llmops-admin|scripts/llmops-admin
+llmops-control|scripts/llmops-control
 model-proxy|scripts/model-proxy
 modelctl|scripts/modelctl
 openclaw-report|scripts/openclaw-report.sh

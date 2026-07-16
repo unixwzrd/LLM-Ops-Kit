@@ -10,6 +10,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -34,9 +35,11 @@ sys.path.insert(0, str(REPO_ROOT / "scripts" / "lib"))
 from llmops_paths import resolve_paths
 from llmops_config import ConfigError, default_config, load_config
 from gguf_metadata import GgufError, read_gguf_metadata, write_metadata_cache
+from llmops_inventory import InventoryError, load_inventory as load_canonical_inventory
+from llmops_topology import Topology, TopologyError, load_stacks, write_host_snapshot
 
 DEFAULT_INVENTORY = REPO_ROOT / "deploy" / "inventory.json"
-FALLBACK_INVENTORY = REPO_ROOT / "docs" / "inventory.example.json"
+FALLBACK_INVENTORY = REPO_ROOT / "docs" / "examples" / "inventory.local-lan.json"
 ADMIN_INVENTORY = resolve_paths().inventory_file
 DEFAULT_STAGE_ROOT = resolve_paths().stage_dir
 SUPPORTED_ROLES = {"admin", "llm", "agent", "hybrid"}
@@ -248,12 +251,27 @@ def select_hosts(hosts: list[HostRecord], args: argparse.Namespace) -> list[Host
     return selected
 
 
-def run_command(command: list[str], *, dry_run: bool = False) -> tuple[int, str]:
+def run_command(
+    command: list[str],
+    *,
+    dry_run: bool = False,
+    attempts: int = 1,
+    retry_delay: float = 1.0,
+) -> tuple[int, str]:
+    """Run a command with bounded exponential retry for transport operations."""
+
     rendered = " ".join(shlex.quote(part) for part in command)
     if dry_run:
         return 0, rendered
-    proc = subprocess.run(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False)
-    return proc.returncode, proc.stdout
+    outputs: list[str] = []
+    for attempt in range(1, max(1, attempts) + 1):
+        proc = subprocess.run(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False)
+        outputs.append(proc.stdout)
+        if proc.returncode == 0 or attempt >= attempts:
+            return proc.returncode, "".join(outputs)
+        outputs.append(f"retrying after attempt {attempt}/{attempts}\n")
+        time.sleep(min(retry_delay * (2 ** (attempt - 1)), 8.0))
+    raise AssertionError("unreachable")
 
 
 def parse_env_file(path: Path) -> dict[str, str]:
@@ -370,18 +388,15 @@ def parse_legacy_assignment_file(path: Path) -> dict[str, str]:
 
 
 def config_layers_for(host: HostRecord, model: str | None = None) -> list[tuple[str, Path]]:
-    admin_config = Path("~/.llm-ops/config").expanduser()
-    layers: list[tuple[str, Path]] = [
-        ("global defaults", REPO_ROOT / "defaults" / "global.env"),
-        ("role defaults", REPO_ROOT / "defaults" / "roles" / f"{host.role}.env"),
-    ]
+    paths = resolve_paths()
+    layers: list[tuple[str, Path]] = [("global compatibility override", paths.config_home / "config.env")]
     if model:
-        layers.append(("model defaults", REPO_ROOT / "models" / f"{model}.env"))
+        layers.append(("model compatibility override", paths.config_home / "config" / f"{model}.env"))
         layers.append(("model defaults", REPO_ROOT / "scripts" / "models" / f"{model}.sh"))
     layers.extend(
         [
-            ("profile config", admin_config / "profiles" / f"{host.config_profile}.env"),
-            ("host config", admin_config / "hosts" / f"{host.name}.env"),
+            ("profile compatibility override", paths.profiles_dir / f"{host.config_profile}.env"),
+            ("host compatibility override", paths.config_home / "hosts" / f"{host.name}.env"),
         ]
     )
     return layers
@@ -438,6 +453,36 @@ def write_host_config(stage_dir: Path, host: HostRecord, model: str | None) -> P
     return config_path
 
 
+def authoritative_topology(args: argparse.Namespace) -> Topology:
+    """Load the canonical topology used for authoritative deployment snapshots."""
+
+    env = dict(os.environ)
+    if getattr(args, "config_home", None):
+        env["LLMOPS_CONFIG_HOME"] = args.config_home
+    paths = resolve_paths(env)
+    canonical_inventory_path = Path(args.inventory).expanduser() if getattr(args, "inventory", None) else paths.inventory_file
+    return Topology(
+        stacks=load_stacks(paths),
+        hosts=load_canonical_inventory(canonical_inventory_path),
+        paths=paths,
+        config=load_config(paths=paths),
+    )
+
+
+def write_host_snapshot_archive(stage_dir: Path, host: HostRecord, topology: Topology) -> Path:
+    """Write and archive the role-filtered canonical configuration for one host."""
+
+    host_dir = stage_dir / "hosts" / host.name
+    resolved_dir = host_dir / "resolved"
+    write_host_snapshot(topology, host_name=host.name, destination=resolved_dir)
+    archive_path = host_dir / "resolved-config.tar.gz"
+    with tarfile.open(archive_path, "w:gz") as archive:
+        for path in sorted(resolved_dir.rglob("*")):
+            archive.add(path, arcname=path.relative_to(resolved_dir))
+    shutil.rmtree(resolved_dir)
+    return archive_path
+
+
 def build_package(stage_dir: Path) -> Path:
     package_path = stage_dir / "package" / "llm-ops-kit.tar.gz"
     package_path.parent.mkdir(parents=True, exist_ok=True)
@@ -461,34 +506,75 @@ def file_sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def write_manifest(stage_dir: Path, package_path: Path, hosts: list[HostRecord], model: str | None) -> Path:
+def git_provenance() -> dict[str, Any]:
+    """Return source revision metadata for deployment audit and rollback."""
+
+    revision = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    status = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "status", "--porcelain"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    describe = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "describe", "--tags", "--always", "--dirty"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return {
+        "git_commit": revision.stdout.strip() if revision.returncode == 0 else "",
+        "git_dirty": bool(status.stdout.strip()) if status.returncode == 0 else None,
+        "toolkit_version": describe.stdout.strip() if describe.returncode == 0 else "unknown",
+    }
+
+
+def write_manifest(
+    stage_dir: Path,
+    package_path: Path,
+    hosts: list[HostRecord],
+    model: str | None,
+    *,
+    authoritative_config: bool = False,
+) -> Path:
     host_entries: list[dict[str, Any]] = []
     for host in hosts:
         host_dir = stage_dir / "hosts" / host.name
         config_env = host_dir / "config.env"
         config_json = host_dir / "config.json"
         config_sources = host_dir / "config-sources.json"
-        host_entries.append(
-            {
-                "name": host.name,
-                "role": host.role,
-                "host": host.host,
-                "user": host.user,
-                "port": host.port,
-                "install_root": host.install_root,
-                "config_profile": host.config_profile,
-                "ssh_key": host.ssh_key,
-                "proxy_jump": host.proxy_jump,
-                "tags": list(host.tags),
-                "config_env": str(config_env),
-                "config_env_sha256": file_sha256(config_env),
-                "config_json": str(config_json),
-                "config_json_sha256": file_sha256(config_json),
-                "config_sources": str(config_sources),
-                "config_sources_sha256": file_sha256(config_sources),
-            }
-        )
+        host_entry = {
+            "name": host.name,
+            "role": host.role,
+            "host": host.host,
+            "user": host.user,
+            "port": host.port,
+            "install_root": host.install_root,
+            "config_profile": host.config_profile,
+            "ssh_key": host.ssh_key,
+            "proxy_jump": host.proxy_jump,
+            "tags": list(host.tags),
+            "config_env": str(config_env),
+            "config_env_sha256": file_sha256(config_env),
+            "config_json": str(config_json),
+            "config_json_sha256": file_sha256(config_json),
+            "config_sources": str(config_sources),
+            "config_sources_sha256": file_sha256(config_sources),
+            "authoritative_config": authoritative_config,
+        }
+        resolved_archive = host_dir / "resolved-config.tar.gz"
+        if resolved_archive.is_file():
+            host_entry["resolved_config"] = str(resolved_archive)
+            host_entry["resolved_config_sha256"] = file_sha256(resolved_archive)
+        host_entries.append(host_entry)
+    provenance = git_provenance()
     manifest = {
+        "schema_version": 1,
         "bundle_id": stage_dir.name,
         "created_at": int(time.time()),
         "repo_root": str(REPO_ROOT),
@@ -497,6 +583,7 @@ def write_manifest(stage_dir: Path, package_path: Path, hosts: list[HostRecord],
         "model": model,
         "config_precedence": CONFIG_PRECEDENCE,
         "hosts": host_entries,
+        "source": provenance,
     }
     manifest_path = stage_dir / "manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -550,12 +637,18 @@ def validate_stage_bundle(stage_dir: Path, hosts: list[HostRecord], *, require_p
         config_env = host_dir / "config.env"
         config_json = host_dir / "config.json"
         config_sources = host_dir / "config-sources.json"
+        resolved_config = host_dir / "resolved-config.tar.gz"
         if item.get("config_env_sha256") != file_sha256(config_env):
             raise AdminError(f"stage config.env checksum mismatch: {config_env}")
         if item.get("config_json_sha256") != file_sha256(config_json):
             raise AdminError(f"stage config.json checksum mismatch: {config_json}")
         if item.get("config_sources_sha256") != file_sha256(config_sources):
             raise AdminError(f"stage config-sources.json checksum mismatch: {config_sources}")
+        if item.get("authoritative_config"):
+            if not resolved_config.is_file():
+                raise AdminError(f"missing authoritative config snapshot: {resolved_config}")
+            if item.get("resolved_config_sha256") != file_sha256(resolved_config):
+                raise AdminError(f"stage resolved config checksum mismatch: {resolved_config}")
 
 
 def latest_stage(stage_root: Path) -> Path:
@@ -602,6 +695,11 @@ def cmd_stage(args: argparse.Namespace) -> int:
     hosts = select_hosts(load_inventory(inventory_path(args)), args)
     bundle_id = args.bundle_id or time.strftime("%Y%m%d-%H%M%S")
     stage_dir = Path(args.stage_root).expanduser() / bundle_id
+    require_authoritative = bool(getattr(args, "require_authoritative_config", False))
+    allow_dirty = bool(getattr(args, "allow_dirty", False))
+    topology = authoritative_topology(args) if require_authoritative else None
+    if require_authoritative and git_provenance().get("git_dirty") and not allow_dirty:
+        raise AdminError("authoritative deployment refuses a dirty source tree; commit changes or use --allow-dirty")
     if args.dry_run:
         print(f"stage dry-run: would create {stage_dir}")
         for host in hosts:
@@ -609,12 +707,22 @@ def cmd_stage(args: argparse.Namespace) -> int:
             print(f"stage dry-run: would render config for {host.name} ({host.role})")
             print(f"stage dry-run: would write {host_dir / 'config.env'}")
             print(f"stage dry-run: would write {host_dir / 'config.json'}")
+            if require_authoritative:
+                print(f"stage dry-run: would write {host_dir / 'resolved-config.tar.gz'}")
         return 0
     stage_dir.mkdir(parents=True, exist_ok=False)
     package_path = build_package(stage_dir)
     for host in hosts:
         write_host_config(stage_dir, host, args.model)
-    manifest_path = write_manifest(stage_dir, package_path, hosts, args.model)
+        if topology is not None:
+            write_host_snapshot_archive(stage_dir, host, topology)
+    manifest_path = write_manifest(
+        stage_dir,
+        package_path,
+        hosts,
+        args.model,
+        authoritative_config=require_authoritative,
+    )
     validate_stage_bundle(stage_dir, hosts, require_package=True)
     print(f"stage created: {stage_dir}")
     print(f"package: {package_path}")
@@ -629,6 +737,7 @@ def push_one(host: HostRecord, stage_dir: Path, dry_run: bool) -> tuple[str, int
     host_config = stage_dir / "hosts" / host.name / "config.env"
     host_config_json = stage_dir / "hosts" / host.name / "config.json"
     host_config_sources = stage_dir / "hosts" / host.name / "config-sources.json"
+    resolved_config = stage_dir / "hosts" / host.name / "resolved-config.tar.gz"
     remote_package_dir = f"{host.install_root}/packages/{stage_dir.name}"
     remote_root = remote_shell_path(host.install_root)
     bundle = shlex.quote(stage_dir.name)
@@ -643,9 +752,17 @@ def push_one(host: HostRecord, stage_dir: Path, dry_run: bool) -> tuple[str, int
             f"{host.destination}:{host.install_root}/config/{host.name}.sources.json",
         ],
     ]
+    if resolved_config.is_file():
+        commands.append(
+            host.scp_base()
+            + [
+                str(resolved_config),
+                f"{host.destination}:{host.install_root}/config/{host.name}.resolved.tar.gz",
+            ]
+        )
     output: list[str] = []
     for command in commands:
-        code, text = run_command(command, dry_run=dry_run)
+        code, text = run_command(command, dry_run=dry_run, attempts=3)
         output.append(text.strip())
         if code != 0:
             return host.name, code, "\n".join(output)
@@ -683,6 +800,8 @@ def apply_one(host: HostRecord, stage_dir: Path, dry_run: bool, restart: str | N
     config_env_sha256 = shlex.quote(str(host_data["config_env_sha256"]))
     config_json_sha256 = shlex.quote(str(host_data["config_json_sha256"]))
     config_sources_sha256 = shlex.quote(str(host_data["config_sources_sha256"]))
+    authoritative_config = bool(host_data.get("authoritative_config"))
+    resolved_config_sha256 = shlex.quote(str(host_data.get("resolved_config_sha256", "")))
     commands = [
         "set -eu",
         f"root={root}",
@@ -693,11 +812,14 @@ def apply_one(host: HostRecord, stage_dir: Path, dry_run: bool, restart: str | N
         f"expected_config_env_sha256={config_env_sha256}",
         f"expected_config_json_sha256={config_json_sha256}",
         f"expected_config_sources_sha256={config_sources_sha256}",
+        f"authoritative_config={'1' if authoritative_config else '0'}",
+        f"expected_resolved_config_sha256={resolved_config_sha256}",
         'package="$root/packages/$bundle/llm-ops-kit.tar.gz"',
         'manifest="$root/packages/$bundle/manifest.json"',
         'remote_config_env="$root/config/$host_name.env"',
         'remote_config_json="$root/config/$host_name.json"',
         'remote_config_sources="$root/config/$host_name.sources.json"',
+        'remote_resolved_config="$root/config/$host_name.resolved.tar.gz"',
         'release="$root/releases/$bundle"',
         'release_config="$release/config"',
         'current="$root/current"',
@@ -725,11 +847,14 @@ def apply_one(host: HostRecord, stage_dir: Path, dry_run: bool, restart: str | N
         'test -f "$remote_config_env"',
         'test -f "$remote_config_json"',
         'test -f "$remote_config_sources"',
+        'if [ "$authoritative_config" -eq 1 ]; then test -f "$remote_resolved_config"; fi',
         'test "$(checksum "$package")" = "$expected_package_sha256"',
         'test "$(checksum "$manifest")" = "$expected_manifest_sha256"',
         'test "$(checksum "$remote_config_env")" = "$expected_config_env_sha256"',
         'test "$(checksum "$remote_config_json")" = "$expected_config_json_sha256"',
         'test "$(checksum "$remote_config_sources")" = "$expected_config_sources_sha256"',
+        'if [ "$authoritative_config" -eq 1 ]; then '
+        'test "$(checksum "$remote_resolved_config")" = "$expected_resolved_config_sha256"; fi',
         'test ! -e "$release"',
         'mkdir -p "$release_config"',
         'release_created=1',
@@ -738,6 +863,7 @@ def apply_one(host: HostRecord, stage_dir: Path, dry_run: bool, restart: str | N
         'cp "$remote_config_env" "$release_config/$host_name.env"',
         'cp "$remote_config_json" "$release_config/$host_name.json"',
         'cp "$remote_config_sources" "$release_config/$host_name.sources.json"',
+        'if [ "$authoritative_config" -eq 1 ]; then tar -xzf "$remote_resolved_config" -C "$release_config"; fi',
         'printf \'%s\\n\' "$bundle" > "$release/BUNDLE_ID"',
         'printf \'%s\\n\' "$host_name" > "$release/HOST_NAME"',
         'if [ -L "$current" ]; then old_target=$(readlink "$current"); '
@@ -758,7 +884,11 @@ def apply_one(host: HostRecord, stage_dir: Path, dry_run: bool, restart: str | N
     if host.role in {"agent", "hybrid"}:
         commands.append('test -x "$current/scripts/agentctl"')
     commands.extend(["trap - EXIT HUP INT TERM", "exit 0"])
-    code, output = run_command(host.ssh_base() + ["; ".join(commands)], dry_run=dry_run)
+    code, output = run_command(
+        host.ssh_base() + ["; ".join(commands)],
+        dry_run=dry_run,
+        attempts=3,
+    )
     return host.name, code, output
 
 
@@ -777,6 +907,161 @@ def cmd_apply(args: argparse.Namespace) -> int:
             if code != 0:
                 failures += 1
     return 1 if failures else 0
+
+
+def cmd_deploy(args: argparse.Namespace) -> int:
+    """Stage, push, and apply one authoritative immutable deployment."""
+
+    bundle_id = args.bundle_id or time.strftime("%Y%m%d-%H%M%S")
+    stage_dir = Path(args.stage_root).expanduser() / bundle_id
+    if args.dry_run:
+        print(f"deploy plan: authoritative stage {stage_dir}")
+        print("deploy plan: validate, push, apply, then report drift")
+        stage_args = argparse.Namespace(**vars(args))
+        stage_args.bundle_id = bundle_id
+        stage_args.require_authoritative_config = True
+        return cmd_stage(stage_args)
+    stage_args = argparse.Namespace(**vars(args))
+    stage_args.bundle_id = bundle_id
+    stage_args.require_authoritative_config = True
+    if cmd_stage(stage_args) != 0:
+        return 1
+    operation_args = argparse.Namespace(**vars(args))
+    operation_args.stage = str(stage_dir)
+    if cmd_push(operation_args) != 0:
+        return 1
+    if cmd_apply(operation_args) != 0:
+        return 1
+    operation_args.json = False
+    return cmd_drift(operation_args)
+
+
+def drift_one(host: HostRecord, stage_dir: Path, dry_run: bool) -> tuple[str, int, dict[str, Any]]:
+    """Compare one host's active immutable release with the desired bundle."""
+
+    manifest_path = stage_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    host_data = next(item for item in manifest["hosts"] if item["name"] == host.name)
+    root = remote_shell_path(host.install_root)
+    script = "; ".join(
+        [
+            "set -eu",
+            f"root={root}",
+            'current="$root/current"',
+            'test -L "$current"',
+            'checksum() { if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | awk \'{print $1}\'; else sha256sum "$1" | awk \'{print $1}\'; fi; }',
+            'host_name=' + shlex.quote(host.name),
+            'printf "current_target=%s\\n" "$(readlink "$current")"',
+            'printf "bundle_id=%s\\n" "$(cat "$current/BUNDLE_ID")"',
+            'printf "manifest_sha256=%s\\n" "$(checksum "$current/manifest.json")"',
+            'printf "config_env_sha256=%s\\n" "$(checksum "$current/config/$host_name.env")"',
+            'printf "config_json_sha256=%s\\n" "$(checksum "$current/config/$host_name.json")"',
+            'printf "config_sources_sha256=%s\\n" "$(checksum "$current/config/$host_name.sources.json")"',
+        ]
+    )
+    code, output = run_command(host.ssh_base() + [script], dry_run=dry_run, attempts=3)
+    if dry_run:
+        return host.name, 0, {"host": host.name, "ok": True, "dry_run": True, "command": output}
+    observed: dict[str, str] = {}
+    for line in output.splitlines():
+        if "=" in line:
+            key, value = line.split("=", 1)
+            observed[key] = value
+    expected = {
+        "bundle_id": stage_dir.name,
+        "manifest_sha256": file_sha256(manifest_path),
+        "config_env_sha256": str(host_data["config_env_sha256"]),
+        "config_json_sha256": str(host_data["config_json_sha256"]),
+        "config_sources_sha256": str(host_data["config_sources_sha256"]),
+    }
+    differences = {
+        key: {"expected": value, "observed": observed.get(key, "")}
+        for key, value in expected.items()
+        if observed.get(key) != value
+    }
+    payload: dict[str, Any] = {
+        "host": host.name,
+        "ok": code == 0 and not differences,
+        "reachable": code == 0,
+        "current_target": observed.get("current_target", ""),
+        "differences": differences,
+    }
+    if code != 0:
+        payload["error"] = output.strip()
+    return host.name, code, payload
+
+
+def cmd_drift(args: argparse.Namespace) -> int:
+    hosts = select_hosts(load_inventory(inventory_path(args)), args)
+    stage_dir = Path(args.stage).expanduser() if args.stage else latest_stage(Path(args.stage_root).expanduser())
+    validate_stage_bundle(stage_dir, hosts, require_package=False)
+    results: list[dict[str, Any]] = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as pool:
+        futures = [pool.submit(drift_one, host, stage_dir, args.dry_run) for host in hosts]
+        for future in concurrent.futures.as_completed(futures):
+            _, _, payload = future.result()
+            results.append(payload)
+    results.sort(key=lambda item: str(item["host"]))
+    if args.json:
+        print(json.dumps({"ok": all(item["ok"] for item in results), "hosts": results}, indent=2, sort_keys=True))
+    else:
+        for item in results:
+            state = "OK" if item["ok"] else "DRIFT"
+            print(f"[{item['host']}] {state}")
+            for key, values in item.get("differences", {}).items():
+                print(f"  {key}: expected={values['expected']} observed={values['observed']}")
+            if item.get("error"):
+                print(f"  error: {item['error']}")
+    return 0 if all(item["ok"] for item in results) else 1
+
+
+def rollback_one(host: HostRecord, dry_run: bool) -> tuple[str, int, str]:
+    """Atomically exchange one host's current and previous release pointers."""
+
+    root = remote_shell_path(host.install_root)
+    script = "; ".join(
+        [
+            "set -eu",
+            f"root={root}",
+            'current="$root/current"',
+            'previous="$root/previous"',
+            'test -L "$current"',
+            'test -L "$previous"',
+            'current_target=$(readlink "$current")',
+            'previous_target=$(readlink "$previous")',
+            'test -d "$current_target"',
+            'test -d "$previous_target"',
+            'replace_link() { src=$1; dst=$2; if mv -fh "$src" "$dst" 2>/dev/null; then return 0; fi; if mv -fT "$src" "$dst" 2>/dev/null; then return 0; fi; rm -f "$dst"; mv -f "$src" "$dst"; }',
+            'ln -s "$previous_target" "$root/.current.rollback.$$"',
+            'ln -s "$current_target" "$root/.previous.rollback.$$"',
+            'replace_link "$root/.current.rollback.$$" "$current"',
+            'replace_link "$root/.previous.rollback.$$" "$previous"',
+            'BIN_DIR="$root/bin" RUNTIME_DIR="$current" bash "$current/scripts/deploy-runtime-links.sh" --replace-managed-links',
+            'printf "current=%s\\nprevious=%s\\n" "$(readlink "$current")" "$(readlink "$previous")"',
+        ]
+    )
+    code, output = run_command(host.ssh_base() + [script], dry_run=dry_run, attempts=3)
+    return host.name, code, output
+
+
+def cmd_rollback(args: argparse.Namespace) -> int:
+    hosts = select_hosts(load_inventory(inventory_path(args)), args)
+    results: list[dict[str, Any]] = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as pool:
+        futures = [pool.submit(rollback_one, host, args.dry_run) for host in hosts]
+        for future in concurrent.futures.as_completed(futures):
+            name, code, output = future.result()
+            results.append({"host": name, "ok": code == 0, "returncode": code, "output": output.strip()})
+    results.sort(key=lambda item: str(item["host"]))
+    if args.json:
+        print(json.dumps({"ok": all(item["ok"] for item in results), "hosts": results}, indent=2, sort_keys=True))
+    else:
+        for item in results:
+            state = "OK" if item["ok"] else f"FAILED({item['returncode']})"
+            print(f"[{item['host']}] rollback {state}")
+            if item["output"]:
+                print(item["output"])
+    return 0 if all(item["ok"] for item in results) else 1
 
 
 def cmd_stage_validate(args: argparse.Namespace) -> int:
@@ -1790,6 +2075,9 @@ def build_parser() -> argparse.ArgumentParser:
     stage.add_argument("--stage-root", default=str(DEFAULT_STAGE_ROOT))
     stage.add_argument("--bundle-id")
     stage.add_argument("--model")
+    stage.add_argument("--config-home")
+    stage.add_argument("--require-authoritative-config", action="store_true")
+    stage.add_argument("--allow-dirty", action="store_true")
     stage.add_argument("--dry-run", action="store_true")
     stage.set_defaults(func=cmd_stage)
     push = sub.add_parser("push")
@@ -1807,6 +2095,31 @@ def build_parser() -> argparse.ArgumentParser:
     apply.add_argument("--restart")
     apply.add_argument("--dry-run", action="store_true")
     apply.set_defaults(func=cmd_apply)
+    deploy = sub.add_parser("deploy")
+    add_host_selectors(deploy)
+    deploy.add_argument("--stage-root", default=str(DEFAULT_STAGE_ROOT))
+    deploy.add_argument("--bundle-id")
+    deploy.add_argument("--model")
+    deploy.add_argument("--config-home")
+    deploy.add_argument("--allow-dirty", action="store_true")
+    deploy.add_argument("--workers", type=int, default=4)
+    deploy.add_argument("--restart")
+    deploy.add_argument("--dry-run", action="store_true")
+    deploy.set_defaults(func=cmd_deploy)
+    drift = sub.add_parser("drift")
+    add_host_selectors(drift)
+    drift.add_argument("--stage-root", default=str(DEFAULT_STAGE_ROOT))
+    drift.add_argument("--stage")
+    drift.add_argument("--workers", type=int, default=4)
+    drift.add_argument("--dry-run", action="store_true")
+    drift.add_argument("--json", action="store_true")
+    drift.set_defaults(func=cmd_drift)
+    rollback = sub.add_parser("rollback")
+    add_host_selectors(rollback)
+    rollback.add_argument("--workers", type=int, default=4)
+    rollback.add_argument("--dry-run", action="store_true")
+    rollback.add_argument("--json", action="store_true")
+    rollback.set_defaults(func=cmd_rollback)
     stage_validate = sub.add_parser("stage-validate")
     add_host_selectors(stage_validate)
     stage_validate.add_argument("--stage-root", default=str(DEFAULT_STAGE_ROOT))
@@ -1904,7 +2217,7 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         return args.func(args)
-    except (AdminError, ConfigError, GgufError) as exc:
+    except (AdminError, ConfigError, GgufError, InventoryError, TopologyError) as exc:
         print(f"llmops-admin: {exc}", file=sys.stderr)
         return 2
 

@@ -1,48 +1,54 @@
-# Architecture Overview
+# Architecture
 
-Back: [docs/INDEX.md](./INDEX.md)
+Back: [Documentation Index](./INDEX.md)
 
-**Created**: 2026-02-26
-**Updated**: 2026-03-01
+## Scope
 
-- [Architecture Overview](#architecture-overview)
-  - [Components](#components)
-  - [Flow](#flow)
-  - [Script architecture](#script-architecture)
-  - [Deployment model](#deployment-model)
+LLM-Ops-Kit is a local-first macOS control layer, not a container scheduler. It coordinates existing model engines, agents, proxies, bridges, tunnels, dashboards, and launchd services without taking ownership of model weights, application state, logs, or secrets.
 
-## Components
+## Control Model
 
-- OpenClaw agent runtime
-- Model proxy wrapper (`model-proxy`) + tap (`model-proxy-tap`)
-- TTS service (`tts` via `mlx_audio.server`)
-- LLM service (`Qwen3` / `Qwen3.5` via `llama-server`)
-- Embedding service (`BGEm3` via `llama-server --embedding`)
-- Operator scripts (`LLM-Ops-Kit/scripts`)
+The administrator machine owns desired state. Canonical JSON configuration is loaded into a `Topology`, validated, and converted to ordered `Operation` objects. The same planner and executor modules are used by the CLI, tests, and future interfaces.
 
-## Flow
+```text
+JSON configuration -> topology validation -> dependency planner -> typed component driver -> local or SSH transport
+```
 
-1. User/channel input enters the OpenClaw agent runtime.
-2. The agent runtime routes model calls through proxy tap (when enabled).
-3. LLM inference served by local/remote `llama-server` profile.
-4. Memory search/indexing uses embedding service profile.
-5. Operator controls lifecycle through the `llmops` launcher in `~/.local/bin`.
+Stacks are dependency graphs. They provide coordinated start, stop, restart, and status operations but do not hide or prevent component-level control.
 
-## Script architecture
+## Lifecycle Semantics
 
-- `scripts/modelctl`: core launcher logic for model profiles.
-- `scripts/models/*.sh`: model-specific defaults.
-- `scripts/defaults/*.sh`: model-type/global fallback defaults.
-- `scripts/runtime-links.manifest`: single source for runtime command links.
+- Component start includes missing upstream dependencies unless `--no-deps` is explicitly used.
+- Component stop affects only the target and refuses when active dependents exist unless `--force` or `--cascade` is supplied.
+- Component restart affects only the target by default.
+- Cascade stop and restart operate over the active dependent closure in dependency-safe order.
+- Stack start is dependency first; stack stop is reverse dependency order.
+- Operations are idempotent.
+- A failed start stops only components started by that invocation.
+- Read-only status and log operations do not acquire the lifecycle mutation lock.
 
-## Deployment model
+## Drivers
 
-- Source of truth: `~/projects/LLM-Ops-Kit`
-- Runtime command surface: `~/.local/llm-ops/bin`
-- Cross-host updates via `sync-ops-scripts` + deploy/verify link scripts.
+Typed drivers construct lifecycle commands for `modelctl`, managed processes, launchd services, model-proxy, tts-bridge, SSH tunnels, and agents. The advanced command driver is disabled by default and accepts argv arrays rather than shell strings.
 
-## See Also
+Transport is either local execution or noninteractive SSH. SSH transport has bounded retry for deployment push, apply, drift, and rollback operations.
 
-- [How It Works](./HOW_IT_WORKS.md)
-- [Configuration](./CONFIGURATION.md)
-- [Switching Models and Agents](./SWITCHING.md)
+## Immutable Releases
+
+An authoritative deployment produces a checksummed package and one role-filtered configuration archive per host. Each archive contains global settings, a host-local inventory, host-local stack graphs, required profiles, and a resolution manifest. Cross-host dependencies are recorded as external dependencies rather than causing unrelated profiles to be copied.
+
+Code and configuration are extracted into the same release directory. The `current` symlink selects the active release and `previous` retains the rollback target. Runtime links point through `current`.
+
+## Drift
+
+Drift compares the desired deployment manifest with the active remote bundle, manifest, and resolved configuration hashes. Remote changes are reported and never merged into administrator state.
+
+## Agent Independence
+
+Agent components use generic process, launchd, or argv action profiles. Hermes and OpenClaw are compatibility adapters for one release. There is no default agent target.
+
+## Future UI Boundary
+
+Any web UI or TUI must call the shared control library or versioned JSON API. It must not contain a second planner or executor.
+
+The intended web shape is a separate loopback-only control process with static HTML, CSS, vanilla JavaScript, a small optional FastAPI backend, REST action endpoints, and SSE lifecycle events. It must remain available while all managed components are stopped and must not import model engines.

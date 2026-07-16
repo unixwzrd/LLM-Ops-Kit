@@ -63,6 +63,104 @@ class LlmopsAdminTests(unittest.TestCase):
         )
         return inventory
 
+    def write_authoritative_config(self, root: Path) -> tuple[Path, Path]:
+        config_home = root / "config"
+        for directory in ("models", "agents", "services", "stacks"):
+            (config_home / directory).mkdir(parents=True, exist_ok=True)
+        (config_home / "config.json").write_text(
+            json.dumps({"schema_version": 1, "runtime": {"allow_command_driver": False}}),
+            encoding="utf-8",
+        )
+        inventory = config_home / "inventory.json"
+        inventory.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "defaults": {
+                        "user": "deploy",
+                        "port": 22,
+                        "install_root": "~/llmops",
+                        "config_profile": "default",
+                        "ssh_key": "~/.ssh/llmops_test",
+                    },
+                    "hosts": [
+                        {
+                            "name": "llm-a",
+                            "role": "llm",
+                            "host": "llm-a.local",
+                            "tags": ["prod", "model"],
+                        },
+                        {
+                            "name": "agent-a",
+                            "role": "agent",
+                            "host": "agent-a.local",
+                            "tags": ["prod", "agent"],
+                        },
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (config_home / "models" / "chat.json").write_text(
+            json.dumps({"schema_version": 1, "model_path": "/models/chat.gguf"}),
+            encoding="utf-8",
+        )
+        (config_home / "services" / "proxy.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "listen": {"host": "127.0.0.1", "port": 11434},
+                    "upstream_token": "env:UPSTREAM_TOKEN",
+                }
+            ),
+            encoding="utf-8",
+        )
+        (config_home / "agents" / "generic.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "actions": {
+                        "start": ["agent", "start"],
+                        "stop": ["agent", "stop"],
+                        "restart": ["agent", "restart"],
+                        "status": ["agent", "status"],
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        (config_home / "stacks" / "test.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "name": "test",
+                    "components": [
+                        {
+                            "id": "chat",
+                            "host": "llm-a",
+                            "driver": "modelctl",
+                            "profile": "chat",
+                        },
+                        {
+                            "id": "proxy",
+                            "host": "agent-a",
+                            "driver": "model-proxy",
+                            "profile": "proxy",
+                        },
+                        {
+                            "id": "agent",
+                            "host": "agent-a",
+                            "driver": "agent",
+                            "profile": "generic",
+                            "depends_on": ["proxy"],
+                        },
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        return config_home, inventory
+
     def test_inventory_parsing_and_selection(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             inventory = self.write_inventory(Path(tmp))
@@ -74,6 +172,23 @@ class LlmopsAdminTests(unittest.TestCase):
     def test_remote_shell_path_expands_inventory_home_safely(self) -> None:
         self.assertEqual(self.admin.remote_shell_path("~/llmops"), '"$HOME"/llmops')
         self.assertEqual(self.admin.remote_shell_path("/opt/llm ops"), "'/opt/llm ops'")
+
+    def test_run_command_retries_with_bounded_backoff(self) -> None:
+        failures = [
+            mock.Mock(returncode=255, stdout="first\n"),
+            mock.Mock(returncode=255, stdout="second\n"),
+            mock.Mock(returncode=0, stdout="third\n"),
+        ]
+        with mock.patch.object(self.admin.subprocess, "run", side_effect=failures) as run:
+            with mock.patch.object(self.admin.time, "sleep") as sleep:
+                code, output = self.admin.run_command(
+                    ["ssh", "host", "true"], attempts=3, retry_delay=0.5
+                )
+        self.assertEqual(code, 0)
+        self.assertEqual(run.call_count, 3)
+        self.assertEqual([call.args[0] for call in sleep.call_args_list], [0.5, 1.0])
+        self.assertIn("attempt 1/3", output)
+        self.assertIn("third", output)
 
     def test_inventory_json_parsing_and_selection(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -116,7 +231,7 @@ class LlmopsAdminTests(unittest.TestCase):
             admin_inventory = root / "config" / "inventory.json"
             legacy_inventory = root / ".llm-ops" / "inventory.yml"
             default_inventory = root / "deploy" / "inventory.json"
-            fallback_inventory = root / "docs" / "inventory.example.json"
+            fallback_inventory = root / "docs" / "examples" / "inventory.local-lan.json"
             legacy_inventory.parent.mkdir(parents=True)
             default_inventory.parent.mkdir(parents=True)
             fallback_inventory.parent.mkdir(parents=True)
@@ -167,6 +282,31 @@ class LlmopsAdminTests(unittest.TestCase):
             )
             self.assertEqual(self.admin.cmd_stage(args), 0)
 
+    def test_deploy_dry_run_requires_authoritative_configuration(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config_home, inventory = self.write_authoritative_config(root)
+            args = Namespace(
+                inventory=str(inventory),
+                role=None,
+                tag=None,
+                host_name=None,
+                stage_root=str(root / "stage"),
+                bundle_id="deploy-plan",
+                model=None,
+                config_home=str(config_home),
+                allow_dirty=True,
+                workers=2,
+                restart=None,
+                dry_run=True,
+            )
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                self.assertEqual(self.admin.cmd_deploy(args), 0)
+            rendered = stdout.getvalue()
+            self.assertIn("authoritative stage", rendered)
+            self.assertIn("resolved-config.tar.gz", rendered)
+
     def test_stage_write_validates_created_bundle(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -196,6 +336,98 @@ class LlmopsAdminTests(unittest.TestCase):
                 self.assertIn("stage validation: OK", stdout.getvalue())
             finally:
                 self.admin.build_package = original_build_package
+
+    def test_authoritative_stage_filters_profiles_and_records_provenance(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config_home, inventory = self.write_authoritative_config(root)
+            original_build_package = self.admin.build_package
+
+            def fake_build_package(stage_dir: Path) -> Path:
+                package = stage_dir / "package" / "llm-ops-kit.tar.gz"
+                package.parent.mkdir(parents=True)
+                package.write_text("package", encoding="utf-8")
+                return package
+
+            self.admin.build_package = fake_build_package
+            try:
+                args = Namespace(
+                    inventory=str(inventory),
+                    role=None,
+                    tag=None,
+                    host_name=None,
+                    stage_root=str(root / "stage"),
+                    bundle_id="authoritative",
+                    model=None,
+                    config_home=str(config_home),
+                    require_authoritative_config=True,
+                    allow_dirty=True,
+                    dry_run=False,
+                )
+                self.assertEqual(self.admin.cmd_stage(args), 0)
+            finally:
+                self.admin.build_package = original_build_package
+
+            stage = root / "stage" / "authoritative"
+            manifest = json.loads((stage / "manifest.json").read_text(encoding="utf-8"))
+            self.assertIn("git_commit", manifest["source"])
+            self.assertIn("git_dirty", manifest["source"])
+            for item in manifest["hosts"]:
+                self.assertTrue(item["authoritative_config"])
+                self.assertEqual(
+                    item["resolved_config_sha256"],
+                    self.admin.file_sha256(Path(item["resolved_config"])),
+                )
+
+            llm_archive = stage / "hosts" / "llm-a" / "resolved-config.tar.gz"
+            with tarfile.open(llm_archive, "r:gz") as archive:
+                llm_names = set(archive.getnames())
+            self.assertIn("models/chat.json", llm_names)
+            self.assertIn("inventory.json", llm_names)
+            self.assertIn("stacks/test.json", llm_names)
+            self.assertNotIn("services/proxy.json", llm_names)
+            self.assertNotIn("agents/generic.json", llm_names)
+
+            agent_archive = stage / "hosts" / "agent-a" / "resolved-config.tar.gz"
+            with tarfile.open(agent_archive, "r:gz") as archive:
+                agent_names = set(archive.getnames())
+                proxy = json.loads(archive.extractfile("services/proxy.json").read())
+            self.assertNotIn("models/chat.json", agent_names)
+            self.assertIn("services/proxy.json", agent_names)
+            self.assertIn("agents/generic.json", agent_names)
+            self.assertEqual(proxy["upstream_token"], "env:UPSTREAM_TOKEN")
+            with tarfile.open(agent_archive, "r:gz") as archive:
+                local_stack = json.loads(archive.extractfile("stacks/test.json").read())
+                resolved = json.loads(archive.extractfile("resolved.json").read())
+            self.assertEqual([item["id"] for item in local_stack["components"]], ["proxy", "agent"])
+            self.assertEqual(resolved["external_dependencies"], {})
+
+    def test_authoritative_stage_rejects_modified_resolved_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config_home, inventory = self.write_authoritative_config(root)
+            hosts = self.admin.load_inventory(inventory)
+            topology = self.admin.authoritative_topology(
+                Namespace(config_home=str(config_home), inventory=str(inventory))
+            )
+            stage = root / "stage" / "bundle"
+            package = stage / "package" / "llm-ops-kit.tar.gz"
+            package.parent.mkdir(parents=True)
+            package.write_text("package", encoding="utf-8")
+            for host in hosts:
+                self.admin.write_host_config(stage, host, model=None)
+                self.admin.write_host_snapshot_archive(stage, host, topology)
+            self.admin.write_manifest(
+                stage,
+                package,
+                hosts,
+                model=None,
+                authoritative_config=True,
+            )
+            archive = stage / "hosts" / "llm-a" / "resolved-config.tar.gz"
+            archive.write_bytes(archive.read_bytes() + b"changed")
+            with self.assertRaisesRegex(self.admin.AdminError, "resolved config checksum mismatch"):
+                self.admin.validate_stage_bundle(stage, hosts, require_package=True)
 
     def test_build_package_contains_runtime_only(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -353,6 +585,48 @@ class LlmopsAdminTests(unittest.TestCase):
             self.assertIn('test "$(checksum "$package")" = "$expected_package_sha256"', rendered)
             self.assertIn('test "$(checksum "$remote_config_sources")" = "$expected_config_sources_sha256"', rendered)
             self.assertIn('BIN_DIR="$root/bin" RUNTIME_DIR="$current"', rendered)
+
+    def test_drift_dry_run_is_read_only_and_uses_desired_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            inventory = self.write_inventory(root)
+            hosts = self.admin.load_inventory(inventory)
+            stage = root / "stage" / "bundle"
+            package = stage / "package" / "llm-ops-kit.tar.gz"
+            package.parent.mkdir(parents=True)
+            package.write_text("package", encoding="utf-8")
+            for host in hosts:
+                self.admin.write_host_config(stage, host, model=None)
+            self.admin.write_manifest(stage, package, hosts, model=None)
+            args = Namespace(
+                inventory=str(inventory),
+                role=None,
+                tag=None,
+                host_name=None,
+                stage_root=str(root / "stage"),
+                stage=str(stage),
+                workers=2,
+                dry_run=True,
+                json=True,
+            )
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                self.assertEqual(self.admin.cmd_drift(args), 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertTrue(payload["ok"])
+            self.assertEqual([item["host"] for item in payload["hosts"]], ["agent-a", "llm-a"])
+            self.assertTrue(all(item["dry_run"] for item in payload["hosts"]))
+
+    def test_rollback_dry_run_exchanges_current_and_previous(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            host = self.admin.load_inventory(self.write_inventory(Path(tmp)))[0]
+            _, code, command = self.admin.rollback_one(host, dry_run=True)
+            self.assertEqual(code, 0)
+            self.assertIn('current_target=$(readlink "$current")', command)
+            self.assertIn('previous_target=$(readlink "$previous")', command)
+            self.assertIn('replace_link "$root/.current.rollback.$$" "$current"', command)
+            self.assertIn('replace_link "$root/.previous.rollback.$$" "$previous"', command)
+            self.assertIn('deploy-runtime-links.sh', command)
 
     def test_push_dry_run_fails_for_config_checksum_mismatch(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

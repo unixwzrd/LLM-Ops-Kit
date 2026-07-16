@@ -1,7 +1,7 @@
 # LLM-Ops-Kit Installation Rework Checklist
 
 **Created**: 2026-04-27
-**Updated**: 2026-05-09
+**Updated**: 2026-07-16
 
 ## Phase 1: Inventory And Bootstrap
 
@@ -33,19 +33,19 @@
 - [x] Transfer per-host config payloads.
 - [x] Record per-host success/failure status.
 - [x] Keep failed hosts isolated from successful hosts.
-- [ ] Add retry support for failed hosts.
+- [x] Add bounded retry support for failed transport commands.
 - [x] Add summary output with elapsed time and failed steps.
 
 ## Phase 4: Remote Apply
 
 - [x] Unpack package on target host.
 - [x] Install or update runtime links.
-- [x] Apply host-specific configuration.
+- [x] Apply host-specific authoritative configuration in the same immutable release as code.
 - [x] Restart selected services only.
 - [x] Verify model server health on LLM hosts.
 - [x] Verify agent runtime health on agent hosts.
 - [x] Emit remote apply logs per host.
-- [x] Preserve previous install for rollback.
+- [x] Preserve previous install for atomic code-and-configuration rollback.
 
 ## Phase 5: `modelctl` Refactor
 
