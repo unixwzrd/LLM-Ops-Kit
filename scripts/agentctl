@@ -805,19 +805,25 @@ launchd_remove_backend() {
 
 launchd_status_backend() {
   local backend="$1"
-  local plist_path label pid pid_name port active_state
+  local plist_path label pid pid_name port active_state launchctl launchd_output launchd_pid launchd_state
   label="$(launchd_label_for_backend "$backend")"
   plist_path="$(launchd_plist_path_for_backend "$backend")"
   load_agent_backend_config "$backend"
   port="${LLMOPS_GATEWAY_PORT:-18789}"
   pid_name="$(gateway_pid_name "$backend")"
-  if launchd_is_loaded_backend "$backend"; then
+  launchctl="$(launchctl_bin)"
+  launchd_output=""
+  if launchd_output="$("$launchctl" print "$(launchd_domain)/$label" 2>/dev/null)"; then
     echo "agentctl[$backend]: launchd loaded label=$label"
   else
     echo "agentctl[$backend]: launchd unloaded label=$label"
   fi
+  launchd_pid="$(printf '%s\n' "$launchd_output" | sed -n 's/^[[:space:]]*pid = \([0-9][0-9]*\).*$/\1/p' | head -n 1)"
+  launchd_state="$(printf '%s\n' "$launchd_output" | sed -n 's/^[[:space:]]*state = \([^[:space:]]*\).*$/\1/p' | head -n 1)"
   pid=""
-  if pid="$(read_pid "$pid_name" 2>/dev/null)" && [[ -n "$pid" ]] && is_pid_running "$pid"; then
+  if [[ "$launchd_state" == "running" && -n "$launchd_pid" ]]; then
+    active_state="active (launchd pid=$launchd_pid)"
+  elif pid="$(read_pid "$pid_name" 2>/dev/null)" && [[ -n "$pid" ]] && is_pid_running "$pid"; then
     active_state="active (pid=$pid)"
   elif lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
     active_state="listening on port $port (pid file stale or wrapper bypassed)"

@@ -1416,6 +1416,9 @@ class ShellRuntimeHelperTests(unittest.TestCase):
             "  print)\n"
             "    key=\"$(key_for \"${2:-}\")\"\n"
             "    [[ -f \"$state_dir/$key.loaded\" ]]\n"
+            "    if [[ -n \"${FAKE_LAUNCHCTL_PRINT_OUTPUT:-}\" ]]; then\n"
+            "      printf '%b\\n' \"$FAKE_LAUNCHCTL_PRINT_OUTPUT\"\n"
+            "    fi\n"
             "    ;;\n"
             "  bootstrap)\n"
             "    domain=\"${2:-}\"\n"
@@ -1629,6 +1632,7 @@ class ShellRuntimeHelperTests(unittest.TestCase):
                 "LAUNCHCTL_BIN": str(fake_launchctl),
                 "FAKE_LAUNCHCTL_LOG": str(launchctl_log),
                 "FAKE_LAUNCHCTL_STATE_DIR": str(launchctl_state),
+                "FAKE_LAUNCHCTL_PRINT_OUTPUT": "state = running\\npid = 4242",
             }
 
             install = self.run_bash(f'"{AGENTCTL}" launchd-install openclaw', env=base_env)
@@ -1646,6 +1650,7 @@ class ShellRuntimeHelperTests(unittest.TestCase):
             status = self.run_bash(f'"{AGENTCTL}" launchd-status openclaw', env=base_env)
             self.assertEqual(status.returncode, 0, status.stderr)
             self.assertIn("agentctl[openclaw]: launchd loaded label=ai.openclaw.gateway", status.stdout)
+            self.assertIn("active (launchd pid=4242)", status.stdout)
 
             bootout = self.run_bash(f'"{AGENTCTL}" launchd-bootout openclaw', env=base_env)
             self.assertEqual(bootout.returncode, 0, bootout.stderr)
