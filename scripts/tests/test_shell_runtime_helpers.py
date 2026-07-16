@@ -1160,6 +1160,71 @@ class ShellRuntimeHelperTests(unittest.TestCase):
             self.assertIn("modelctl settings (Qwen3.6)", proc.stdout)
             self.assertFalse((config_home / "config" / "Qwen3.6.env").exists())
 
+    def test_modelctl_start_handles_empty_optional_flags_and_rejects_early_exit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            home = root / "home"
+            config_home = root / "config"
+            state_home = root / "state"
+            models_dir = config_home / "models"
+            models_dir.mkdir(parents=True)
+            model_path = root / "model.gguf"
+            model_path.touch()
+            (models_dir / "Qwen3.6.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "name": "Qwen3.6",
+                        "type": "llm",
+                        "env": {
+                            "MODEL_TYPE": "llm",
+                            "MODEL_PROFILE": "Qwen3_6",
+                            "MODEL": str(model_path),
+                            "HOST": "127.0.0.1",
+                            "PORT": "11999",
+                            "THREADS": "2",
+                            "THREADS_BATCH": "2",
+                            "CTX_SIZE": "512",
+                            "GPU_LAYERS": "0",
+                            "BATCH_SIZE": "32",
+                            "UBATCH_SIZE": "32",
+                            "USE_CUSTOM_TEMPLATE": "0",
+                            "USE_NO_WEBUI": "0",
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            fake_server = root / "fake-llama-server"
+            fake_server.write_text(
+                "#!/usr/bin/env bash\n"
+                "while :; do sleep 1; done\n",
+                encoding="utf-8",
+            )
+            fake_server.chmod(0o755)
+            env = {
+                "HOME": str(home),
+                "LLMOPS_HOME": str(root / "llm-ops"),
+                "LLMOPS_CONFIG_HOME": str(config_home),
+                "LLMOPS_STATE_HOME": str(state_home),
+                "LLAMA_SERVER_BIN": str(fake_server),
+            }
+            proc = self.run_bash(
+                f'"{MODELCTL}" Qwen3.6 start; rc=$?; "{MODELCTL}" Qwen3.6 stop >/dev/null 2>&1 || true; exit "$rc"',
+                env=env,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertIn("Started llama-Qwen3_6", proc.stdout)
+            self.assertNotIn("unbound variable", proc.stderr)
+
+            fake_server.write_text("#!/usr/bin/env bash\nexit 17\n", encoding="utf-8")
+            proc = self.run_bash(f'"{MODELCTL}" Qwen3.6 start', env=env)
+            self.assertNotEqual(proc.returncode, 0)
+            self.assertNotIn("Started llama-Qwen3_6", proc.stdout)
+            self.assertIn("process exited during startup", proc.stderr)
+            self.assertFalse((state_home / "run" / "llama-Qwen3_6.pid").exists())
+            self.assertFalse((state_home / "run" / "llama-Qwen3_6.state").exists())
+
     def test_model_proxy_stop_accepts_no_optional_arguments(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

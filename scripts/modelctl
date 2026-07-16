@@ -244,6 +244,7 @@ print_model_settings() {
   echo "  HOST=${HOST:-}"
   echo "  PORT=${PORT:-}"
   if [[ "$MODEL_TYPE" == "llm" || "$MODEL_TYPE" == "embedding" ]]; then
+    echo "  LLAMA_SERVER_BIN=${LLAMA_SERVER_BIN:-/usr/local/bin/llama-server}"
     echo "  THREADS=${THREADS:-}"
     echo "  THREADS_BATCH=${THREADS_BATCH:-}"
     echo "  CTX_SIZE=${CTX_SIZE:-}"
@@ -317,6 +318,7 @@ if [[ "$action" == "start" || "$action" == "restart" || "$action" == "status" ||
   load_shell_env
 fi
 ensure_runtime_dirs
+LLAMA_SERVER_BIN="${LLAMA_SERVER_BIN:-/usr/local/bin/llama-server}"
 
 list_profiles() {
   {
@@ -526,6 +528,7 @@ start_model() {
   fi
 
   if [[ "$MODEL_TYPE" == "llm" || "$MODEL_TYPE" == "embedding" ]]; then
+    [[ -x "$LLAMA_SERVER_BIN" ]] || { echo "llama-server is not executable: $LLAMA_SERVER_BIN" >&2; exit 1; }
     [[ -f "$MODEL" ]] || { echo "Model not found: $MODEL" >&2; exit 1; }
   else
     [[ -e "$MODEL" ]] || { echo "TTS model path not found: $MODEL" >&2; exit 1; }
@@ -563,7 +566,7 @@ start_model() {
       RUNTIME_FLAGS+=(--no-webui)
     fi
     if [[ "${DIRECT_IO:-0}" == "1" ]]; then
-      if /usr/local/bin/llama-server --help 2>&1 | rg -q -- '--direct-io'; then
+      if "$LLAMA_SERVER_BIN" --help 2>&1 | rg -q -- '--direct-io'; then
         RUNTIME_FLAGS+=(--direct-io)
       else
         echo "WARNING: DIRECT_IO=1 but llama-server does not support --direct-io; skipping."
@@ -606,9 +609,9 @@ start_model() {
       RUNTIME_FLAGS+=(--no-host)
     fi
     if [[ "${DISABLE_TOOL_GRAMMAR:-0}" == "1" ]]; then
-      if /usr/local/bin/llama-server --help 2>&1 | rg -q -- '--no-tool-grammar'; then
+      if "$LLAMA_SERVER_BIN" --help 2>&1 | rg -q -- '--no-tool-grammar'; then
         EXTRA_ARGS+=(--no-tool-grammar)
-      elif /usr/local/bin/llama-server --help 2>&1 | rg -q -- '--disable-tool-grammar'; then
+      elif "$LLAMA_SERVER_BIN" --help 2>&1 | rg -q -- '--disable-tool-grammar'; then
         EXTRA_ARGS+=(--disable-tool-grammar)
       else
         echo "WARNING: DISABLE_TOOL_GRAMMAR=1 but llama-server has no known tool-grammar disable flag; skipping."
@@ -632,7 +635,7 @@ start_model() {
       RUNTIME_FLAGS+=(--no-webui)
     fi
     if [[ "${DIRECT_IO:-0}" == "1" ]]; then
-      if /usr/local/bin/llama-server --help 2>&1 | rg -q -- '--direct-io'; then
+      if "$LLAMA_SERVER_BIN" --help 2>&1 | rg -q -- '--direct-io'; then
         RUNTIME_FLAGS+=(--direct-io)
       else
         echo "WARNING: DIRECT_IO=1 but llama-server does not support --direct-io; skipping."
@@ -655,31 +658,40 @@ start_model() {
       tts_cmd+=( "${extra[@]}" )
     fi
     nohup "${tts_cmd[@]}" > "$LOG_FILE" 2>&1 &
+    pid="$!"
   fi
 
   if [[ "$MODEL_TYPE" == "llm" || "$MODEL_TYPE" == "embedding" ]]; then
-    nohup /usr/local/bin/llama-server \
-      --model "$MODEL" \
-      "${MM_FLAGS[@]}" \
-      --ctx-size "$CTX_SIZE" \
-      --gpu-layers "$GPU_LAYERS" \
-      --batch-size "$BATCH_SIZE" \
-      --ubatch-size "$UBATCH_SIZE" \
-      --port "$PORT" \
-      --host "$HOST" \
-      --threads "$THREADS" \
-      --threads-batch "$THREADS_BATCH" \
-      "${SAMPLING_FLAGS[@]}" \
-      "${RUNTIME_FLAGS[@]}" \
-      "${TEMPLATE_FLAGS[@]}" \
-      "${DEBUG_FLAGS[@]}" \
-      --log-timestamps \
-      --log-file "$LOG_FILE" \
-      "${MODE_FLAGS[@]}" \
-      "${EXTRA_ARGS[@]}" &
+    local -a llama_cmd
+    llama_cmd=("$LLAMA_SERVER_BIN" --model "$MODEL")
+    (( ${#MM_FLAGS[@]} > 0 )) && llama_cmd+=("${MM_FLAGS[@]}")
+    llama_cmd+=(
+      --ctx-size "$CTX_SIZE"
+      --gpu-layers "$GPU_LAYERS"
+      --batch-size "$BATCH_SIZE"
+      --ubatch-size "$UBATCH_SIZE"
+      --port "$PORT"
+      --host "$HOST"
+      --threads "$THREADS"
+      --threads-batch "$THREADS_BATCH"
+    )
+    (( ${#SAMPLING_FLAGS[@]} > 0 )) && llama_cmd+=("${SAMPLING_FLAGS[@]}")
+    (( ${#RUNTIME_FLAGS[@]} > 0 )) && llama_cmd+=("${RUNTIME_FLAGS[@]}")
+    (( ${#TEMPLATE_FLAGS[@]} > 0 )) && llama_cmd+=("${TEMPLATE_FLAGS[@]}")
+    (( ${#DEBUG_FLAGS[@]} > 0 )) && llama_cmd+=("${DEBUG_FLAGS[@]}")
+    llama_cmd+=(--log-timestamps --log-file "$LOG_FILE")
+    (( ${#MODE_FLAGS[@]} > 0 )) && llama_cmd+=("${MODE_FLAGS[@]}")
+    (( ${#EXTRA_ARGS[@]} > 0 )) && llama_cmd+=("${EXTRA_ARGS[@]}")
+    nohup "${llama_cmd[@]}" &
+    pid="$!"
   fi
 
-  pid="$!"
+  sleep 0.4
+  if ! is_pid_running "$pid"; then
+    echo "Failed to start $pid_name; process exited during startup. Recent log output:" >&2
+    tail -n 40 "$LOG_FILE" >&2 || true
+    return 1
+  fi
   write_pid "$pid_name" "$pid"
   write_model_state "$pid"
   start_log_marktime "$pid_name" "$MODEL_PROFILE" "$LOG_FILE"
