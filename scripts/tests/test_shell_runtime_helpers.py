@@ -781,6 +781,7 @@ class ShellRuntimeHelperTests(unittest.TestCase):
             self.assertTrue((remote_home / ".local" / "state" / "llm-ops" / "runtime-state.env").exists())
             self.assertTrue((remote_home / ".local" / "llm-ops" / "venv" / "bin" / "python").exists())
             self.assertTrue((remote_home / ".local" / "llm-ops" / "bin" / "agentctl").is_symlink())
+            self.assertTrue((remote_home / ".local" / "llm-ops" / "bin" / "llmops").is_symlink())
             self.assertTrue((remote_home / ".local" / "bin" / "llmops").is_symlink())
             self.assertIn(str(remote_home / ".local" / "bin"), (remote_home / ".bash_profile").read_text(encoding="utf-8"))
             self.assertTrue(ssh_log.exists())
