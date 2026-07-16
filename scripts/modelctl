@@ -51,11 +51,13 @@ resolve_model_from_invocation() {
 }
 
 resolve_args() {
+  local raw1="${1:-}"
+  local raw2="${2:-}"
   local arg1
   local arg2
   local invoked_as
-  arg1="$(normalize_action "${1:-}")"
-  arg2="$(normalize_action "${2:-}")"
+  arg1="$(normalize_action "$raw1")"
+  arg2="$(normalize_action "$raw2")"
   invoked_as="$(basename "$0")"
 
   if [[ -z "$arg1" ]]; then
@@ -81,7 +83,7 @@ resolve_args() {
     return
   fi
 
-  model_name="$arg1"
+  model_name="$raw1"
   action="${arg2:-start}"
 }
 
@@ -287,7 +289,6 @@ print_model_settings() {
     echo "  TTS_PYTHON_BIN=${TTS_PYTHON_BIN:-}"
     echo "  TTS_SERVER_MODULE=${TTS_SERVER_MODULE:-}"
     echo "  TTS_API_KEY=${TTS_API_KEY:+<set>}"
-    [[ -z "${TTS_API_KEY:-}" ]] && echo "  TTS_API_KEY="
     echo "  TTS_SERVER_ARGS=${TTS_SERVER_ARGS:-}"
   fi
 }
@@ -331,8 +332,11 @@ ensure_model_override_template() {
   local model_file="$SCRIPT_DIR/models/${m}.sh"
   local model_override_file="$LLMOPS_CONFIG_DIR/${m}.env"
   local legacy_override_file="$LLMOPS_CONFIG_DIR/${m}.sh"
+  local json_model_file
+  json_model_file="$(llmops_model_profile_path "$m")"
 
   [[ -f "$model_file" ]] || return 0
+  [[ -f "$json_model_file" ]] && return 0
   if [[ -f "$model_override_file" ]]; then
     return 0
   fi

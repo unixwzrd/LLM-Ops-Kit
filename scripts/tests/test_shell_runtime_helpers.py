@@ -351,7 +351,7 @@ class ShellRuntimeHelperTests(unittest.TestCase):
                 },
             )
             self.assertEqual(proc.returncode, 0, proc.stderr)
-            self.assertIn("MODEL_PROFILE=qwen3.6", proc.stdout)
+            self.assertIn("MODEL_PROFILE=Qwen3.6", proc.stdout)
             self.assertIn("MODEL=/models/qwen3.6.gguf", proc.stdout)
             self.assertIn("HOST=127.0.0.1", proc.stdout)
             self.assertIn("PORT=11999", proc.stdout)
@@ -1115,6 +1115,50 @@ class ShellRuntimeHelperTests(unittest.TestCase):
             self.assertEqual(proc.returncode, 1, proc.stderr)
             self.assertIn("log_rotate_seconds=123", proc.stdout)
             self.assertIn("log_rotate_keep=4", proc.stdout)
+
+    def test_modelctl_preserves_profile_case_and_does_not_seed_json_override(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config_home = root / "config"
+            models_dir = config_home / "models"
+            models_dir.mkdir(parents=True)
+            model_path = root / "model.gguf"
+            model_path.touch()
+            (models_dir / "Qwen3.6.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "name": "Qwen3.6",
+                        "type": "llm",
+                        "env": {
+                            "MODEL_TYPE": "llm",
+                            "MODEL_PROFILE": "Qwen3_6",
+                            "MODEL": str(model_path),
+                            "HOST": "127.0.0.1",
+                            "PORT": "11434",
+                            "THREADS": "8",
+                            "THREADS_BATCH": "8",
+                            "CTX_SIZE": "8192",
+                            "GPU_LAYERS": "99",
+                            "BATCH_SIZE": "512",
+                            "UBATCH_SIZE": "512",
+                            "USE_CUSTOM_TEMPLATE": "0",
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            proc = self.run_bash(
+                f'"{MODELCTL}" Qwen3.6 settings',
+                env={
+                    "HOME": str(root / "home"),
+                    "LLMOPS_HOME": str(root / "llm-ops"),
+                    "LLMOPS_CONFIG_HOME": str(config_home),
+                },
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertIn("modelctl settings (Qwen3.6)", proc.stdout)
+            self.assertFalse((config_home / "config" / "Qwen3.6.env").exists())
 
     def test_model_proxy_stop_accepts_no_optional_arguments(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

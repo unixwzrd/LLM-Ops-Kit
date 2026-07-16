@@ -6,10 +6,12 @@ import importlib.machinery
 import contextlib
 import io
 import json
+import os
 import sys
 import tempfile
 import tarfile
 import unittest
+from unittest import mock
 from argparse import Namespace
 from pathlib import Path
 
@@ -535,6 +537,50 @@ class LlmopsAdminTests(unittest.TestCase):
             self.assertEqual(len(qwen_docs), 1)
             self.assertEqual(qwen_docs[0]["env"]["PORT"], "19999")
             self.assertEqual(len(qwen_docs[0]["sources"]), 2)
+
+    def test_legacy_parser_expands_scalars_and_flattens_active_extra_args(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profile = root / "Qwen3.6.env"
+            profile.write_text(
+                "\n".join(
+                    [
+                        'MODEL="${MODEL:-$HOME/model.gguf}"',
+                        'THREADS="${THREADS:-8}"',
+                        'THREADS_BATCH="${THREADS_BATCH:-$THREADS}"',
+                        "IGNORED=(",
+                        '  "--not-active 1"',
+                        ")",
+                        "EXTRA_ARGS=(",
+                        "  --cache-prompt",
+                        '  "--slot-save-path $HOME/slots"',
+                        ")",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            with mock.patch.dict(os.environ, {"HOME": str(root)}, clear=False):
+                values = self.admin.parse_legacy_assignment_file(profile)
+            self.assertEqual(values["MODEL"], str(root / "model.gguf"))
+            self.assertEqual(values["THREADS_BATCH"], "8")
+            self.assertEqual(
+                values["EXTRA_FLAGS"],
+                f"--cache-prompt --slot-save-path {root / 'slots'}",
+            )
+            self.assertNotIn("IGNORED", values)
+            self.assertNotIn("EXTRA_ARGS", values)
+
+    def test_legacy_value_resolution_uses_final_merged_values(self) -> None:
+        resolved = self.admin.resolve_legacy_assignment_values(
+            {
+                "THREADS_BATCH": "$THREADS",
+                "THREADS": "24",
+                "UNRESOLVED": "$RUNTIME_DEFAULT",
+            }
+        )
+        self.assertEqual(resolved["THREADS_BATCH"], "24")
+        self.assertNotIn("UNRESOLVED", resolved)
 
     def test_migration_rebases_legacy_runtime_to_invoked_runtime_path(self) -> None:
         original_runtime_root = self.admin.RUNTIME_ROOT

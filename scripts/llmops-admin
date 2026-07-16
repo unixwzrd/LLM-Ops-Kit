@@ -274,7 +274,45 @@ def parse_env_file(path: Path) -> dict[str, str]:
 
 
 VAR_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-DEFAULT_EXPR_RE = re.compile(r'^\$\{[A-Za-z_][A-Za-z0-9_]*:-(.*)\}$')
+DEFAULT_EXPR_RE = re.compile(r'^\$\{([A-Za-z_][A-Za-z0-9_]*):-(.*)\}$')
+VAR_REF_RE = re.compile(r'\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)')
+
+
+def expand_legacy_assignment(value: str, values: dict[str, str]) -> str:
+    env = {**os.environ, **values}
+    match = DEFAULT_EXPR_RE.match(value)
+    if match:
+        value = env.get(match.group(1), match.group(2))
+    if "$(" in value or "`" in value:
+        return ""
+
+    def replace(match: re.Match[str]) -> str:
+        name = match.group(1) or match.group(2)
+        return env.get(name, match.group(0))
+
+    for _ in range(4):
+        expanded = VAR_REF_RE.sub(replace, value)
+        if expanded == value:
+            break
+        value = expanded
+    return value
+
+
+def resolve_legacy_assignment_values(values: dict[str, str]) -> dict[str, str]:
+    resolved = dict(values)
+    for _ in range(4):
+        updated = {
+            key: expand_legacy_assignment(value, resolved)
+            for key, value in resolved.items()
+        }
+        if updated == resolved:
+            break
+        resolved = updated
+    return {
+        key: value
+        for key, value in resolved.items()
+        if not VAR_REF_RE.search(value) and "$(" not in value and "`" not in value
+    }
 
 
 def parse_legacy_assignment_file(path: Path) -> dict[str, str]:
@@ -287,7 +325,11 @@ def parse_legacy_assignment_file(path: Path) -> dict[str, str]:
     values: dict[str, str] = {}
     if not path.exists():
         return values
-    for raw_line in path.read_text(encoding="utf-8").splitlines():
+    lines = path.read_text(encoding="utf-8").splitlines()
+    index = 0
+    while index < len(lines):
+        raw_line = lines[index]
+        index += 1
         line = raw_line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
@@ -295,11 +337,35 @@ def parse_legacy_assignment_file(path: Path) -> dict[str, str]:
         key = key.strip().removeprefix("export ").strip()
         if not VAR_NAME_RE.match(key):
             continue
-        value = raw_value.strip().strip("\"'")
+        raw_value = raw_value.strip()
+        if raw_value.startswith("("):
+            array_lines = [raw_value[1:]]
+            while not any(part.strip().endswith(")") for part in array_lines) and index < len(lines):
+                array_lines.append(lines[index])
+                index += 1
+            if key == "EXTRA_ARGS":
+                tokens: list[str] = []
+                for part in array_lines:
+                    part = part.strip()
+                    if part.endswith(")"):
+                        part = part[:-1]
+                    if not part or part.startswith("#"):
+                        continue
+                    try:
+                        tokens.extend(shlex.split(part, comments=True, posix=True))
+                    except ValueError:
+                        tokens = []
+                        break
+                if tokens:
+                    values["EXTRA_FLAGS"] = " ".join(
+                        expand_legacy_assignment(token, values) for token in tokens
+                    )
+            continue
+        value = raw_value.strip("\"'")
         match = DEFAULT_EXPR_RE.match(value)
-        if match:
-            value = match.group(1)
-        values[key] = value
+        value = expand_legacy_assignment(value, values)
+        if value:
+            values[key] = value
     return values
 
 
@@ -1033,6 +1099,13 @@ def migration_documents(legacy_home: Path) -> dict[Path, dict[str, Any]]:
             )
             agent["sources"].append(source_record(label, path))
             agent["env"].update(values)
+
+    config_env = resolve_legacy_assignment_values(config_env)
+    host_defaults = resolve_legacy_assignment_values(host_defaults)
+    for model in models.values():
+        model["env"] = resolve_legacy_assignment_values(model["env"])
+    for agent in agents.values():
+        agent["env"] = resolve_legacy_assignment_values(agent["env"])
 
     config = default_config()
     config["runtime"] = {
