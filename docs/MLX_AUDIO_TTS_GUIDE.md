@@ -1,7 +1,7 @@
 # MLX Audio TTS Guide
 
 **Created**: 2026-03-02  
-**Updated**: 2026-05-11
+**Updated**: 2026-07-16
 
 - [MLX Audio TTS Guide](#mlx-audio-tts-guide)
   - [Purpose](#purpose)
@@ -9,29 +9,30 @@
   - [Model Recommendation](#model-recommendation)
   - [Start the TTS Server](#start-the-tts-server)
   - [API Smoke Test](#api-smoke-test)
-  - [Bridge for OpenClaw TTS](#bridge-for-openclaw-tts)
+  - [Bridge for Agent TTS](#bridge-for-agent-tts)
   - [Bridge Configuration](#bridge-configuration)
   - [Bridge Dictionaries](#bridge-dictionaries)
-  - [Voice Clone Workflow](#voice-clone-workflow)
-  - [Best Practices for Clone Samples](#best-practices-for-clone-samples)
+  - [Reference Voice Workflow](#reference-voice-workflow)
+  - [Best Practices for Reference Samples](#best-practices-for-reference-samples)
   - [Known Packaging Gotchas](#known-packaging-gotchas)
   - [Troubleshooting](#troubleshooting)
 
 ## Purpose
 
-Provide a simple, repeatable path to run local TTS with `mlx-audio`, and use voice cloning through the OpenAI-compatible API used by this toolkit.
+Provide a repeatable local TTS path through the OpenAI-compatible API. Reference
+audio must be owned by the operator or used with the speaker's permission.
 
 ## Requirements
 
 - Python 3.9+
 - `mlx-audio` installed in the active Python environment
-- A local model directory for Qwen3-TTS CustomVoice
+- A local model directory for Qwen3-TTS Base
 - Toolkit profile `Qwen3TTS` configured in `scripts/models/Qwen3TTS.sh`
 
 Upstream links:
 
 - MLX Audio: <https://github.com/Blaizzy/mlx-audio>
-- Qwen3-TTS 0.6B CustomVoice (MLX): <https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit>
+- Qwen3-TTS 0.6B Base (MLX): <https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-0.6B-Base-8bit>
 
 Temporary compatibility note:
 
@@ -43,11 +44,11 @@ Temporary compatibility note:
 
 Default recommendation for most systems:
 
-- `Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit`
+- `Qwen3-TTS-12Hz-0.6B-Base-8bit`
 
 Why:
 
-- Good quality for local voice clone checks
+- Supports reference-conditioned speech with operator-authorized samples
 - Lower memory use than 1.7B variants
 - Fast enough for iterative testing
 
@@ -72,10 +73,9 @@ Port note:
 
 Override via environment (optional):
 
-- `LLMOPS_TTS_HOST`
-- `LLMOPS_TTS_PORT`
-- `LLMOPS_TTS_PYTHON`
-- `LLMOPS_TTS_MODULE`
+- `HOST`, `PORT`
+- `TTS_PYTHON_BIN`, `TTS_SERVER_MODULE`
+- `TTS_RUNTIME_PATH` for utilities such as `ffmpeg`
 
 ## API Smoke Test
 
@@ -83,7 +83,7 @@ Override via environment (optional):
 curl -sS http://127.0.0.1:11439/v1/audio/speech \
   -H 'Content-Type: application/json' \
   -d '{
-    "model": "'"$HOME/LLM_Repository/TTS/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit"'",
+    "model": "'"$HOME/LLM_Repository/TTS/Qwen3-TTS-12Hz-0.6B-Base-8bit"'",
     "input": "Hello from local MLX TTS.",
     "response_format": "wav"
   }' \
@@ -92,14 +92,18 @@ curl -sS http://127.0.0.1:11439/v1/audio/speech \
 
 If the MLX TTS server runs on a different machine, replace `127.0.0.1` with your remote model host. The URL above is the direct upstream TTS server, not the local `tts-bridge`.
 
-## Bridge for OpenClaw TTS
+## Bridge for Agent TTS
 
-Use `tts-bridge` so OpenClaw can keep using OpenAI-style TTS requests while your local bridge injects MLX-specific fields (`model`, `voice`, `ref_audio`, `ref_text`).
+Use `tts-bridge` so Hermes or OpenClaw can issue OpenAI-style TTS requests while
+the bridge injects MLX-specific fields (`model`, `ref_audio`, `ref_text`).
 
-Important `CustomVoice` note:
+Important Base-model note:
 
-- The validated clone path for this deployment uses a `CustomVoice` model together with clone refs.
-- `tts-bridge` forwards `model`, `voice`, `ref_audio`, and `ref_text`, while the upstream `mlx-audio` server resolves `ref_text` from a server-side path and routes clone-ref requests through the ICL path.
+- The validated path uses the Base 0.6B 8-bit model with reference audio and a
+  matching transcript. Friendly voice names are bridge aliases, not built-in
+  model speakers.
+- WAV needs no external encoder. MP3/FLAC requires `ffmpeg` in the managed TTS
+  process PATH.
 - Unsupported response formats such as `opus` and `ogg` are normalized to `wav`.
 
 Operationally, this behaves like `model-proxy`: start/stop/restart/status via a wrapper script with PID and log tracking.
@@ -109,7 +113,7 @@ llmops tts-bridge start
 llmops tts-bridge status
 ```
 
-Then route OpenClaw TTS to the bridge:
+Then route the agent's OpenAI-compatible TTS provider to the bridge.
 
 ```bash
 export OPENAI_TTS_BASE_URL=http://127.0.0.1:11440/v1
@@ -129,7 +133,7 @@ And set provider in `~/.openclaw/openclaw.json`:
       "provider": "openai",
       "openai": {
         "baseUrl": "http://127.0.0.1:11440/v1",
-        "model": "${HOME}/LLM_Repository/TTS/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit",
+        "model": "${HOME}/LLM_Repository/TTS/Qwen3-TTS-12Hz-0.6B-Base-8bit",
         "voice": "serena"
       }
     }
@@ -138,6 +142,17 @@ And set provider in `~/.openclaw/openclaw.json`:
 ```
 
 Treat the `11440` value above as an example only. Use whatever local bridge port you configured in `~/.config/llm-ops/config.env`.
+
+Hermes equivalent:
+
+```yaml
+tts:
+  provider: openai
+  openai:
+    base_url: http://127.0.0.1:11439/v1
+    model: /path/to/Qwen3-TTS-12Hz-0.6B-Base-8bit
+    voice: voice-a
+```
 
 ## Bridge Configuration
 
@@ -166,7 +181,7 @@ Example:
 export TTS_BRIDGE_HOST=127.0.0.1
 export TTS_BRIDGE_PORT=11440
 export TTS_BRIDGE_UPSTREAM_BASE=http://<remote-mlx-host>:11439/v1
-export TTS_BRIDGE_MODEL=$HOME/LLM_Repository/TTS/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit
+export TTS_BRIDGE_MODEL=$HOME/LLM_Repository/TTS/Qwen3-TTS-12Hz-0.6B-Base-8bit
 export TTS_BRIDGE_CONFIG_DIR=$HOME/.llm-ops
 export TTS_BRIDGE_SAMPLES_DIR=$HOME/LLM_Repository/TTS/Samples
 export TTS_BRIDGE_VOICE=Guide
@@ -220,7 +235,7 @@ Example:
 
 `voice-map.json`:
 
-- maps a friendly incoming voice name to a clone sample
+- maps a friendly incoming voice name to an authorized reference sample
 - supports a top-level `defaults` block for shared `sample_dir` and fallback `sample`
 - derives the transcript path from the sample basename unless `ref_text` is explicitly set in the alias
 - `sample` is required; `ref_text` is optional
@@ -308,7 +323,7 @@ Bridge log rotation:
 - `TTS_BRIDGE_LOG_ROTATE_SECONDS` defaults to `86400`
 - `TTS_BRIDGE_LOG_ROTATE_KEEP` defaults to `5`
 
-## Voice Clone Workflow
+## Reference Voice Workflow
 
 Use a `.wav` and a matching transcript `.txt` with the same basename:
 
@@ -320,38 +335,27 @@ Example request:
 ```bash
 AUDIO="$HOME/LLM_Repository/TTS/Samples/speaker-reference-a.wav"
 TEXT="${AUDIO%.wav}.txt"
-MODEL="$HOME/LLM_Repository/TTS/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit"
-VOICE="serena"
-OUT="/tmp/test-tts-clone.wav"
+MODEL="$HOME/LLM_Repository/TTS/Qwen3-TTS-12Hz-0.6B-Base-8bit"
+OUT="/tmp/test-tts-reference.wav"
 
 curl -sS http://<remote-mlx-host>:11439/v1/audio/speech \
   -H 'Content-Type: application/json' \
   -d "$(jq -n \
     --arg model "$MODEL" \
-    --arg input "Hello, this is a quick clone check." \
-    --arg voice "$VOICE" \
+    --arg input "Hello, this is a quick reference-voice check." \
     --arg ref_audio "$AUDIO" \
     --arg ref_text "$TEXT" \
     --arg response_format "wav" \
-    '{model:$model,input:$input,voice:$voice,ref_audio:$ref_audio,ref_text:$ref_text,response_format:$response_format}')" \
+    '{model:$model,input:$input,ref_audio:$ref_audio,ref_text:$ref_text,response_format:$response_format}')" \
   --output "$OUT"
 ```
 
 For this deployment, `ref_audio` and `ref_text` are server-side paths on the MLX host. They do not need to exist on the bridge machine. Do not inline the transcript text into the JSON payload.
 
-For the current MLX build, these are the predefined speaker names reported for speaker-mode requests:
+Friendly names belong in `voice-map.json`; keep repository examples neutral and
+keep private filenames in host-local configuration.
 
-- `serena`
-- `vivian`
-- `uncle_fu`
-- `ryan`
-- `aiden`
-- `ono_anna`
-- `sohee`
-- `eric`
-- `dylan`
-
-## Best Practices for Clone Samples
+## Best Practices for Reference Samples
 
 - Keep a short sample set for routine operations (20-45 seconds).
 - Keep longer samples separately for quality comparisons.
@@ -382,7 +386,7 @@ If you maintain a local fork/clone of `mlx-audio`, update its `pyproject.toml` s
 If `/v1/audio/speech` returns 500:
 
 - Confirm model path exists and is readable.
-- Confirm the model is a `CustomVoice` model when using clone refs in this deployment.
+- Confirm the model is the Base variant when using reference audio and text.
 - Confirm the transcript file exists on the MLX host, is non-empty, and matches the sample.
 - Check server log:
   - `~/.openclaw/logs/tts-server-Qwen3TTS.log`

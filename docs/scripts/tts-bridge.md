@@ -3,12 +3,14 @@
 **Created**: 2026-03-03
 **Updated**: 2026-03-25
 
-Run a local OpenAI-compatible TTS bridge that forwards to your MLX Audio server and injects a configured voice clone payload (`model`, `voice`, `ref_audio`, `ref_text`).
+Run a local OpenAI-compatible TTS bridge that forwards to MLX Audio and injects
+a configured reference payload (`model`, `ref_audio`, `ref_text`). Use only
+operator-owned or authorized reference audio.
 
 The bridge can now:
 
 - rewrite incoming text through a pronunciation dictionary
-- map friendly voice names to clone samples and matching transcripts
+- map friendly voice aliases to reference samples and matching transcripts
 - load config from a dedicated bridge config directory
 - fail loudly when configuration is malformed or the upstream request itself is invalid
 
@@ -27,7 +29,7 @@ Port note:
 - Any free/open ports will work.
 - If you change ports, keep `TTS_BRIDGE_UPSTREAM_BASE` and OpenClaw TTS base URL in sync.
 
-Default voice clone sample:
+Default reference sample:
 
 - `TTS_BRIDGE_REF_AUDIO=$HOME/LLM_Repository/TTS/Samples/speaker-reference-a.wav`
 - `TTS_BRIDGE_REF_TEXT=$HOME/LLM_Repository/TTS/Samples/speaker-reference-a.txt`
@@ -51,11 +53,10 @@ Environment overrides:
 - `TTS_BRIDGE_LOG_ROTATE_SECONDS`
 - `TTS_BRIDGE_LOG_ROTATE_KEEP`
 - `TTS_BRIDGE_VOICE`
-  - Required fallback for `CustomVoice` bridge setups unless the caller always supplies `voice`.
-  - The bridge forwards clone refs and keeps `voice` for `CustomVoice` requests.
+  - Optional friendly alias selected by the caller or bridge map.
 - `TTS_BRIDGE_REF_AUDIO`
 - `TTS_BRIDGE_REF_TEXT`
-- `TTS_BRIDGE_PYTHON_BIN`
+- `TTS_BRIDGE_PYTHON_BIN` (use an absolute path for launchd/Conda installs)
 - `LLMOPS_LOG_ROTATE_BYTES`
 - `LLMOPS_LOG_ROTATE_KEEP`
 - `LLMOPS_LOG_ROTATE_MAX_AGE_DAYS`
@@ -114,12 +115,12 @@ Voice map behavior:
 - alias entries require `sample`
 - alias sample paths resolve relative to alias `sample_dir`, then `defaults.sample_dir`, then the bridge `samples-dir`
 - alias-derived `ref_audio` and `ref_text` are only used when the request does not already provide explicit `ref_audio` or `ref_text`
-- if no alias matches and no explicit refs are sent, `defaults.sample` can act as the fallback clone voice
-- when an alias matches, the bridge resolves clone refs from the map and does not need a mapped speaker name
+- if no alias matches and no explicit refs are sent, `defaults.sample` can act as the fallback reference voice
+- when an alias matches, the bridge resolves reference paths from the map and does not need a built-in speaker name
 - if no voice is provided by the request and no non-alias fallback applies, the bridge leaves `voice` unset instead of inventing one
 - transcript defaults to the sample basename with `.txt`
 - alias entries may point to sample and transcript files that exist only on the upstream MLX host
-- local bridge-side file existence is not authoritative for clone refs; alias-resolved `ref_audio` and `ref_text` are forwarded as path strings for server-side resolution
+- local bridge-side file existence is not authoritative for reference paths; alias-resolved `ref_audio` and `ref_text` are forwarded for server-side resolution
 - `ref_text` may be set explicitly in the map; if omitted, the bridge derives it from the sample basename with `.txt`
 
 Allowed empty defaults:
@@ -226,7 +227,9 @@ Compatibility notes:
 
 - Unsupported OpenAI-style output formats such as `opus` and `ogg` are normalized to `wav` before forwarding to MLX Audio.
 - In this deployment, the bridge forwards `ref_audio` and `ref_text` as server-side paths on the MLX host. Those files do not need to exist on the bridge machine.
-- Correct cloning with `CustomVoice` depends on the upstream `mlx-audio` path resolving `ref_text` server-side and preferring the ICL clone path when clone refs are present.
+- The validated deployment uses the Base model with server-side `ref_audio` and
+  `ref_text` paths. MP3/FLAC output also requires `ffmpeg` in the upstream TTS
+  process PATH.
 
 OpenClaw wiring:
 

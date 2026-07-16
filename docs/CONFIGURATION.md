@@ -248,9 +248,11 @@ Notes:
 - Hermes-specific wrapper defaults can be customized in `~/.config/llm-ops/config/agents/hermes.env`.
 - Hermes-native runtime behavior is loaded by Hermes from:
   - `~/.hermes/config.yaml`
-  - `~/.hermes/.env` (keep placeholder-only; Hermes always reads it)
+  - `~/.hermes/.env` (restrict permissions while it is the active secret
+    source; make it placeholder-only only after an external secret provider is active)
   - legacy `~/.hermes/gateway.json`
-- `LLMOPS_GATEWAY_PORT` only applies to the OpenClaw backend.
+- `LLMOPS_GATEWAY_PORT` is the status/probe port for the selected backend.
+  Shipped defaults are `18789` for OpenClaw and `8642` for Hermes.
 - `HERMES_GATEWAY_CMD` overrides the command used to launch Hermes when `backend=hermes`.
 - Hermes Secrets Kit use is optional and disabled by default.
 
@@ -334,6 +336,8 @@ Notes:
 ### Proxy and tap
 
 - `MODEL_PROXY_TAP_BIN`: explicit path to `model-proxy-tap`.
+- `MODEL_PROXY_PYTHON_BIN`: optional absolute Python interpreter for the
+  tracked proxy implementation; recommended for launchd and Conda installs.
 - `MODEL_PROXY_LOG_ROTATE_SECONDS`: rotation period in seconds (default `86400`).
 - `MODEL_PROXY_LOG_ROTATE_KEEP`: number of rotated proxy logs to keep (default `5`).
 
@@ -348,6 +352,9 @@ Notes:
 - `TTS_BRIDGE_REF_AUDIO`: default reference audio file.
 - `TTS_BRIDGE_REF_TEXT`: default reference transcript file (or literal text).
 - `TTS_BRIDGE_PYTHON_BIN`: python binary used by the bridge launcher.
+- `TTS_PYTHON_BIN`: Python interpreter used by a `MODEL_TYPE=tts` profile.
+- `TTS_RUNTIME_PATH`: extra PATH prefix inherited by the managed TTS server;
+  use it for encoder tools such as `ffmpeg` without activating Conda.
 
 ### Secrets
 

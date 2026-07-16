@@ -3,7 +3,7 @@
 Back: [docs/INDEX.md](./INDEX.md)
 
 **Created**: 2026-02-26
-**Updated**: 2026-05-11
+**Updated**: 2026-07-16
 
 - [Quickstart (10 Minutes)](#quickstart-10-minutes)
   - [Requirements](#requirements)
@@ -14,10 +14,11 @@ Back: [docs/INDEX.md](./INDEX.md)
 
 ## Requirements
 
-- OpenClaw installed
+- OpenClaw or Hermes installed
 - Python 3.9+ with `jinja2` available for prompt/template helpers
 - `llama-server` at `/usr/local/bin/llama-server`
 - `mlx-audio` installed on the TTS host if you are using the MLX TTS path
+- `ffmpeg` available to the managed TTS process when clients request MP3/FLAC
 - Bash 4+ available as `/usr/local/bin/bash` on remote hosts
 - `ssh`, `rsync`, `jq`
 
@@ -57,6 +58,15 @@ separate operator workflow.
 
 Use this when OpenClaw, `agentctl`, `model-proxy`, and `tts-bridge` run locally, while the LLM, embeddings, and MLX TTS run on a remote model host.
 
+For Hermes deployments, start dependencies in this order: chat model,
+embedding model, TTS model, model-proxy, tts-bridge, Headroom if enabled,
+gateway, dashboard, SSH tunnel, Desktop. Stop in reverse order.
+
+Do not depend on Conda activation in SSH or launchd. Put absolute interpreters
+in model/service JSON profiles (`TTS_PYTHON_BIN`,
+`MODEL_PROXY_PYTHON_BIN`, and `TTS_BRIDGE_PYTHON_BIN`). Use
+`TTS_RUNTIME_PATH` when the TTS encoder must find utilities such as `ffmpeg`.
+
 Set these in `~/.config/llm-ops/config.env` or export them in the shell before starting wrappers:
 
 ```bash
@@ -71,9 +81,9 @@ export TTS_BRIDGE_UPSTREAM_BASE=http://<remote-model-host>:11439/v1
 
 ```bash
 cd ~/projects/LLM-Ops-Kit
-llmops agentctl start
 llmops model-proxy restart --upstream http://<remote-model-host>:11434
 llmops tts-bridge start
+llmops agentctl start hermes
 ```
 
 What admin deployment does:

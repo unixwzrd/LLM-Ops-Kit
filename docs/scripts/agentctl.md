@@ -28,7 +28,10 @@ llmops agentctl [launchd-install|launchd-start|launchd-stop|launchd-bootout|laun
 - `switch` stops the other backend and starts the requested backend.
 - Per-agent overrides live under `~/.config/llm-ops/config/agents/`.
 - Launchd uses the internal `agentctl launchd-run <backend>` path so backend-native `.env` files can be loaded without workspace-local wrappers. For OpenClaw, this path wraps the gateway with `seckit run` only when `LLMOPS_USE_SECKIT=1`.
-- Agents may also source a small shell init file before their native `.env`; Hermes defaults this to `~/.bashrc` so Conda/Python initialization can be picked up in managed runs.
+- Agents may source a small shell init file before their native `.env`, but
+  production launchd profiles should still use absolute interpreter and command
+  paths. Shell initialization is a compatibility aid, not environment ownership.
+- Hermes uses gateway port `8642` by default; OpenClaw uses `18789`.
 - Hermes Secrets Kit use is optional and disabled by default. Keep `~/.hermes/.env` placeholder-only when using an external secret store.
 - `launchd-install` writes a per-backend plist under `~/Library/LaunchAgents/` and starts it immediately.
 - `launchd-start` and `launchd-stop` manage the loaded agent without rewriting the plist.

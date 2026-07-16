@@ -1,9 +1,22 @@
 # Agent Ops Changelog
 
 **Created**: 2026-02-20
-**Updated**: 2026-04-18
+**Updated**: 2026-07-16
 
 All notable changes to LLM-Ops-Kit will be documented in this file.
+
+### 2026-07-16 - Clean launchd/Conda runtime validation
+
+- Added Hermes gateway port `8642` and native launchd PID/state reporting.
+- Added absolute Python interpreter fields for model-proxy and tts-bridge
+  service profiles, with early missing-interpreter errors.
+- Added `TTS_RUNTIME_PATH` so managed MLX Audio processes can find encoders such
+  as `ffmpeg` without interactive Conda activation.
+- Validated a complete two-host stop/start cycle through immutable runtime 20,
+  including chat, 1024-dimension embeddings, reference TTS, Hermes dashboard
+  TTS, native LaunchAgents, and the local Desktop tunnel.
+- Updated multi-host, Hermes, launchd, and TTS operator documentation. Public
+  examples use neutral, operator-authorized reference audio names.
 
 ### 2026-07-15 — TTS bridge clone-model default correction
 
