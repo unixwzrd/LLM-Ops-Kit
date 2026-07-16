@@ -1330,9 +1330,12 @@ class ShellRuntimeHelperTests(unittest.TestCase):
     def test_tts_bridge_start_reports_bridge_pid_not_marktime_pid(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
+            args_log = root / "tts-bridge-args.log"
             fake_python = root / "fake-python"
             fake_python.write_text(
-                "#!/usr/bin/env bash\nwhile :; do sleep 1; done\n",
+                "#!/usr/bin/env bash\n"
+                "printf '%s\\n' \"$@\" > \"$FAKE_TTS_BRIDGE_ARGS\"\n"
+                "while :; do sleep 1; done\n",
                 encoding="utf-8",
             )
             fake_python.chmod(0o755)
@@ -1340,6 +1343,10 @@ class ShellRuntimeHelperTests(unittest.TestCase):
                 f"""
                 output=$("{TTS_BRIDGE}" start)
                 pid=$(cat "$LLMOPS_STATE_HOME/run/tts-bridge.pid")
+                for _ in 1 2 3 4 5 6 7 8 9 10; do
+                    [[ -f "$FAKE_TTS_BRIDGE_ARGS" ]] && break
+                    sleep 0.1
+                done
                 "{TTS_BRIDGE}" stop >/dev/null
                 printf '%s\\nexpected_pid=%s\\n' "$output" "$pid"
                 """,
@@ -1351,6 +1358,7 @@ class ShellRuntimeHelperTests(unittest.TestCase):
                     "TTS_BRIDGE_UPSTREAM_BASE": "http://127.0.0.1:65530/v1",
                     "TTS_BRIDGE_PORT": "65531",
                     "TTS_BRIDGE_PYTHON_BIN": str(fake_python),
+                    "FAKE_TTS_BRIDGE_ARGS": str(args_log),
                 },
             )
             self.assertEqual(proc.returncode, 0, proc.stderr)
@@ -1358,6 +1366,12 @@ class ShellRuntimeHelperTests(unittest.TestCase):
             reported = next(line for line in lines if line.startswith("Started tts-bridge pid="))
             expected = next(line for line in lines if line.startswith("expected_pid="))
             self.assertIn(f"pid={expected.split('=', 1)[1]} ", reported)
+            args = args_log.read_text(encoding="utf-8").splitlines()
+            model_index = args.index("--model") + 1
+            self.assertEqual(
+                args[model_index],
+                str(root / "home" / "LLM_Repository" / "TTS" / "Qwen3-TTS-12Hz-0.6B-Base-8bit"),
+            )
 
     def _write_fake_gateway_cmd(self, root: Path) -> Path:
         script = root / "fake-gateway"

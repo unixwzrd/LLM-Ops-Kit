@@ -5,6 +5,13 @@
 
 All notable changes to LLM-Ops-Kit will be documented in this file.
 
+### 2026-07-15 — TTS bridge clone-model default correction
+
+- **Scope:** `scripts/tts-bridge`, TTS runtime tests, and operator examples
+- **Category:** `tts`, `runtime`, `testing`, `documentation`
+- **What changed:** Aligned the bridge default with the `Qwen3TTS` launcher by using the 0.6B Base model for sample/reference voice cloning.
+- **Why:** Current MLX Audio CustomVoice models require a built-in speaker name, while bridge aliases intentionally resolve to `ref_audio` and `ref_text` clone inputs.
+
 ### 2026-04-18 — Staged SSH deployment flow, named deploy configs, and launchd cleanup
 
 - **Scope:**

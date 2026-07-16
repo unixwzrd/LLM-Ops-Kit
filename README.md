@@ -85,8 +85,8 @@ These are the profiles currently documented and validated in this toolkit:
 
 ### Notes:
 
-- `Qwen3TTS` profile defaults point to the 0.6B CustomVoice model for lower memory use.
-- Voice cloning with `CustomVoice` depends on the upstream `mlx-audio` path honoring clone refs when `ref_audio` and `ref_text` are present.
+- `Qwen3TTS` and `tts-bridge` default to the 0.6B Base model.
+- Voice cloning uses the Base model with `ref_audio` and `ref_text`; CustomVoice models require a supported built-in speaker name.
 - In this deployment, `tts-bridge` forwards server-side clone reference paths and keeps the OpenAI-style TTS surface stable for OpenClaw.
 - Until upstream `mlx-audio` PR `#558` merges, the validated source for this deployment is:
   - <https://github.com/unixwzrd/mlx-audio>
@@ -105,7 +105,7 @@ Quick direct MLX Audio clone request:
 ```bash
 AUDIO="$HOME/LLM_Repository/TTS/Samples/speaker-reference-a.wav"
 TEXT="${AUDIO%.wav}.txt"
-MODEL="$HOME/LLM_Repository/TTS/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit"
+MODEL="$HOME/LLM_Repository/TTS/Qwen3-TTS-12Hz-0.6B-Base-8bit"
 VOICE="serena"
 OUT="/tmp/tts-clone.wav"
 

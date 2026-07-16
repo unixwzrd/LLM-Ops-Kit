@@ -26,7 +26,7 @@ Qwen3-TTS smoke test:
 curl -sS http://127.0.0.1:11439/v1/audio/speech \
   -H 'Content-Type: application/json' \
   -d '{
-    "model": "'"$HOME/LLM_Repository/TTS/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit"'",
+    "model": "'"$HOME/LLM_Repository/TTS/Qwen3-TTS-12Hz-0.6B-Base-8bit"'",
     "input": "Hello from local MLX TTS.",
     "response_format": "wav"
   }' \
