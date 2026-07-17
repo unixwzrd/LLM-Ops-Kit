@@ -127,26 +127,17 @@ def build_component_command(topology: Topology, component: Component, action: st
         binary = _managed_binary(host, component.driver)
         return f"{binary} {shlex.quote(action)}"
     if component.driver == "agent":
-        if isinstance(profile.get("actions"), dict):
-            actions = _require_actions(profile, component)
-            argv = actions.get(action)
-            if argv is None:
-                if action == "logs":
-                    log_path = profile.get("log_path")
-                    if isinstance(log_path, str) and log_path:
-                        return f"tail -n 100 {shlex.quote(log_path)}"
-                raise DriverError(
-                    f"{component.qualified_id}: agent profile does not define action: {action}"
-                )
-            return shlex.join(argv)
-        if component.profile not in {"hermes", "openclaw"}:
+        actions = _require_actions(profile, component)
+        argv = actions.get(action)
+        if argv is None:
+            if action == "logs":
+                log_path = profile.get("log_path")
+                if isinstance(log_path, str) and log_path:
+                    return f"tail -n 100 {shlex.quote(log_path)}"
             raise DriverError(
-                f"{component.qualified_id}: agent profile requires argv actions or a compatibility adapter"
+                f"{component.qualified_id}: agent profile does not define action: {action}"
             )
-        binary = _managed_binary(host, "agentctl")
-        if action == "logs":
-            return f"{binary} logs {shlex.quote(component.profile)}"
-        return f"{binary} {shlex.quote(action)} {shlex.quote(component.profile)}"
+        return shlex.join(argv)
     if component.driver in {"launchd", "ssh-tunnel"}:
         if action == "logs":
             log_path = profile.get("log_path", profile.get("stdout"))

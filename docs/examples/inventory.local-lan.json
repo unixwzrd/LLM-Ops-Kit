@@ -5,7 +5,7 @@
     "port": 22,
     "install_root": "~/.local/llm-ops",
     "config_profile": "default",
-    "ssh_key": "~/.ssh/llmops_ed25519"
+    "ssh_key": "~/.ssh/id_ed25519_llmops"
   },
   "hosts": [
     {

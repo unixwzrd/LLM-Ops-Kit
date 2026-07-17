@@ -14,12 +14,25 @@ cd "$REPO_ROOT"
 
 shell_targets=(
   "scripts/lib/common.sh"
-  "scripts/agentctl"
+  "scripts/llmops"
   "scripts/modelctl"
   "scripts/tts-bridge"
   "scripts/model-proxy"
   "scripts/install-runtime.sh"
   "scripts/uninstall-runtime.sh"
+)
+
+python_targets=(
+  "scripts/llmops-control"
+  "scripts/lib/llmops_config.py"
+  "scripts/lib/llmops_deployment.py"
+  "scripts/lib/llmops_drivers.py"
+  "scripts/lib/llmops_executor.py"
+  "scripts/lib/llmops_inventory.py"
+  "scripts/lib/llmops_migration.py"
+  "scripts/lib/llmops_paths.py"
+  "scripts/lib/llmops_profiles.py"
+  "scripts/lib/llmops_topology.py"
 )
 
 echo "==> Shell syntax checks"
@@ -32,6 +45,9 @@ fi
 
 echo "==> Shellcheck"
 shellcheck "${shell_targets[@]}"
+
+echo "==> Python compile checks"
+python3 -m py_compile "${python_targets[@]}"
 
 echo "==> Python regression tests"
 python3 -m unittest discover -s scripts/tests -p 'test_*.py'

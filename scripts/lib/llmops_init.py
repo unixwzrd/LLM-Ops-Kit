@@ -74,14 +74,22 @@ def initialize(
         paths.inventory_file: {"schema_version": 1, "hosts": hosts},
         paths.models_dir / "chat.json": {
             "schema_version": 1,
-            "model_type": "llm",
+            "name": "chat",
+            "type": "llm",
             "model_path": "/path/to/model.gguf",
-            "server": {"host": "127.0.0.1", "port": model_port},
+            "runtime": {"host": "127.0.0.1", "port": model_port},
+            "llama": {"ctx_size": 32768, "gpu_layers": "auto"},
+            "server": {"cache_prompt": True, "extra_flags": []},
         },
         paths.services_dir / "model-proxy.json": {
             "schema_version": 1,
-            "listen": {"host": "127.0.0.1", "port": 11434},
-            "upstream": proxy_upstream,
+            "name": "model-proxy",
+            "runtime": {
+                "listen_host": "127.0.0.1",
+                "listen_port": 11434,
+                "upstream_host": proxy_upstream.rsplit(":", 1)[0].removeprefix("http://"),
+                "upstream_port": int(proxy_upstream.rsplit(":", 1)[1]),
+            },
         },
         paths.agents_dir / "example-agent.json": {
             "schema_version": 1,

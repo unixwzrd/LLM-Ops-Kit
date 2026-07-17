@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-KEY_PATH="${KEY_PATH:-$HOME/.ssh/id_ed25519_openclaw_deploy}"
-KEY_COMMENT="${KEY_COMMENT:-openclaw-deploy}"
+KEY_PATH="${KEY_PATH:-$HOME/.ssh/id_ed25519_llmops}"
+KEY_COMMENT="${KEY_COMMENT:-llmops-deploy}"
 TTL="${TTL:-20m}"
 REMOTE_HOST="${REMOTE_HOST:-}"
 REMOTE_USER="${REMOTE_USER:-$USER}"
@@ -13,8 +13,8 @@ usage() {
 Usage: setup-ssh-deploy-key.sh [options]
 
 Options:
-  --key <path>            Private key path (default: ~/.ssh/id_ed25519_openclaw_deploy)
-  --comment <text>        Key comment (default: openclaw-deploy)
+  --key <path>            Private key path (default: ~/.ssh/id_ed25519_llmops)
+  --comment <text>        Key comment (default: llmops-deploy)
   --ttl <duration>        ssh-add lifetime (default: 20m)
   --host <host>           Remote host for optional install
   --user <user>           Remote user (default: current user)
@@ -83,4 +83,3 @@ fi
 echo
 echo "Remove key from agent when done:"
 echo "  ssh-add -d $KEY_PATH"
-

@@ -1,279 +1,182 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SOURCE="${BASH_SOURCE[0]}"
-while [[ -h "$SOURCE" ]]; do
-  DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
-  SOURCE="$(readlink "$SOURCE")"
-  [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
-done
-SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
-SOURCE_DIR_DEFAULT="$(cd "$SCRIPT_DIR/.." && pwd)"
-
-SOURCE_DIR="${LLMOPS_SOURCE_DIR:-$SOURCE_DIR_DEFAULT}"
+SOURCE_DIR="${LLMOPS_SOURCE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 INSTALL_BASE="${LLMOPS_INSTALL_BASE:-$HOME/.local/llm-ops}"
-INSTALL_DIR="$INSTALL_BASE/current"
-BIN_DIR="${BIN_DIR:-${LLMOPS_BIN_DIR:-$HOME/.local/llm-ops/bin}}"
 PUBLIC_BIN_DIR="${LLMOPS_PUBLIC_BIN_DIR:-$HOME/.local/bin}"
 STATE_HOME="${LLMOPS_STATE_HOME:-${XDG_STATE_HOME:-$HOME/.local/state}/llm-ops}"
-STATE_FILE="${LLMOPS_STATE_FILE:-$STATE_HOME/runtime-state.env}"
-VENV_PATH="${LLMOPS_RUNTIME_VENV_PATH:-}"
-INSTALL_SECRETS_KIT=0
-SECRETS_KIT_SOURCE="${LLMOPS_SECRETS_KIT_SOURCE:-git+https://github.com/unixwzrd/Secrets-Kit.git}"
-PYTHON_PACKAGES="${LLMOPS_RUNTIME_VENV_PACKAGES:-jinja2}"
-NO_LINKS=0
-UPDATE_SHELL_PROFILE=1
-SHELL_PROFILE="${LLMOPS_SHELL_PROFILE:-}"
+RELEASE_ID=""
+REPAIR=0
 
-expand_path() {
-  local raw="$1"
-  case "$raw" in
-    "~") printf '%s\n' "$HOME" ;;
-    \~/*) printf '%s/%s\n' "$HOME" "${raw#\~/}" ;;
-    *) printf '%s\n' "$raw" ;;
-  esac
-}
-
-ensure_runtime_venv() {
-  local venv="$1"
-  local python_bin
-  local -a python_packages
-  [[ -n "$venv" ]] || return 0
-
-  venv="$(expand_path "$venv")"
-  python_bin="$venv/bin/python"
-  if [[ ! -x "$python_bin" ]]; then
-    echo "Creating runtime venv at: $venv"
-    python3 -m venv "$venv"
-  fi
-
-  if [[ -n "${PYTHON_PACKAGES// }" ]]; then
-    echo "Installing runtime Python packages into: $venv"
-    read -r -a python_packages <<< "$PYTHON_PACKAGES"
-    "$python_bin" -m pip install "${python_packages[@]}"
-  fi
-
-  if [[ "$INSTALL_SECRETS_KIT" -eq 1 ]]; then
-    echo "Installing Secrets-Kit into runtime venv from: $SECRETS_KIT_SOURCE"
-    "$python_bin" -m pip install "$SECRETS_KIT_SOURCE"
-  fi
-
-  VENV_PATH="$venv"
-}
-
-default_shell_profile() {
-  if [[ -n "$SHELL_PROFILE" ]]; then
-    printf '%s\n' "$SHELL_PROFILE"
-    return 0
-  fi
-  case "${SHELL:-}" in
-    */zsh) printf '%s/.zprofile\n' "$HOME" ;;
-    *)
-      case "$(uname -s 2>/dev/null || printf unknown)" in
-        Darwin) printf '%s/.bash_profile\n' "$HOME" ;;
-        *) printf '%s/.bashrc\n' "$HOME" ;;
-      esac
-      ;;
-  esac
-}
-
-install_public_launcher() {
-  local launcher_src="$1"
-  mkdir -p "$PUBLIC_BIN_DIR"
-  ln -sfn "$launcher_src" "$PUBLIC_BIN_DIR/llmops"
-  echo "LINKED_PUBLIC: $PUBLIC_BIN_DIR/llmops -> $launcher_src"
-}
-
-ensure_shell_profile_path() {
-  local profile_file="$1"
-  local public_bin="$2"
-  local filtered_file new_file
-  [[ "$UPDATE_SHELL_PROFILE" -eq 1 ]] || return 0
-  mkdir -p "$(dirname "$profile_file")"
-  touch "$profile_file"
-  filtered_file="${profile_file}.filtered.$$"
-  new_file="${profile_file}.tmp.$$"
-  awk '
-    $0 == "# >>> llm-ops path >>>" { skip=1; next }
-    $0 == "# <<< llm-ops path <<<" { skip=0; next }
-    skip == 1 { next }
-    { print }
-  ' "$profile_file" > "$filtered_file"
-  {
-    cat "$filtered_file"
-    printf '\n# >>> llm-ops path >>>\n'
-    # shellcheck disable=SC2016
-    printf 'export PATH="%s:$PATH"\n' "$public_bin"
-    printf '# <<< llm-ops path <<<\n'
-  } > "$new_file"
-  mv "$new_file" "$profile_file"
-  rm -f "$filtered_file"
-  echo "UPDATED_SHELL_PROFILE: $profile_file"
-}
+INTERNAL_COMMANDS=(llmops llmops-control modelctl model-proxy tts-bridge tts runtime-maintenance precheck)
 
 usage() {
-  cat <<USAGE
-Usage: $(basename "$0") [options]
+  cat <<'USAGE'
+Usage: install-runtime.sh [options]
 
 Options:
-  --source <path>      Source repo directory (default: $SOURCE_DIR_DEFAULT)
-  --prefix <path>      Install base dir (default: ~/.local/llm-ops)
-  --bin-dir <path>     Managed runtime bin dir (default: ~/.local/llm-ops/bin)
-  --public-bin-dir <path>  Public launcher dir (default: ~/.local/bin)
-  --state-file <path>  Runtime state file (default: ~/.local/state/llm-ops/runtime-state.env)
-  --venv-path <path>   Optional runtime Python virtualenv path
-  --install-secrets-kit  Install Secrets-Kit into the runtime venv
-  --secrets-kit-source <spec>  pip install source for Secrets-Kit
-  --no-links           Install files only; skip link deploy/verify
-  --no-shell-profile   Do not update shell startup files
-  --shell-profile <path>  Shell startup file to update (default: detected)
-  -h, --help           Show this help
+  --source <path>          Source checkout
+  --prefix <path>          Install root (default: ~/.local/llm-ops)
+  --public-bin-dir <path>  Public command directory (default: ~/.local/bin)
+  --state-home <path>      State root (default: ~/.local/state/llm-ops)
+  --release-id <id>        Explicit immutable release ID
+  --repair                 Rebuild links for the active release only
+  -h, --help               Show this help
 USAGE
+}
+
+expand_path() {
+  case "$1" in
+    "~") printf '%s\n' "$HOME" ;;
+    \~/*) printf '%s/%s\n' "$HOME" "${1#\~/}" ;;
+    *) printf '%s\n' "$1" ;;
+  esac
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --source) SOURCE_DIR="$2"; shift 2 ;;
     --prefix) INSTALL_BASE="$2"; shift 2 ;;
-    --bin-dir) BIN_DIR="$2"; shift 2 ;;
     --public-bin-dir) PUBLIC_BIN_DIR="$2"; shift 2 ;;
-    --state-file) STATE_FILE="$2"; shift 2 ;;
-    --venv-path) VENV_PATH="$2"; shift 2 ;;
-    --install-secrets-kit) INSTALL_SECRETS_KIT=1; shift ;;
-    --secrets-kit-source) SECRETS_KIT_SOURCE="$2"; shift 2 ;;
-    --no-links) NO_LINKS=1; shift ;;
-    --no-shell-profile) UPDATE_SHELL_PROFILE=0; shift ;;
-    --shell-profile) SHELL_PROFILE="$2"; shift 2 ;;
+    --state-home) STATE_HOME="$2"; shift 2 ;;
+    --release-id) RELEASE_ID="$2"; shift 2 ;;
+    --repair) REPAIR=1; shift ;;
     -h|--help) usage; exit 0 ;;
-    *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
+    *) echo "install-runtime.sh: unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
 
 SOURCE_DIR="$(expand_path "$SOURCE_DIR")"
 INSTALL_BASE="$(expand_path "$INSTALL_BASE")"
-BIN_DIR="$(expand_path "$BIN_DIR")"
 PUBLIC_BIN_DIR="$(expand_path "$PUBLIC_BIN_DIR")"
-STATE_FILE="$(expand_path "$STATE_FILE")"
-if [[ -n "$SHELL_PROFILE" ]]; then
-  SHELL_PROFILE="$(expand_path "$SHELL_PROFILE")"
-fi
-if [[ -n "$VENV_PATH" ]]; then
-  VENV_PATH="$(expand_path "$VENV_PATH")"
-fi
+STATE_HOME="$(expand_path "$STATE_HOME")"
+CURRENT="$INSTALL_BASE/current"
+PREVIOUS="$INSTALL_BASE/previous"
 
-INSTALL_DIR="$INSTALL_BASE/current"
-STAGING_DIR="$INSTALL_BASE/.staging.$$"
-BACKUP_ROOT="${LLMOPS_BACKUP_DIR:-$STATE_HOME/backups}"
-BACKUP_DIR="$BACKUP_ROOT/$(date +%Y%m%d-%H%M%S)-$$"
-PREVIOUS_INSTALL=""
-INSTALL_SWAPPED=0
-
-remove_fresh_install_links() {
-  local manifest="$INSTALL_DIR/scripts/runtime-links.manifest"
-  local target_rel src_rel target expected actual
-  if [[ -f "$manifest" ]]; then
-    while IFS='|' read -r target_rel src_rel; do
-      [[ -n "${target_rel:-}" ]] || continue
-      [[ "$target_rel" =~ ^[[:space:]]*# ]] && continue
-      target="$BIN_DIR/$target_rel"
-      expected="$INSTALL_DIR/$src_rel"
-      if [[ -L "$target" ]]; then
-        actual="$(readlink "$target" 2>/dev/null || true)"
-        [[ "$actual" == "$expected" ]] && rm -f "$target"
-      fi
-    done < "$manifest"
-  fi
-  if [[ -L "$PUBLIC_BIN_DIR/llmops" ]]; then
-    actual="$(readlink "$PUBLIC_BIN_DIR/llmops" 2>/dev/null || true)"
-    [[ "$actual" == "$INSTALL_DIR/scripts/llmops" ]] && rm -f "$PUBLIC_BIN_DIR/llmops"
+replace_link() {
+  local source="$1" destination="$2" temporary="${2}.new.$$"
+  ln -s "$source" "$temporary"
+  if ! mv -fh "$temporary" "$destination" 2>/dev/null; then
+    rm -f "$destination"
+    mv -f "$temporary" "$destination"
   fi
 }
 
-rollback_install() {
-  local rc=$?
+link_runtime() {
+  local root="$1" name source
+  mkdir -p "$INSTALL_BASE/bin" "$PUBLIC_BIN_DIR"
+  for name in "${INTERNAL_COMMANDS[@]}"; do
+    source="$root/scripts/$name"
+    [[ -x "$source" ]] || continue
+    ln -sfn "$source" "$INSTALL_BASE/bin/$name"
+  done
+  ln -sfn "$root/scripts/llmops" "$PUBLIC_BIN_DIR/llmops"
+}
+
+write_state() {
+  local release="$1"
+  local state_file="$STATE_HOME/install.json"
+  local temporary="${state_file}.tmp.$$"
+  mkdir -p "$STATE_HOME"
+  python3 - "$temporary" "$INSTALL_BASE" "$PUBLIC_BIN_DIR" "$release" <<'PY'
+import json, sys
+path, install_root, public_bin, release = sys.argv[1:]
+with open(path, "w", encoding="utf-8") as stream:
+    json.dump(
+        {
+            "schema_version": 1,
+            "install_root": install_root,
+            "public_bin_dir": public_bin,
+            "active_release": release,
+        },
+        stream,
+        indent=2,
+        sort_keys=True,
+    )
+    stream.write("\n")
+PY
+  mv -f "$temporary" "$state_file"
+}
+
+if [[ "$REPAIR" -eq 1 ]]; then
+  [[ -L "$CURRENT" ]] || { echo "install-runtime.sh: no active installation to repair" >&2; exit 2; }
+  active="$(readlink "$CURRENT")"
+  [[ -d "$active" ]] || { echo "install-runtime.sh: active release is missing: $active" >&2; exit 2; }
+  link_runtime "$CURRENT"
+  write_state "$active"
+  echo "REPAIRED: $active"
+  exit 0
+fi
+
+[[ -d "$SOURCE_DIR/scripts" && -d "$SOURCE_DIR/bin" ]] || {
+  echo "install-runtime.sh: invalid source checkout: $SOURCE_DIR" >&2
+  exit 2
+}
+
+if [[ -z "$RELEASE_ID" ]]; then
+  revision="$(git -C "$SOURCE_DIR" rev-parse --short HEAD 2>/dev/null || printf source)"
+  RELEASE_ID="local-$(date -u +%Y%m%dT%H%M%SZ)-$revision"
+fi
+[[ "$RELEASE_ID" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "install-runtime.sh: invalid release ID" >&2; exit 2; }
+
+release="$INSTALL_BASE/releases/$RELEASE_ID"
+staging="$INSTALL_BASE/.staging-$RELEASE_ID-$$"
+old=""
+previous_old=""
+previous_existed=0
+release_created=0
+switched=0
+
+cleanup() {
+  local status=$?
   trap - EXIT INT TERM
-  rm -rf "$STAGING_DIR"
-  if [[ "$INSTALL_SWAPPED" -eq 1 ]]; then
-    if [[ -n "$PREVIOUS_INSTALL" && -d "$PREVIOUS_INSTALL" ]]; then
-      rm -rf "$INSTALL_DIR"
-      mv "$PREVIOUS_INSTALL" "$INSTALL_DIR"
-      echo "ROLLED_BACK_INSTALL: $INSTALL_DIR" >&2
-    else
-      remove_fresh_install_links
-      rm -rf "$INSTALL_DIR"
-      echo "ROLLED_BACK_FRESH_INSTALL: $INSTALL_DIR" >&2
+  rm -rf "$staging"
+  if [[ "$status" -ne 0 ]]; then
+    if [[ "$switched" -eq 1 ]]; then
+      if [[ -n "$old" ]]; then
+        replace_link "$old" "$CURRENT"
+      else
+        rm -f "$CURRENT"
+      fi
+      if [[ "$previous_existed" -eq 1 ]]; then
+        replace_link "$previous_old" "$PREVIOUS"
+      else
+        rm -f "$PREVIOUS"
+      fi
+    fi
+    if [[ "$release_created" -eq 1 ]]; then
+      rm -rf "$release"
     fi
   fi
-  exit "$rc"
+  exit "$status"
 }
+trap cleanup EXIT INT TERM
 
-trap rollback_install EXIT INT TERM
-
-[[ -d "$SOURCE_DIR/scripts" ]] || { echo "Missing source scripts dir: $SOURCE_DIR/scripts" >&2; exit 1; }
-[[ -d "$SOURCE_DIR/bin" ]] || { echo "Missing source bin dir: $SOURCE_DIR/bin" >&2; exit 1; }
-[[ -x "$SOURCE_DIR/scripts/deploy-runtime-links.sh" ]] || {
-  echo "Missing deploy script in source: $SOURCE_DIR/scripts/deploy-runtime-links.sh" >&2
-  exit 1
+[[ ! -e "$release" ]] || { echo "install-runtime.sh: release already exists: $release" >&2; exit 2; }
+mkdir -p "$staging" "$INSTALL_BASE/releases"
+rsync -a --delete --exclude tests --exclude __pycache__ --exclude '*.pyc' "$SOURCE_DIR/scripts/" "$staging/scripts/"
+rsync -a --delete "$SOURCE_DIR/bin/" "$staging/bin/"
+[[ -x "$staging/scripts/llmops" && -x "$staging/scripts/llmops-control" ]] || {
+  echo "install-runtime.sh: staged payload is incomplete" >&2
+  exit 2
 }
-
-mkdir -p "$INSTALL_BASE" "$BIN_DIR" "$PUBLIC_BIN_DIR"
-rm -rf "$STAGING_DIR"
-mkdir -p "$STAGING_DIR"
-
-echo "Installing runtime payload from: $SOURCE_DIR"
-rsync -a --delete "$SOURCE_DIR/scripts/" "$STAGING_DIR/scripts/"
-rsync -a --delete "$SOURCE_DIR/bin/" "$STAGING_DIR/bin/"
-
-pushd "$STAGING_DIR/scripts" >/dev/null
-./generate-manifest
-popd >/dev/null
-
-ensure_runtime_venv "$VENV_PATH"
-
-if [[ -d "$INSTALL_DIR" ]]; then
-  mkdir -p "$BACKUP_ROOT"
-  mv "$INSTALL_DIR" "$BACKUP_DIR"
-  PREVIOUS_INSTALL="$BACKUP_DIR"
-  echo "Backed up previous runtime to: $BACKUP_DIR"
+mv "$staging" "$release"
+release_created=1
+if [[ -L "$CURRENT" ]]; then
+  old="$(readlink "$CURRENT")"
 fi
-
-mv "$STAGING_DIR" "$INSTALL_DIR"
-INSTALL_SWAPPED=1
-echo "Installed runtime to: $INSTALL_DIR"
-
-if [[ "$NO_LINKS" -eq 0 ]]; then
-  pushd "$INSTALL_DIR/scripts" >/dev/null
-  BIN_DIR="$BIN_DIR" RUNTIME_DIR="$INSTALL_DIR" ./deploy-runtime-links.sh --replace-managed-links
-  BIN_DIR="$BIN_DIR" RUNTIME_DIR="$INSTALL_DIR" ./verify-runtime-links.sh
-  popd >/dev/null
-  install_public_launcher "$INSTALL_DIR/scripts/llmops"
-  ensure_shell_profile_path "$(default_shell_profile)" "$PUBLIC_BIN_DIR"
+if [[ -L "$PREVIOUS" ]]; then
+  previous_old="$(readlink "$PREVIOUS")"
+  previous_existed=1
 fi
-
-mkdir -p "$(dirname "$STATE_FILE")"
-STATE_FILE_TMP="${STATE_FILE}.tmp.$$"
-cat > "$STATE_FILE_TMP" <<EOF
-LLMOPS_INSTALL_MODE=installed
-LLMOPS_INSTALL_BASE=$INSTALL_BASE
-LLMOPS_INSTALL_DIR=$INSTALL_DIR
-LLMOPS_BIN_DIR=$BIN_DIR
-LLMOPS_PUBLIC_BIN_DIR=$PUBLIC_BIN_DIR
-LLMOPS_SOURCE_DIR=$SOURCE_DIR
-LLMOPS_RUNTIME_VENV_PATH=$VENV_PATH
-LLMOPS_UPDATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-EOF
-mv "$STATE_FILE_TMP" "$STATE_FILE"
-echo "WROTE_STATE: $STATE_FILE"
-
-INSTALL_SWAPPED=0
+if [[ -n "$old" ]]; then
+  replace_link "$old" "$PREVIOUS"
+fi
+switched=1
+replace_link "$release" "$CURRENT"
+link_runtime "$CURRENT"
+write_state "$release"
 trap - EXIT INT TERM
-
-if [[ -f "$INSTALL_DIR/scripts/lib/common.sh" ]]; then
-  # shellcheck disable=SC1090
-  . "$INSTALL_DIR/scripts/lib/common.sh"
-  if ! prune_runtime_backups; then
-    echo "WARNING: runtime backup pruning failed; run 'llmops runtime-maintenance prune'" >&2
-  fi
-fi
-
-echo "Install complete."
+echo "INSTALLED: $release"
+echo "CURRENT: $(readlink "$CURRENT")"
+if [[ -L "$PREVIOUS" ]]; then echo "PREVIOUS: $(readlink "$PREVIOUS")"; fi

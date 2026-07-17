@@ -13,7 +13,7 @@ SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
 
 is_action() {
   case "$1" in
-    start|stop|restart|status|status-all|settings|verify|test|list|add) return 0 ;;
+    start|stop|restart|status|status-all|settings|verify|test|list) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -31,20 +31,11 @@ normalize_action() {
   esac
 }
 
-model_add_main() {
-  local helper="$SCRIPT_DIR/lib/model_registry.py"
-  if [[ ! -f "$helper" ]]; then
-    echo "modelctl add: helper not found: $helper" >&2
-    exit 2
-  fi
-  /usr/bin/env python3 "$helper" "$@"
-}
-
 resolve_model_from_invocation() {
   local bn
   bn="$(basename "$0")"
   if [[ "$bn" == "modelctl" ]]; then
-    echo "Qwen3"
+    echo "__all__"
   else
     echo "$bn"
   fi
@@ -62,13 +53,7 @@ resolve_args() {
 
   if [[ -z "$arg1" ]]; then
     model_name="$(resolve_model_from_invocation)"
-    action="start"
-    return
-  fi
-
-  if [[ "$arg1" == "add" ]]; then
-    model_name="__add__"
-    action="add"
+    action="list"
     return
   fi
 
@@ -89,61 +74,19 @@ resolve_args() {
 
 load_model_defaults() {
   local m="$1"
-  local model_file="$SCRIPT_DIR/models/${m}.sh"
   local json_model_file
-  local model_override_file="$LLMOPS_CONFIG_DIR/${m}.env"
-  local legacy_override_file="$LLMOPS_CONFIG_DIR/${m}.sh"
   json_model_file="$(llmops_model_profile_path "$m")"
-  [[ -f "$model_file" || -f "$json_model_file" ]] || {
-    echo "Model defaults not found: $model_file or $json_model_file" >&2
+  [[ -f "$json_model_file" ]] || {
+    echo "Model profile not found: $json_model_file" >&2
     exit 2
   }
 
-  # Precedence (highest -> lowest):
-  # 1) external environment
-  # 2) ~/.config/llm-ops/config.env (via load_shell_env)
-  # 3) ~/.config/llm-ops/config/<Model>.env
-  # 4) model profile
-  # 5) model-kind defaults
-  # 6) global defaults
-  #
-  # Implementation detail:
-  # - source global defaults first
-  # - source the user override early because the seeded override file uses the
-  #   same ${VAR:-...} template style as the model profile
-  # - source the model profile once to discover MODEL_TYPE
-  # - source model-kind defaults
-  # - source the model profile again so profile values override kind defaults
-  # - do not re-source the user override late, or plain assignments would beat
-  #   explicit external environment settings
-
-  # 3) global defaults
+  # Shipped defaults tune each runtime kind. Canonical JSON and an explicitly
+  # injected process environment remain the only configuration authorities.
   # shellcheck disable=SC1090,SC1091
   . "$SCRIPT_DIR/defaults/global-defaults.sh"
+  source_json_model_profile_defaults "$m" "$json_model_file"
 
-  # 3) user-owned per-model override
-  if [[ -f "$model_override_file" ]]; then
-    # shellcheck disable=SC1090
-    . "$model_override_file"
-    [[ -f "$model_file" ]] && warn_override_drift "$model_file" "$model_override_file"
-  elif [[ -f "$legacy_override_file" ]]; then
-    echo "modelctl: legacy per-model override is no longer loaded: $legacy_override_file" >&2
-    echo "modelctl: migrate it with: scripts/llmops-admin migrate-config --legacy-home \"$LLMOPS_HOME\"" >&2
-    echo "modelctl: then use the JSON profile under $(llmops_config_home)/models/ or create $model_override_file" >&2
-    exit 2
-  fi
-
-  if [[ -f "$json_model_file" ]]; then
-    source_json_model_profile_defaults "$m" "$json_model_file"
-  fi
-
-  # 4a) model profile discovery pass
-  if [[ -f "$model_file" ]]; then
-    # shellcheck disable=SC1090,SC1091
-    . "$model_file"
-  fi
-
-  # 5) model-type defaults
   case "${MODEL_TYPE:-}" in
     llm)
       # shellcheck disable=SC1091
@@ -162,32 +105,11 @@ load_model_defaults() {
       . "$SCRIPT_DIR/defaults/tts-defaults.sh"
       ;;
     *)
-      echo "Unknown or missing MODEL_TYPE in $model_file: ${MODEL_TYPE:-<unset>}" >&2
-      echo "Set MODEL_TYPE to llm, embedding, or tts in the model profile." >&2
+      echo "Unknown or missing MODEL_TYPE in $json_model_file: ${MODEL_TYPE:-<unset>}" >&2
       exit 2
       ;;
   esac
-
-  # 4b) model profile precedence pass
-  if [[ -f "$model_file" ]]; then
-    # shellcheck disable=SC1090,SC1091
-    . "$model_file"
-  fi
-}
-
-warn_override_drift() {
-  local model_file="$1"
-  local override_file="$2"
-  local -a profile_vars=()
-  local -a override_vars=()
-  local missing
-  mapfile -t profile_vars < <(grep -E '^[A-Z][A-Z0-9_]*=' "$model_file" | cut -d= -f1 | sort -u)
-  mapfile -t override_vars < <(grep -E '^[A-Z][A-Z0-9_]*=' "$override_file" | cut -d= -f1 | sort -u)
-  missing="$(comm -23 <(printf '%s\n' "${profile_vars[@]}") <(printf '%s\n' "${override_vars[@]}") | tr '\n' ' ')"
-  if [[ -n "$missing" ]]; then
-    echo "modelctl: override missing new profile settings in $(basename "$override_file"):" >&2
-    echo "  $missing" >&2
-  fi
+  source_json_model_profile_defaults "$m" "$json_model_file"
 }
 
 require_non_empty() {
@@ -301,18 +223,9 @@ resolve_args "${1:-}" "${2:-}"
 
 if ! is_action "$action"; then
   echo "Invalid action: $action" >&2
-  echo "Usage: $(basename "$0") [start|stop|restart|status|status-all|settings|verify|test|list|add]" >&2
+  echo "Usage: modelctl <model-profile> [start|stop|restart|status|settings|verify|test]" >&2
   echo "   or: modelctl <model-profile> [start|stop|restart|status|settings|verify|test]" >&2
   exit 2
-fi
-
-if [[ "$action" == "add" ]]; then
-  load_shell_env
-  if [[ "${1:-}" == "add" ]]; then
-    shift
-  fi
-  model_add_main "$@"
-  exit 0
 fi
 
 if [[ "$action" == "start" || "$action" == "restart" || "$action" == "status" || "$action" == "settings" || "$action" == "verify" || "$action" == "test" ]]; then
@@ -322,57 +235,20 @@ ensure_runtime_dirs
 LLAMA_SERVER_BIN="${LLAMA_SERVER_BIN:-/usr/local/bin/llama-server}"
 
 list_profiles() {
-  {
-    find "$SCRIPT_DIR/models" -maxdepth 1 -type f -name '*.sh' -print 2>/dev/null \
-      | sed -e 's#^.*/##' -e 's#\.sh$##'
-    find "$(llmops_config_home)/models" -maxdepth 1 -type f -name '*.json' -print 2>/dev/null \
-      | sed -e 's#^.*/##' -e 's#\.json$##'
-  } | sort -u
+  find "$(llmops_config_home)/models" -maxdepth 1 -type f -name '*.json' -print 2>/dev/null \
+    | sed -e 's#^.*/##' -e 's#\.json$##' | sort -u
 }
 
 profile_type() {
   local profile="$1"
-  local model_file="$SCRIPT_DIR/models/$profile.sh"
   local json_model_file
   json_model_file="$(llmops_model_profile_path "$profile")"
 
   unset MODEL_TYPE
-  if [[ -f "$model_file" ]]; then
-    # shellcheck disable=SC1090
-    . "$model_file"
-  elif [[ -f "$json_model_file" ]]; then
+  if [[ -f "$json_model_file" ]]; then
     source_json_model_profile_defaults "$profile" "$json_model_file"
   fi
   printf '%s\n' "${MODEL_TYPE:-unknown}"
-}
-
-ensure_model_override_template() {
-  local m="$1"
-  local model_file="$SCRIPT_DIR/models/${m}.sh"
-  local model_override_file="$LLMOPS_CONFIG_DIR/${m}.env"
-  local legacy_override_file="$LLMOPS_CONFIG_DIR/${m}.sh"
-  local json_model_file
-  json_model_file="$(llmops_model_profile_path "$m")"
-
-  [[ -f "$model_file" ]] || return 0
-  [[ -f "$json_model_file" ]] && return 0
-  if [[ -f "$model_override_file" ]]; then
-    return 0
-  fi
-  if [[ -f "$legacy_override_file" ]]; then
-    echo "modelctl: legacy per-model override is no longer used for '$m': $legacy_override_file" >&2
-    echo "modelctl: run: scripts/llmops-admin migrate-config --legacy-home \"$LLMOPS_HOME\"" >&2
-    return 0
-  fi
-
-  mkdir -p "$LLMOPS_CONFIG_DIR"
-  cp "$model_file" "$model_override_file"
-
-  {
-    echo "modelctl: no per-model override file found for '$m'"
-    echo "modelctl: copied template config to $model_override_file"
-    echo "modelctl: edit that file for user-owned overrides; shipped defaults remain in $model_file"
-  } >&2
 }
 
 if [[ "$model_name" == "__all__" ]]; then
@@ -400,7 +276,6 @@ if [[ "$model_name" == "__all__" ]]; then
   esac
 fi
 
-ensure_model_override_template "$model_name"
 load_model_defaults "$model_name"
 
 if [[ -z "${MODEL_PROFILE:-}" ]]; then

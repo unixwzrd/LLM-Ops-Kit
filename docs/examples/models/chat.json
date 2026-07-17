@@ -1,9 +1,18 @@
 {
   "schema_version": 1,
-  "model_type": "llm",
+  "name": "chat",
+  "type": "llm",
   "model_path": "/path/to/chat-model.gguf",
-  "server": {
+  "runtime": {
     "host": "127.0.0.1",
     "port": 11434
+  },
+  "llama": {
+    "ctx_size": 32768,
+    "gpu_layers": "auto"
+  },
+  "server": {
+    "cache_prompt": true,
+    "extra_flags": []
   }
 }

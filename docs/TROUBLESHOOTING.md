@@ -1,119 +1,28 @@
 # Troubleshooting
 
-Back: [docs/INDEX.md](./INDEX.md)
+**Created**: 2026-07-16
+**Updated**: 2026-07-16
 
-**Created**: 2026-02-26
-**Updated**: 2026-03-01
+Back: [Documentation index](./INDEX.md)
 
-- [Troubleshooting](#troubleshooting)
-  - [Interpreter policy](#interpreter-policy)
-  - [Link verification shows `MISSING`](#link-verification-shows-missing)
-  - [Deploy reports `CONFLICT` after repo rename](#deploy-reports-conflict-after-repo-rename)
-  - [`declare -A: invalid option`](#declare--a-invalid-option)
-  - [`mkpath: Operation not supported`](#mkpath-operation-not-supported)
-  - [Model reports started but behaves stale](#model-reports-started-but-behaves-stale)
-  - [Embedding indexing context-size errors](#embedding-indexing-context-size-errors)
-  - [SSH keeps prompting for password](#ssh-keeps-prompting-for-password)
-
-
-## Interpreter policy
-
-- Bash scripts use `#!/usr/bin/env bash` and are written for Bash 3.2+ compatibility.
-- Python helper scripts use `#!/usr/bin/env python` and require Python 3.9+.
-- Bash 5+ is recommended, but not required for normal operation.
-
-## Link verification shows `MISSING`
-
-Symptoms:
-
-- `verify-runtime-links.sh` reports missing symlink(s).
-
-Fix:
+Start with read-only output:
 
 ```bash
-/usr/local/bin/bash ~/projects/LLM-Ops-Kit/scripts/deploy-runtime-links.sh
-/usr/local/bin/bash ~/projects/LLM-Ops-Kit/scripts/verify-runtime-links.sh
+llmops doctor --json
+llmops config show --json
+llmops component status <component> --json
+llmops component logs <component>
+llmops drift --stage <stage> --json
 ```
 
-## Deploy reports `CONFLICT` after repo rename
+If `llmops` is missing or points at an old release, run `/usr/local/bin/bash scripts/install-runtime.sh --repair` from the matching source checkout.
 
-Symptoms:
+If configuration is missing, set `LLMOPS_CONFIG_HOME` explicitly or initialize a new root. Installed host commands normally use the configuration snapshot bundled under `current/config`.
 
-- `deploy-runtime-links.sh` reports conflicts where links still point at `~/projects/OpenClaw-Ops-Toolkit/...`.
+If a model, proxy, or TTS profile is not found, verify the profile exists in the canonical directory and is included in the selected host snapshot. Repository profiles and shell overrides are intentionally ignored.
 
-Fix:
+If SSH deployment fails, verify noninteractive access using the inventory user, host, port, key, and optional proxy jump. Deployment retries transient push and apply failures three times and then reports the failing host.
 
-```bash
-/usr/local/bin/bash ~/projects/LLM-Ops-Kit/scripts/deploy-runtime-links.sh
-/usr/local/bin/bash ~/projects/LLM-Ops-Kit/scripts/verify-runtime-links.sh
-```
+If a component start fails, the executor removes only dependencies started by that invocation. Check component logs and readiness targets before retrying.
 
-Notes:
-
-- Deploy auto-heals symlinks from `OpenClaw-Ops-Toolkit` to `LLM-Ops-Kit` for managed runtime commands.
-- Non-symlink files in `~/.local/llm-ops/bin` are still treated as real conflicts and are not overwritten automatically.
-
-## `declare -A: invalid option`
-
-Cause:
-
-- Script executed under bash 3.x.
-
-Fix:
-
-```bash
-/usr/local/bin/bash ~/projects/LLM-Ops-Kit/scripts/<script>.sh
-```
-
-## `mkpath: Operation not supported`
-
-Cause:
-
-- Invalid remote target path.
-
-Fix:
-
-- Use home-relative destination: `~/projects/LLM-Ops-Kit`.
-
-## Model reports started but behaves stale
-
-Checks:
-
-```bash
-llmops modelctl status
-llmops Qwen3 status
-llmops BGEm3 status
-```
-
-Then restart target cleanly:
-
-```bash
-llmops Qwen3 restart
-llmops BGEm3 restart
-```
-
-## Embedding indexing context-size errors
-
-Symptoms:
-
-- Errors around token/context limits from embedding model.
-
-Actions:
-
-- Verify embedding profile settings with `llmops BGEm3 settings`.
-- Confirm running model actually supports the configured `CTX_SIZE`.
-- Check OpenClaw memory chunking values in `.openclaw/openclaw.json`.
-
-## SSH keeps prompting for password
-
-Checks:
-
-- `ssh-add -l` shows key loaded.
-- `~/.ssh/authorized_keys` on remote contains your public key.
-- remote permissions: `~/.ssh` 700, `authorized_keys` 600.
-
-## See Also
-
-- [Quickstart](./QUICKSTART.md)
-- [Configuration](./CONFIGURATION.md)
-- [How It Works](./HOW_IT_WORKS.md)
+If drift reports a hash difference, do not merge remote changes. Compare the active release against the desired stage, correct authoritative configuration, and redeploy.

@@ -25,7 +25,7 @@
 
 ## Purpose
 
-Capture what OpenClaw sends to the model with enough observability to debug prompt shaping, tool-call flow, retries, and timeouts.
+Capture what an agent sends to the model with enough observability to debug prompt shaping, tool-call flow, retries, and timeouts.
 
 ## Start Proxy (Default)
 

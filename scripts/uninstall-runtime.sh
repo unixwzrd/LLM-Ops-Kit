@@ -2,97 +2,65 @@
 set -euo pipefail
 
 INSTALL_BASE="${LLMOPS_INSTALL_BASE:-$HOME/.local/llm-ops}"
-INSTALL_DIR="$INSTALL_BASE/current"
-BIN_DIR="${BIN_DIR:-${LLMOPS_BIN_DIR:-$HOME/.local/llm-ops/bin}}"
 PUBLIC_BIN_DIR="${LLMOPS_PUBLIC_BIN_DIR:-$HOME/.local/bin}"
+CONFIG_HOME="${LLMOPS_CONFIG_HOME:-${XDG_CONFIG_HOME:-$HOME/.config}/llm-ops}"
+DATA_HOME="${LLMOPS_DATA_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/llm-ops}"
 STATE_HOME="${LLMOPS_STATE_HOME:-${XDG_STATE_HOME:-$HOME/.local/state}/llm-ops}"
-STATE_FILE="${LLMOPS_STATE_FILE:-$STATE_HOME/runtime-state.env}"
-KEEP_FILES=0
-BIN_DIR_EXPLICIT=0
-PUBLIC_BIN_DIR_EXPLICIT=0
+CACHE_HOME="${LLMOPS_CACHE_HOME:-${XDG_CACHE_HOME:-$HOME/.cache}/llm-ops}"
+PURGE=0
 
 usage() {
-  cat <<USAGE
-Usage: $(basename "$0") [options]
+  cat <<'USAGE'
+Usage: uninstall-runtime.sh [options]
 
 Options:
-  --prefix <path>    Install base dir (default: ~/.local/llm-ops)
-  --bin-dir <path>   Managed runtime bin dir (default: ~/.local/llm-ops/bin)
-  --public-bin-dir <path> Public launcher dir (default: ~/.local/bin)
-  --state-file <path> Runtime state file (default: ~/.local/state/llm-ops/runtime-state.env)
-  --keep-files       Keep installed runtime files; remove links only
-  -h, --help         Show this help
+  --prefix <path>          Install root
+  --public-bin-dir <path>  Public command directory
+  --config-home <path>     Canonical configuration root
+  --data-home <path>       Data root
+  --state-home <path>      State root
+  --cache-home <path>      Cache root
+  --purge                  Also remove configuration, data, state, and cache
+  -h, --help               Show this help
 USAGE
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --prefix) INSTALL_BASE="$2"; shift 2 ;;
-    --bin-dir) BIN_DIR="$2"; BIN_DIR_EXPLICIT=1; shift 2 ;;
-    --public-bin-dir) PUBLIC_BIN_DIR="$2"; PUBLIC_BIN_DIR_EXPLICIT=1; shift 2 ;;
-    --state-file) STATE_FILE="$2"; shift 2 ;;
-    --keep-files) KEEP_FILES=1; shift ;;
+    --public-bin-dir) PUBLIC_BIN_DIR="$2"; shift 2 ;;
+    --config-home) CONFIG_HOME="$2"; shift 2 ;;
+    --data-home) DATA_HOME="$2"; shift 2 ;;
+    --state-home) STATE_HOME="$2"; shift 2 ;;
+    --cache-home) CACHE_HOME="$2"; shift 2 ;;
+    --purge) PURGE=1; shift ;;
     -h|--help) usage; exit 0 ;;
-    *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
+    *) echo "uninstall-runtime.sh: unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
 
-INSTALL_DIR="$INSTALL_BASE/current"
-MANIFEST_FILE="$INSTALL_DIR/scripts/runtime-links.manifest"
+remove_managed_link() {
+  local path="$1" target=""
+  [[ -L "$path" ]] || return 0
+  target="$(readlink "$path")"
+  case "$target" in
+    "$INSTALL_BASE"/*) rm -f "$path" ;;
+  esac
+}
 
-removed=0
-
-if [[ -f "$MANIFEST_FILE" ]]; then
-  while IFS='|' read -r target_rel src_rel; do
-    [[ -z "${target_rel:-}" ]] && continue
-    [[ "$target_rel" =~ ^[[:space:]]*# ]] && continue
-
-    target="$BIN_DIR/$target_rel"
-    expected="$INSTALL_DIR/$src_rel"
-    if [[ -L "$target" ]]; then
-      actual="$(readlink "$target" 2>/dev/null || true)"
-      if [[ "$actual" == "$expected" ]]; then
-        rm -f "$target"
-        echo "REMOVED_LINK: $target -> $actual"
-        removed=$((removed + 1))
-      fi
-    fi
-  done < "$MANIFEST_FILE"
-else
-  echo "WARNING: manifest not found; removing only links targeting $INSTALL_DIR" >&2
-  for target in "$BIN_DIR"/*; do
-    [[ -L "$target" ]] || continue
-    actual="$(readlink "$target" 2>/dev/null || true)"
-    case "$actual" in
-      "$INSTALL_DIR"/*)
-        rm -f "$target"
-        echo "REMOVED_LINK_WITHOUT_MANIFEST: $target -> $actual"
-        removed=$((removed + 1))
-        ;;
-    esac
+remove_managed_link "$PUBLIC_BIN_DIR/llmops"
+if [[ -d "$INSTALL_BASE/bin" ]]; then
+  for path in "$INSTALL_BASE/bin"/*; do
+    [[ -e "$path" || -L "$path" ]] || continue
+    remove_managed_link "$path"
   done
 fi
+rm -rf "$INSTALL_BASE"
+rm -f "$STATE_HOME/install.json"
 
-if [[ "$KEEP_FILES" -eq 0 ]]; then
-  rm -rf "$INSTALL_DIR"
-  echo "REMOVED_INSTALL_DIR: $INSTALL_DIR"
+if [[ "$PURGE" -eq 1 ]]; then
+  rm -rf "$CONFIG_HOME" "$DATA_HOME" "$STATE_HOME" "$CACHE_HOME"
 fi
 
-if [[ "$BIN_DIR_EXPLICIT" -eq 0 || "$PUBLIC_BIN_DIR_EXPLICIT" -eq 1 ]]; then
-  public_launcher="$PUBLIC_BIN_DIR/llmops"
-  expected_public="$INSTALL_DIR/scripts/llmops"
-  if [[ -L "$public_launcher" ]]; then
-    actual_public="$(readlink "$public_launcher" 2>/dev/null || true)"
-    if [[ "$actual_public" == "$expected_public" ]]; then
-      rm -f "$public_launcher"
-      echo "REMOVED_PUBLIC_LINK: $public_launcher -> $actual_public"
-    fi
-  fi
-fi
-
-if [[ -f "$STATE_FILE" ]]; then
-  rm -f "$STATE_FILE"
-  echo "REMOVED_STATE: $STATE_FILE"
-fi
-
-echo "Uninstall complete. links_removed=$removed"
+echo "UNINSTALLED: $INSTALL_BASE"
+if [[ "$PURGE" -eq 1 ]]; then echo "PURGED: configuration data state cache"; fi

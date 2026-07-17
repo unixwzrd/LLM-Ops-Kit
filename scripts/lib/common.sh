@@ -83,43 +83,21 @@ maybe_prepend_runtime_venv_bin() {
 }
 
 load_shell_env() {
-  # Do not source interactive shell init files here; they may contain
-  # framework hooks (venv managers, prompt tooling) that break non-interactive
-  # service wrappers. Load only explicit env files.
-  local early_files=()
-  local late_files=()
-  local f
+  # Runtime configuration comes from canonical JSON. An explicit environment
+  # file is accepted only as a secret-injection boundary.
+  local f="${LLMOPS_ENV_FILE:-}"
   if [[ -n "${LLMOPS_ENV_FILE:-}" ]]; then
-    early_files+=("$LLMOPS_ENV_FILE")
+    [[ -f "$f" ]] || {
+      echo "llmops: explicit secret environment file not found: $f" >&2
+      return 2
+    }
+    set -a
+    # shellcheck disable=SC1090
+    . "$f"
+    set +a
+    strip_self_placeholder_env_values
   fi
-  # Load toolkit config first so we know whether Secrets-Kit is enabled before
-  # touching placeholder-based ~/.env files.
-  early_files+=("$LLMOPS_ROOT/config/hosts.env" "$LLMOPS_ROOT/config/hosts.local.env")
-  early_files+=("$LLMOPS_CONFIG_HOME/config.env" "$LLMOPS_CONFIG_HOME/hosts.env")
-  for f in "${early_files[@]}"; do
-    if [[ -f "$f" ]]; then
-      set -a
-      # shellcheck disable=SC1090
-      . "$f"
-      set +a
-    fi
-  done
   maybe_prepend_runtime_venv_bin
-  late_files+=("$HOME/.env")
-  for f in "${late_files[@]}"; do
-    if [[ -f "$f" ]]; then
-      # The user env may contain self-referential placeholders after migration
-      # to an external secret store. Source it with nounset disabled so
-      # placeholder cleanup can run without tripping set -u.
-      set +u
-      set -a
-      # shellcheck disable=SC1090
-      . "$f"
-      set +a
-      set -u
-      strip_self_placeholder_env_values
-    fi
-  done
 }
 
 llmops_config_home() {
@@ -128,33 +106,21 @@ llmops_config_home() {
 
 llmops_service_profile_path() {
   local service="$1"
-  if [[ -f "$LLMOPS_ROOT/config/services/$service.json" ]]; then
-    printf '%s/config/services/%s.json\n' "$LLMOPS_ROOT" "$service"
-    return 0
-  fi
   printf '%s/services/%s.json\n' "$(llmops_config_home)" "$service"
 }
 
 llmops_model_profile_path() {
   local model="$1"
-  if [[ -f "$LLMOPS_ROOT/config/models/$model.json" ]]; then
-    printf '%s/config/models/%s.json\n' "$LLMOPS_ROOT" "$model"
-    return 0
-  fi
   printf '%s/models/%s.json\n' "$(llmops_config_home)" "$model"
 }
 
 llmops_agent_profile_path() {
   local backend="$1"
-  if [[ -f "$LLMOPS_ROOT/config/agents/$backend.json" ]]; then
-    printf '%s/config/agents/%s.json\n' "$LLMOPS_ROOT" "$backend"
-    return 0
-  fi
   printf '%s/agents/%s.json\n' "$(llmops_config_home)" "$backend"
 }
 
-source_json_rendered_env_defaults() {
-  local render_command="$1"
+source_json_profile_defaults() {
+  local kind="$1"
   local name="$2"
   local json_file="$3"
   local line key
@@ -165,25 +131,25 @@ source_json_rendered_env_defaults() {
     if [[ -z "${!key-}" ]]; then
       eval "export $line"
     fi
-  done < <("$LLMOPS_ROOT/scripts/llmops-admin" "$render_command" "$name" --profile-path "$json_file")
+  done < <("${LLMOPS_PYTHON_BIN:-python3}" "$LLMOPS_ROOT/scripts/lib/llmops_profiles.py" "$kind" "$name" --profile-path "$json_file")
 }
 
 source_json_model_profile_defaults() {
   local model="$1"
   local json_file="${2:-$(llmops_model_profile_path "$model")}"
-  source_json_rendered_env_defaults model-render-env "$model" "$json_file"
+  source_json_profile_defaults model "$model" "$json_file"
 }
 
 source_json_agent_profile_defaults() {
   local backend="$1"
   local json_file="${2:-$(llmops_agent_profile_path "$backend")}"
-  source_json_rendered_env_defaults agent-render-env "$backend" "$json_file"
+  source_json_profile_defaults agent "$backend" "$json_file"
 }
 
 source_json_service_profile_defaults() {
   local service="$1"
   local json_file="${2:-$(llmops_service_profile_path "$service")}"
-  source_json_rendered_env_defaults service-render-env "$service" "$json_file"
+  source_json_profile_defaults service "$service" "$json_file"
 }
 
 strip_self_placeholder_env_values() {
@@ -334,177 +300,12 @@ dir_usage_bytes() {
   du -sk "$path" 2>/dev/null | awk '{print $1 * 1024}'
 }
 
-config_hint_file() {
-  printf '%s/config.env\n' "$LLMOPS_HOME"
-}
-
-deploy_config_dir() {
-  printf '%s/stage/deploy_config\n' "$(deploy_workspace_root)"
-}
-
-deploy_config_name() {
-  local name="${1:-${LLMOPS_DEPLOY_CONFIG_NAME:-default}}"
-  printf '%s\n' "$name"
-}
-
-deploy_config_path() {
-  local name="${1:-}"
-  if [[ -z "$name" && -n "${LLMOPS_DEPLOY_CONFIG:-}" ]]; then
-    printf '%s\n' "$LLMOPS_DEPLOY_CONFIG"
-    return 0
-  fi
-  name="$(deploy_config_name "$name")"
-  printf '%s/%s.env\n' "$(deploy_config_dir)" "$name"
-}
-
-deploy_log_dir() {
-  local name="${1:-}"
-  if [[ -n "${LLMOPS_DEPLOY_LOG_DIR:-}" ]]; then
-    printf '%s\n' "$LLMOPS_DEPLOY_LOG_DIR"
-    return 0
-  fi
-  if [[ -n "$name" ]]; then
-    printf '%s/logs/%s\n' "$(deploy_config_dir)" "$(deploy_profile_slug "$name")"
-    return 0
-  fi
-  printf '%s/logs\n' "$(deploy_config_dir)"
-}
-
-deploy_workspace_root() {
-  if [[ -n "${LLMOPS_DEPLOY_ROOT:-}" ]]; then
-    printf '%s\n' "$LLMOPS_DEPLOY_ROOT"
-    return 0
-  fi
-  if git -C "$LLMOPS_ROOT" rev-parse --show-toplevel >/dev/null 2>&1; then
-    git -C "$LLMOPS_ROOT" rev-parse --show-toplevel
-    return 0
-  fi
-  printf '%s\n' "$LLMOPS_ROOT"
-}
-
-deploy_profile_slug() {
-  local profile="${1:-}"
-  profile="${profile//[^A-Za-z0-9_]/_}"
-  printf '%s\n' "$profile"
-}
-
-deploy_host_list_normalize() {
-  local raw="${1:-}"
-  printf '%s\n' "$raw" | tr ',;' '  ' | awk '
-    {
-      for (i = 1; i <= NF; i++) {
-        if (!seen[$i]++) {
-          out = out (out ? " " : "") $i
-        }
-      }
-    }
-    END { print out }
-  '
-}
-
-prompt_yes_no() {
-  local label="$1"
-  local default="${2:-N}"
-  local answer=""
-  local normalized_default="N"
-  case "$default" in
-    Y|y) normalized_default="Y" ;;
-    *) normalized_default="N" ;;
-  esac
-  if [[ "$normalized_default" == "Y" ]]; then
-    printf '%s [Y/n]: ' "$label" >&2
-  else
-    printf '%s [y/N]: ' "$label" >&2
-  fi
-  if ! IFS= read -r answer; then
-    answer=""
-  fi
-  answer="$(printf '%s' "$answer" | tr '[:upper:]' '[:lower:]')"
-  case "$answer" in
-    y|yes) return 0 ;;
-    n|no) return 1 ;;
-    "")
-      [[ "$normalized_default" == "Y" ]]
-      return
-      ;;
-    *)
-      [[ "$normalized_default" == "Y" ]]
-      return
-      ;;
-  esac
-}
-
-deploy_verbose_enabled() {
-  case "${LLMOPS_DEPLOY_VERBOSE:-0}" in
-    1|true|TRUE|yes|YES|on|ON) return 0 ;;
-    *) return 1 ;;
-  esac
-}
-
-deploy_verbose_echo() {
-  deploy_verbose_enabled || return 0
-  printf '%s\n' "$*"
-}
-
-deploy_default_config_name() {
-  if [[ -n "${LLMOPS_DEPLOY_CONFIG_NAME:-}" ]]; then
-    printf '%s\n' "$LLMOPS_DEPLOY_CONFIG_NAME"
-    return 0
-  fi
-  if [[ -f "$(deploy_config_path default)" ]]; then
-    printf 'default\n'
-    return 0
-  fi
-}
-
-deploy_load_config() {
-  local config_name="${1:-}"
-  local config_file="${2:-}"
-  local slug
-
-  if [[ -z "$config_file" ]]; then
-    config_file="$(deploy_config_path "$config_name")"
-  fi
-  [[ -f "$config_file" ]] || {
-    echo "Missing deployment config: $config_file" >&2
-    return 1
-  }
-  # shellcheck disable=SC1090
-  . "$config_file"
-
-  if [[ -z "$config_name" ]]; then
-    config_name="${LLMOPS_DEPLOY_CONFIG_NAME:-$(basename "$config_file" .env)}"
-  fi
-  slug="$(deploy_profile_slug "$config_name")"
-
-  export DEPLOY_CONFIG_FILE="$config_file"
-  export DEPLOY_CONFIG_NAME="$config_name"
-  export DEPLOY_CONFIG_SLUG="$slug"
-  DEPLOY_HOSTS="$(deploy_host_list_normalize "${LLMOPS_DEPLOY_HOSTS:-}")"
-  export DEPLOY_HOSTS
-  [[ -n "$DEPLOY_HOSTS" ]] || {
-    echo "Deployment config has no hosts: $config_file" >&2
-    return 1
-  }
-  export DEPLOY_USER="${LLMOPS_DEPLOY_USER:-}"
-  export DEPLOY_BASE_DIR="${LLMOPS_DEPLOY_BASE_DIR:-}"
-  export DEPLOY_INSTALL_PREFIX="${LLMOPS_DEPLOY_INSTALL_PREFIX:-}"
-  export DEPLOY_BIN_DIR="${LLMOPS_DEPLOY_BIN_DIR:-}"
-  export DEPLOY_PUBLIC_BIN_DIR="${LLMOPS_DEPLOY_PUBLIC_BIN_DIR:-}"
-  export DEPLOY_STATE_FILE="${LLMOPS_DEPLOY_STATE_FILE:-}"
-  export DEPLOY_VENV_PATH="${LLMOPS_DEPLOY_VENV_PATH:-}"
-  export DEPLOY_INSTALL_SECRETS_KIT="${LLMOPS_DEPLOY_INSTALL_SECRETS_KIT:-0}"
-  export DEPLOY_SECRETS_KIT_SOURCE="${LLMOPS_DEPLOY_SECRETS_KIT_SOURCE:-}"
-  export DEPLOY_SSH_KEY_PATH="${LLMOPS_DEPLOY_SSH_KEY_PATH:-}"
-  return 0
-}
-
 print_missing_config_hint() {
   local message="$1"
   shift || true
   local var
   echo "$message" >&2
-  echo "Set the required value(s) in $(config_hint_file) or pass them explicitly." >&2
+  echo "Set the value in the canonical JSON profile or inject it explicitly." >&2
   echo "Example:" >&2
   for var in "$@"; do
     case "$var" in

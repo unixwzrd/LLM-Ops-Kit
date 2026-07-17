@@ -189,7 +189,6 @@ class ProxyTapPassthroughTests(unittest.TestCase):
 
         Handler.upstream_base = upstream_url
         Handler.log_path = log_dir / "proxy.ndjson"
-        Handler.max_log_bytes = 0
         Handler.timeout_sec = 5.0
         Handler.latest_image_only = False
         Handler.log_fsync = False
@@ -369,7 +368,6 @@ class ProxyTapPassthroughTests(unittest.TestCase):
                 f"http://127.0.0.1:{upstream.server_port}",
                 FakeRenderer(),
             )
-            proxy_handler.max_log_bytes = 10
             proxy_handler.chat_template_max_chars = 10
             proxy, proxy_thread = self._start_server(proxy_handler)
             self.addCleanup(proxy.shutdown)

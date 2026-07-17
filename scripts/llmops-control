@@ -18,6 +18,7 @@ from llmops_drivers import ComponentRunner, DriverError, build_component_command
 from llmops_executor import ExecutionError, Executor, component_plan, stack_plan
 from llmops_inventory import InventoryError, load_inventory
 from llmops_init import InitError, initialize
+from llmops_migration import MigrationError, migrate
 from llmops_paths import LlmOpsPaths, resolve_paths
 from llmops_topology import Topology, TopologyError, load_stacks, validate_topology
 
@@ -113,6 +114,28 @@ def cmd_init(args: argparse.Namespace) -> int:
         agent_host=args.agent_host,
     )
     emit({"ok": True, "preset": args.preset, "created": [str(path) for path in created]}, json_output=args.json)
+    return 0
+
+
+def cmd_migrate_config(args: argparse.Namespace) -> int:
+    env = dict(os.environ)
+    if args.config_home:
+        env["LLMOPS_CONFIG_HOME"] = args.config_home
+    result = migrate(
+        Path(args.legacy_home),
+        resolve_paths(env),
+        dry_run=args.dry_run,
+        force=args.force,
+    )
+    emit(
+        {
+            "ok": True,
+            "unchanged": result.unchanged,
+            "source_hash": result.source_hash,
+            "written": [str(path) for path in result.written],
+        },
+        json_output=args.json,
+    )
     return 0
 
 
@@ -265,6 +288,12 @@ def build_parser() -> argparse.ArgumentParser:
     init.add_argument("--force", action="store_true")
     init.set_defaults(func=cmd_init, topology_required=False)
 
+    migrate_config = sub.add_parser("migrate-config")
+    migrate_config.add_argument("--legacy-home", default="~/.llm-ops")
+    migrate_config.add_argument("--dry-run", action="store_true")
+    migrate_config.add_argument("--force", action="store_true")
+    migrate_config.set_defaults(func=cmd_migrate_config, topology_required=False)
+
     plan = sub.add_parser("plan")
     plan.add_argument("--action", choices=("start", "stop", "restart"), default="start")
     plan.add_argument("--stack")
@@ -328,7 +357,15 @@ def main(argv: Optional[list[str]] = None) -> int:
                 inventory=args.inventory,
             )
         return args.func(args)
-    except (ConfigError, InitError, InventoryError, TopologyError, DriverError, ExecutionError) as exc:
+    except (
+        ConfigError,
+        InitError,
+        InventoryError,
+        MigrationError,
+        TopologyError,
+        DriverError,
+        ExecutionError,
+    ) as exc:
         if args.json:
             print(json.dumps({"ok": False, "error": str(exc)}, indent=2, sort_keys=True))
         else:

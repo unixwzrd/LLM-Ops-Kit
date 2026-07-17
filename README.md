@@ -1,32 +1,40 @@
 # LLM-Ops-Kit
 
-LLM-Ops-Kit is a macOS-first operations toolkit for running models, agents, proxies, bridges, tunnels, dashboards, and supporting services on one Apple Silicon Mac or across a local LAN.
+**Created**: 2026-02-20
+**Updated**: 2026-07-16
 
-It provides dependency-aware component control without requiring Docker or Kubernetes. Components remain independently manageable; stacks are named dependency groupings for coordinated operations.
+LLM-Ops-Kit is a macOS-first, local-LAN control layer for models, agents, proxies, bridges, tunnels, dashboards, and supporting services. It coordinates existing processes without Docker, Kubernetes, model downloads, or agent-specific runtime code.
+
+`llmops` is the only public control command. A component is independently manageable. A stack is a named dependency graph used for coordinated operation.
 
 ## Supported Platform
 
 - macOS on Apple Silicon
 - Python 3.9 or newer
-- Bash 3.2 compatibility for runtime wrappers
-- SSH for LAN operation
-- launchd for supervised macOS services
+- GNU Bash available as `/usr/local/bin/bash`
+- SSH for remote hosts
+- launchd for supervised services
 
-Linux is not a supported or tested platform for this release.
+Linux is not a supported release target.
 
-## Main Commands
+## Install
 
 ```bash
-llmops init --preset single-host
-llmops doctor
-llmops config show --json
-llmops plan --action start
+/usr/local/bin/bash scripts/install-runtime.sh
+~/.local/bin/llmops init --preset single-host
+~/.local/bin/llmops doctor
+```
 
+Use `--preset local-lan` for separate model and agent hosts. Initialization creates disabled examples and never starts services.
+
+## Operate
+
+```bash
 llmops component list
 llmops component plan restart <component>
 llmops component start <component>
+llmops component restart <component>
 llmops component stop <component> [--force|--cascade]
-llmops component restart <component> [--cascade]
 llmops component status <component>
 llmops component logs <component>
 
@@ -36,17 +44,13 @@ llmops stack start <stack>
 llmops stack stop <stack>
 llmops stack restart <stack>
 llmops stack status <stack>
-
-llmops deploy --config-home ~/.config/llm-ops
-llmops drift
-llmops rollback
 ```
 
-Every lifecycle operation has a non-mutating plan form. Component restart affects only the selected component by default. `--cascade` includes active dependents in dependency-safe order.
+Starting a component starts missing dependencies. Restarting affects only the requested component unless `--cascade` is supplied. Stopping a component with active dependents requires `--force` or `--cascade`.
 
 ## Configuration
 
-Authoritative JSON configuration lives under `~/.config/llm-ops/`:
+Canonical JSON lives under `~/.config/llm-ops/`:
 
 ```text
 config.json
@@ -57,44 +61,34 @@ agents/*.json
 services/*.json
 ```
 
-Run `llmops init --preset single-host` or `llmops init --preset local-lan` to create a disabled starter configuration. Initialization refuses to overwrite existing files unless `--force` is supplied.
+The runtime never reads proof-of-concept shell configuration. Use `llmops migrate-config --legacy-home ~/.llm-ops` once, review the JSON, then remove the old configuration from operation.
 
-Real topology, credentials, model paths, and host profiles should remain untracked. Sanitized examples are under [`docs/examples`](docs/examples).
-
-## Agent Independence
-
-Hermes and OpenClaw are compatibility adapters, not implicit defaults. No agent starts unless an agent component or explicit compatibility target is configured. Other agents use generic process, launchd, or explicitly enabled argv-based command profiles.
+Environment variables are limited to path selection, explicit secret injection, and documented emergency process overrides. An optional `LLMOPS_ENV_FILE` is a secret-injection boundary, not a configuration source.
 
 ## Deployment
 
-The administrator checkout is the one-way desired-state authority. An authoritative deployment creates a checksummed package plus a role-filtered configuration snapshot for each host, pushes both, and applies them as one immutable release.
+The administrator checkout is the one-way desired-state authority. `llmops deploy` packages code and a role-filtered JSON snapshot into one immutable release per host. `current` selects the active release and `previous` retains the rollback target.
 
-The active release is selected by `<install_root>/current`; the prior release is retained at `<install_root>/previous`. `llmops rollback` atomically exchanges those pointers and refreshes managed runtime links.
+```bash
+llmops deploy --config-home ~/.config/llm-ops --bundle-id <release> --dry-run
+llmops deploy --config-home ~/.config/llm-ops --bundle-id <release>
+llmops drift --stage ~/.local/share/llm-ops/stage/<release>
+llmops rollback
+```
 
-Dirty deployments are refused by default. Use `--allow-dirty` only for an intentional canary; the manifest records the dirty state, Git commit, toolkit version, and content hashes.
-
-## Included Runtime Tools
-
-- `modelctl` for model runner profiles
-- `model-proxy` for request tapping, prompt rendering, and upstream routing
-- `tts-bridge` for stable voice names and TTS request adaptation
-- `agentctl` compatibility adapters for Hermes and OpenClaw
-- immutable deployment, drift reporting, rollback, and runtime maintenance
+Deployment refuses dirty source by default. `--allow-dirty` is intended only for a deliberate canary and is recorded in the manifest.
 
 ## Documentation
 
+- [Documentation index](docs/INDEX.md)
 - [Quickstart](docs/QUICKSTART.md)
 - [Configuration](docs/CONFIGURATION.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Deployment](docs/DEPLOYMENT_OVERVIEW.md)
-- [Upgrade and Rollback](docs/UPGRADE_AND_ROLLBACK.md)
+- [Upgrade and rollback](docs/UPGRADE_AND_ROLLBACK.md)
+- [Model profiles](docs/MODELCTL_GUIDE.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
-- [Documentation Index](docs/INDEX.md)
-
-## Optional UI Direction
-
-The CLI and shared Python control modules are the authoritative orchestration interfaces. A future optional UI may use a separate loopback-only FastAPI process with static HTML, CSS, vanilla JavaScript, REST commands, and SSE events. It must remain usable while every model and agent is stopped and must not initialize model engines.
 
 ## License
 
-See [LICENSE](LICENSE).
+See [LICENSE.md](LICENSE.md).

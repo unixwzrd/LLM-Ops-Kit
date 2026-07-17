@@ -1,53 +1,46 @@
 # Upgrade and Rollback
 
-Back: [Documentation Index](./INDEX.md)
+**Created**: 2026-07-16
+**Updated**: 2026-07-16
 
-## Before Upgrade
+Back: [Documentation index](./INDEX.md)
+
+## Local Installation
+
+Run the installer from the new clean checkout. It creates a new release, preserves the old `current` target as `previous`, and atomically updates links.
 
 ```bash
-git status --short
+/usr/local/bin/bash scripts/install-runtime.sh
+/usr/local/bin/bash scripts/install-runtime.sh --repair
+```
+
+`--repair` does not copy source or create a release. It validates the active target and reconstructs managed links and install state.
+
+## LAN Upgrade
+
+```bash
 llmops doctor
-llmops plan --action start
-scripts/llmops-admin deploy --config-home ~/.config/llm-ops --bundle-id <bundle-id> --dry-run
+llmops deploy --bundle-id <release> --dry-run
+llmops deploy --bundle-id <release>
+llmops drift --stage ~/.local/share/llm-ops/stage/<release>
 ```
 
-Record the active `current` and `previous` targets on each host. Keep the prior validated runtime until the new release has completed the required operational reporting cycles.
+Retain the prior release until the new version passes operational acceptance. Restart only changed components.
 
-## Upgrade
-
-```bash
-scripts/llmops-admin deploy --config-home ~/.config/llm-ops --bundle-id <bundle-id>
-```
-
-Deployment refuses dirty source by default. It applies code and the resolved host configuration atomically, leaves existing component processes alone unless restart was explicitly requested, and runs drift verification after apply.
-
-## Verify
-
-```bash
-llmops drift --stage ~/.local/share/llm-ops/stage/<bundle-id>
-llmops stack status <stack>
-llmops component status <critical-component>
-```
-
-Run functional acceptance for the components changed by the release. For a model engine upgrade, use target-only component restart first and confirm proxies and agents remain running.
-
-## Roll Back
+## Rollback
 
 ```bash
 llmops rollback --dry-run
 llmops rollback
 ```
 
-Rollback exchanges `current` and `previous`, so running the command again returns to the newer release. It refreshes managed command links after the pointer exchange.
-
-After rollback, run status and functional checks. Processes that cache code in memory may require a deliberate component restart; use component scope unless downstream restart is required.
-
-## Failed Apply
-
-Apply installs into a new release directory and verifies content before switching. Its failure trap restores the prior `current` and `previous` targets and removes the failed release if a post-switch step fails.
-
-Do not delete the failed stage bundle until its manifest and logs have been inspected.
+Rollback exchanges `current` and `previous` and reconstructs managed links. A second rollback exchanges them again. Processes that already loaded code may require a deliberate component restart.
 
 ## Uninstall
 
-Use the existing uninstall runtime command only after saving any untracked configuration needed for migration. Never treat model weights, agent state, logs, or secrets as part of the runtime package.
+```bash
+/usr/local/bin/bash scripts/uninstall-runtime.sh
+/usr/local/bin/bash scripts/uninstall-runtime.sh --purge
+```
+
+Default uninstall removes the runtime, managed links, and install record while preserving canonical configuration, operational data, state, and cache. `--purge` removes those LLM-Ops-Kit roots too. Model weights and agent-owned state are outside installer ownership.

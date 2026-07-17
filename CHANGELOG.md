@@ -5,6 +5,15 @@
 
 All notable changes to LLM-Ops-Kit will be documented in this file.
 
+### 2026-07-16 - Operator V1 clean break
+
+- Replaced the proof-of-concept administrator and synchronization commands with one public `llmops` surface and a deployment-only internal module.
+- Made canonical JSON the sole runtime configuration authority and added an idempotent one-way migration command for old shell configuration.
+- Removed hardcoded Hermes and OpenClaw adapters; all agents now use ordinary typed argv profiles.
+- Removed repository synchronization, post-commit synchronization, compatibility configuration archives, launcher-name model profiles, and legacy runtime-link scripts.
+- Added immutable fresh install, upgrade, repair, uninstall, and purge behavior with isolated regression coverage.
+- Rewrote public operator documentation around clean macOS installation, component and stack operation, LAN deployment, drift, and rollback.
+
 ### 2026-07-16 - Clean launchd/Conda runtime validation
 
 - Added Hermes gateway port `8642` and native launchd PID/state reporting.

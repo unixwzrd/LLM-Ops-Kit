@@ -457,7 +457,6 @@ def extract_response_stats(payload: Any) -> dict[str, Any] | None:
 class ProxyTapHandler(BaseHTTPRequestHandler):
     upstream_base: str = ""
     log_path: Path
-    max_log_bytes: int = 0
     timeout_sec: float = 120.0
     latest_image_only: bool = False
     log_fsync: bool = True
@@ -811,7 +810,6 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument("--log", default=f"{default_log_dir}/model-proxy.ndjson", help="NDJSON log file path")
     p.add_argument("--timeout", type=float, default=900.0)
-    p.add_argument("--max-log-bytes", type=int, default=0, help="Deprecated compatibility flag; raw and NDJSON payload logs are now unlimited and unmodified.")
     p.add_argument("--stream-chunk-size", type=int, default=65536)
     p.add_argument("--chat-template", help="Optional Jinja chat template path to render/log final prompt text.")
     p.add_argument("--chat-template-max-chars", type=int, default=0, help="Optional rendered-log character cap; 0 means unlimited.")
@@ -864,7 +862,6 @@ def main() -> int:
 
     ProxyTapHandler.upstream_base = upstream_base
     ProxyTapHandler.log_path = Path(os.path.expanduser(args.log))
-    ProxyTapHandler.max_log_bytes = int(args.max_log_bytes)
     ProxyTapHandler.timeout_sec = float(args.timeout)
     ProxyTapHandler.latest_image_only = bool(args.latest_image_only)
     ProxyTapHandler.log_fsync = bool(args.log_fsync)
@@ -907,7 +904,7 @@ def main() -> int:
     server = ThreadingHTTPServer((args.listen_host, listen_port), ProxyTapHandler)
     print(
         f"model-proxy-tap listening on http://{args.listen_host}:{listen_port} "
-        f"-> {upstream_base} (threading, log: {ProxyTapHandler.log_path}, raw_log={ProxyTapHandler.raw_request_log_path}, rendered_log={ProxyTapHandler.rendered_prompt_log_path}, raw_response_log={ProxyTapHandler.raw_response_log_path}, latest_image_only={ProxyTapHandler.latest_image_only}, log_fsync={ProxyTapHandler.log_fsync}, log_rotate_seconds={ProxyTapHandler.log_rotate_seconds}, log_rotate_keep={ProxyTapHandler.log_rotate_keep}, stream_chunk_size={ProxyTapHandler.stream_chunk_size}, max_log_bytes={ProxyTapHandler.max_log_bytes}, chat_template={ProxyTapHandler.chat_template_path})",
+        f"-> {upstream_base} (threading, log: {ProxyTapHandler.log_path}, raw_log={ProxyTapHandler.raw_request_log_path}, rendered_log={ProxyTapHandler.rendered_prompt_log_path}, raw_response_log={ProxyTapHandler.raw_response_log_path}, latest_image_only={ProxyTapHandler.latest_image_only}, log_fsync={ProxyTapHandler.log_fsync}, log_rotate_seconds={ProxyTapHandler.log_rotate_seconds}, log_rotate_keep={ProxyTapHandler.log_rotate_keep}, stream_chunk_size={ProxyTapHandler.stream_chunk_size}, chat_template={ProxyTapHandler.chat_template_path})",
         flush=True,
     )
 

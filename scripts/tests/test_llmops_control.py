@@ -4,8 +4,6 @@
 from __future__ import annotations
 
 import json
-import os
-import subprocess
 import sys
 import tempfile
 import unittest
@@ -176,23 +174,6 @@ class InventoryTests(ControlFixture):
         self.write_json(self.paths.inventory_file, raw)
         with self.assertRaisesRegex(InventoryError, "duplicate host"):
             load_inventory(self.paths.inventory_file)
-
-
-class AgentCompatibilityTests(unittest.TestCase):
-    def test_agentctl_has_no_implicit_openclaw_target(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            env = dict(os.environ)
-            env["HOME"] = tmp
-            env.pop("LLMOPS_GATEWAY_BACKEND", None)
-            completed = subprocess.run(
-                [str(Path(__file__).resolve().parents[1] / "agentctl"), "status"],
-                env=env,
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            self.assertEqual(completed.returncode, 2)
-            self.assertIn("no agent target configured", completed.stderr)
 
 
 class TopologyTests(ControlFixture):

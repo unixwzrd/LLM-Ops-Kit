@@ -66,9 +66,6 @@ After a logical batch, run relevant checks:
 
 - `bash -n` for changed shell scripts.
 - Script-level smoke checks (`--help`, `status`, `settings`) where applicable.
-- Link/manifest checks when touching runtime links:
-  - `scripts/generate-manifest`
-  - `scripts/deploy-runtime-links.sh`
-  - `scripts/verify-runtime-links.sh`
+- Isolated install, repair, upgrade, and uninstall checks when touching runtime installation.
 
 When a change worsens behavior, revert that batch and rework with a smaller diff.

@@ -45,7 +45,7 @@ Usage: tts-bridge [start|stop|restart|status] [-- <extra python args>]
 Env overrides:
   TTS_BRIDGE_HOST             (default: 127.0.0.1)
   TTS_BRIDGE_PORT             (default: 11440)
-  TTS_BRIDGE_UPSTREAM_BASE    (required from ~/.config/llm-ops/config.env or explicit env)
+  TTS_BRIDGE_UPSTREAM_BASE    (required from services/tts-bridge.json or explicit env)
   TTS_BRIDGE_MODEL            (default: Qwen3-TTS local path)
   TTS_BRIDGE_VOICE            (ignored by wrapper; bridge code selects/normalizes the effective voice)
   TTS_BRIDGE_PREFER_INCOMING_VOICE (default: 0; set 1 to honor incoming voice)
