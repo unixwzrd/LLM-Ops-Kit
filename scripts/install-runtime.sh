@@ -76,26 +76,8 @@ link_runtime() {
 write_state() {
   local release="$1"
   local state_file="$STATE_HOME/install.json"
-  local temporary="${state_file}.tmp.$$"
-  mkdir -p "$STATE_HOME"
-  python3 - "$temporary" "$INSTALL_BASE" "$PUBLIC_BIN_DIR" "$release" <<'PY'
-import json, sys
-path, install_root, public_bin, release = sys.argv[1:]
-with open(path, "w", encoding="utf-8") as stream:
-    json.dump(
-        {
-            "schema_version": 1,
-            "install_root": install_root,
-            "public_bin_dir": public_bin,
-            "active_release": release,
-        },
-        stream,
-        indent=2,
-        sort_keys=True,
-    )
-    stream.write("\n")
-PY
-  mv -f "$temporary" "$state_file"
+  "${LLMOPS_PYTHON_BIN:-python3}" "$SOURCE_DIR/scripts/lib/llmops_install_state.py" \
+    "$state_file" "$INSTALL_BASE" "$PUBLIC_BIN_DIR" "$release"
 }
 
 if [[ "$REPAIR" -eq 1 ]]; then

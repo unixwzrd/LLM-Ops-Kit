@@ -12,6 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 LOCAL_LINK = re.compile(r"\[[^]]+\]\((?!https?://|mailto:|#)([^)#]+)(?:#[^)]*)?\)")
 PRIVATE_PATTERN = re.compile(r"/Users/|/Volumes/|\bmiafour\b|\b10\.0\.0\.\d+\b")
+EMBEDDED_PYTHON = re.compile(r"\bpython(?:3)?\b[^\n]*<<")
 
 
 def tracked_files() -> list[Path]:
@@ -57,6 +58,16 @@ class ReleaseHygieneTests(unittest.TestCase):
         names = {str(path.relative_to(ROOT)) for path in tracked_files()}
         obsolete = [name for name in names if name == "bin" or name.startswith(("bin/", "deploy/", "docs/internal/"))]
         self.assertEqual(obsolete, [])
+
+    def test_shell_scripts_do_not_embed_python_heredocs(self) -> None:
+        findings: list[str] = []
+        for path in tracked_files():
+            text = path.read_text(encoding="utf-8", errors="replace")
+            if path.suffix != ".sh" and not text.startswith("#!/usr/bin/env bash"):
+                continue
+            if EMBEDDED_PYTHON.search(text):
+                findings.append(str(path.relative_to(ROOT)))
+        self.assertEqual(findings, [])
 
 
 if __name__ == "__main__":

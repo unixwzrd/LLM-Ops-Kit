@@ -37,6 +37,7 @@ python_targets=(
   "scripts/lib/llmops_executor.py"
   "scripts/lib/llmops_inventory.py"
   "scripts/lib/llmops_init.py"
+  "scripts/lib/llmops_install_state.py"
   "scripts/lib/llmops_migration.py"
   "scripts/lib/llmops_paths.py"
   "scripts/lib/llmops_probe.py"
