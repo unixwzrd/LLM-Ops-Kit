@@ -96,7 +96,10 @@ class DeploymentTests(unittest.TestCase):
             self.assertFalse(any(name.endswith(".env") for name in names))
 
     def test_internal_links_exclude_agent_specific_adapters(self) -> None:
-        script = deployment._link_script()
+        with tempfile.TemporaryDirectory() as temporary:
+            config = self._configuration(Path(temporary))
+            topology = deployment._topology(str(config), None)
+            script = deployment._link_script(topology.hosts["local"])
         self.assertNotIn("agentctl", script)
         self.assertNotIn("openclaw", script)
         self.assertNotIn("hermes", script)

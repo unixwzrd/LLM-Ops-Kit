@@ -24,6 +24,7 @@ The administrator may set `deployment.source_root` in `config.json` to the clean
     "user": "operator",
     "port": 22,
     "install_root": "~/.local/llm-ops",
+    "public_bin_dir": "~/.local/bin",
     "ssh_key": "~/.ssh/id_ed25519_llmops"
   },
   "hosts": [

@@ -4,6 +4,7 @@
     "user": "operator",
     "port": 22,
     "install_root": "~/.local/llm-ops",
+    "public_bin_dir": "~/.local/bin",
     "config_profile": "default",
     "ssh_key": "~/.ssh/id_ed25519_llmops"
   },

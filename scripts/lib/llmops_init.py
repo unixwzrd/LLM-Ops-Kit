@@ -41,6 +41,7 @@ def initialize(
         "user": user,
         "port": 22,
         "install_root": "~/.local/llm-ops",
+        "public_bin_dir": "~/.local/bin",
         "config_profile": "default",
     }
     if preset == "single-host":

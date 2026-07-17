@@ -202,6 +202,7 @@ def stage_bundle(args: argparse.Namespace) -> tuple[Path, dict[str, Any]]:
                 "port": host.port,
                 "transport": host.transport,
                 "install_root": host.install_root,
+                "public_bin_dir": host.public_bin_dir,
                 "config_sha256": _sha256(snapshot),
             }
         )
@@ -270,14 +271,16 @@ def push_bundle(stage: Path, hosts: dict[str, HostRecord], *, dry_run: bool, wor
     return sorted(results, key=lambda item: item["host"])
 
 
-def _link_script() -> str:
+def _link_script(host: HostRecord) -> str:
     names = " ".join(shlex.quote(name) for name in INTERNAL_COMMANDS)
+    public_bin = _remote_path(host.public_bin_dir)
     return (
-        'mkdir -p "$root/bin" "$HOME/.local/bin"; '
+        f"public_bin={public_bin}; "
+        'mkdir -p "$root/bin" "$public_bin"; '
         f"for name in {names}; do "
         'source="$current/scripts/$name"; test -x "$source" || continue; '
         'ln -sfn "$source" "$root/bin/$name"; done; '
-        'ln -sfn "$current/scripts/llmops" "$HOME/.local/bin/llmops"'
+        'ln -sfn "$current/scripts/llmops" "$public_bin/llmops"'
     )
 
 
@@ -318,7 +321,7 @@ def _apply_one(stage: Path, host: HostRecord, manifest: dict[str, Any], *, dry_r
             'if [ -n "$old" ]; then ln -s "$old" "$root/.previous.$$"; replace_link "$root/.previous.$$" "$root/previous"; fi',
             'ln -s "$release" "$root/.current.$$"',
             'replace_link "$root/.current.$$" "$current"',
-            _link_script(),
+            _link_script(host),
             'test -x "$current/scripts/llmops" && test -x "$current/scripts/llmops-control"',
             'trap - EXIT HUP INT TERM',
         ]
@@ -381,7 +384,7 @@ def _rollback_one(host: HostRecord, *, dry_run: bool) -> dict[str, Any]:
             'replace_link() { src=$1; dst=$2; if mv -fh "$src" "$dst" 2>/dev/null; then return 0; fi; rm -f "$dst"; mv -f "$src" "$dst"; }',
             'ln -s "$previous_target" "$root/.current.$$"; ln -s "$current_target" "$root/.previous.$$"',
             'replace_link "$root/.current.$$" "$current"; replace_link "$root/.previous.$$" "$previous"',
-            _link_script(),
+            _link_script(host),
             'printf "current=%s\\nprevious=%s\\n" "$(readlink "$current")" "$(readlink "$previous")"',
         ]
     )

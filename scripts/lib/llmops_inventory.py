@@ -27,6 +27,7 @@ class HostRecord:
     user: str
     port: int
     install_root: str
+    public_bin_dir: str
     config_profile: str
     ssh_key: str
     proxy_jump: Optional[str]
@@ -122,6 +123,7 @@ def load_inventory(path: Path) -> dict[str, HostRecord]:
             user=_require_string(merged, "user", host_name=name),
             port=port,
             install_root=_require_string(merged, "install_root", host_name=name),
+            public_bin_dir=str(merged.get("public_bin_dir", "~/.local/bin")),
             config_profile=str(merged.get("config_profile", "default")),
             ssh_key=str(merged.get("ssh_key", "")),
             proxy_jump=str(merged["proxy_jump"]) if merged.get("proxy_jump") else None,

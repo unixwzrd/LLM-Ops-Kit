@@ -447,6 +447,7 @@ def write_host_snapshot(topology: Topology, *, host_name: str, destination: Path
                 "user": host.user,
                 "port": host.port,
                 "install_root": host.install_root,
+                "public_bin_dir": host.public_bin_dir,
                 "config_profile": host.config_profile,
                 "ssh_key": host.ssh_key,
                 "proxy_jump": host.proxy_jump,
