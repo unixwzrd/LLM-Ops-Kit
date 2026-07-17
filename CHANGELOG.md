@@ -6,6 +6,7 @@
 - Added a separately checksummed bootstrap installer for repository-free installation.
 - Added `llmops update` check, plan, JSON, verified local apply, and offline artifact workflows.
 - Excluded tests and maintainer-only release tooling from installed runtime payloads.
+- Added Hugging Face-compatible `raise_exception` support to model-proxy chat-template rendering, with regressions against the shipped Qwen template.
 
 ## Unreleased - Operator V1 Release Candidate
 
