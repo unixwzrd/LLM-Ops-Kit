@@ -17,6 +17,7 @@ Back: [Documentation index](./INDEX.md)
 
 ## Post-V1
 
+- [ ] Add an optional application-owned Python runtime environment with a checksum-verified uv or `venv` bootstrap, offline/error handling, dependency locking, repair, upgrade, rollback, and purge semantics. Python-backed launchd services should use its explicit interpreter path without sourcing interactive shell profiles.
 - [ ] Add an optional loopback-only control API and static web UI after CLI stability.
 - [ ] Integrate Secrets-Kit only through explicit provider references after its release contract stabilizes.
 - [ ] Remove plaintext `.env` secret injection after the external provider path is validated.
