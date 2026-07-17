@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import runpy
 import sys
 import tempfile
 import unittest
@@ -27,6 +28,11 @@ from llmops_topology import (
     validate_topology,
     write_host_snapshot,
 )
+
+CONTROL_SCRIPT = Path(__file__).resolve().parents[1] / "llmops-control"
+CONTROL_GLOBALS = runpy.run_path(str(CONTROL_SCRIPT), run_name="llmops_control_test")
+status_components = CONTROL_GLOBALS["_status_components"]
+status_state = CONTROL_GLOBALS["_status_state"]
 
 
 class FakeRunner:
@@ -140,6 +146,7 @@ class ControlFixture(unittest.TestCase):
                         "host": "model-host",
                         "driver": "modelctl",
                         "profile": "chat",
+                        "tags": ["model", "chat"],
                     },
                     {
                         "id": "embedding",
@@ -202,6 +209,30 @@ class TopologyTests(ControlFixture):
     def test_short_component_resolution_requires_unique_id(self) -> None:
         self.assertEqual(self.topology.resolve_component("chat").qualified_id, "sample:chat")
         self.assertEqual(self.topology.resolve_component("sample:chat").profile, "chat")
+
+    def test_component_tags_are_loaded(self) -> None:
+        self.assertEqual(self.topology.resolve_component("chat").tags, ("model", "chat"))
+
+    def test_component_tags_must_be_nonempty_strings(self) -> None:
+        stack = json.loads((self.paths.stacks_dir / "sample.json").read_text(encoding="utf-8"))
+        stack["components"][0]["tags"] = [""]
+        self.write_json(self.paths.stacks_dir / "sample.json", stack)
+        with self.assertRaisesRegex(TopologyError, "tags must be nonempty strings"):
+            load_stacks(self.paths)
+
+    def test_status_selector_matches_profile_stack_driver_and_tag(self) -> None:
+        status_components.__globals__["CURRENT_TOPOLOGY"] = self.topology
+        self.assertEqual([item.component_id for item in status_components("chat", include_disabled=False)], ["chat"])
+        self.assertEqual([item.component_id for item in status_components("model", include_disabled=False)], ["chat"])
+        self.assertEqual(len(status_components("sample", include_disabled=False)), 4)
+        self.assertEqual(len(status_components("modelctl", include_disabled=False)), 2)
+
+    def test_status_state_distinguishes_stopped_unreachable_and_error(self) -> None:
+        self.assertEqual(status_state(enabled=True, returncode=0), "running")
+        self.assertEqual(status_state(enabled=True, returncode=1), "not-running")
+        self.assertEqual(status_state(enabled=True, returncode=255), "unreachable")
+        self.assertEqual(status_state(enabled=True, returncode=None, error="bad profile"), "error")
+        self.assertEqual(status_state(enabled=False, returncode=None), "disabled")
 
     def test_topological_order_is_dependency_first(self) -> None:
         order = [item.component_id for item in topological_order(self.topology.stacks["sample"])]

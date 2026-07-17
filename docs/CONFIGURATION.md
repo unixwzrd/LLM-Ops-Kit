@@ -53,6 +53,7 @@ Supported roles are `admin`, `llm`, `agent`, and `hybrid`. Supported transports 
   "driver": "modelctl",
   "profile": "chat",
   "enabled": false,
+  "tags": ["model", "chat"],
   "depends_on": [],
   "ownership": "managed",
   "health": {
@@ -64,6 +65,8 @@ Supported roles are `admin`, `llm`, `agent`, and `hybrid`. Supported transports 
 ```
 
 Drivers are `modelctl`, `process`, `launchd`, `model-proxy`, `tts-bridge`, `ssh-tunnel`, `agent`, and gated `command`. Generic process and agent profiles define lifecycle actions as argument arrays. No agent implementation receives privileged treatment.
+
+Tags are optional operator-defined subsystem labels used by `llmops status <tag>`. Libraries embedded inside another process are not independently manageable components unless a process, service, or health adapter is configured for them.
 
 ## Reusing Model Profiles
 
@@ -95,6 +98,7 @@ llmops doctor
 llmops doctor --probe
 llmops config show --json
 llmops component list --json
+llmops status --json
 llmops plan --action start --json
 ```
 

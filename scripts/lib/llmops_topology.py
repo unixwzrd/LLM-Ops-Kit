@@ -70,6 +70,7 @@ class Component:
     enabled: bool
     depends_on: tuple[str, ...]
     ownership: str
+    tags: tuple[str, ...]
     health: HealthCheck
 
     @property
@@ -198,6 +199,11 @@ def _parse_component(stack_name: str, raw: Any) -> Component:
     enabled = raw.get("enabled", True)
     if not isinstance(enabled, bool):
         raise TopologyError(f"{reference}: enabled must be boolean")
+    tags = raw.get("tags", [])
+    if isinstance(tags, str):
+        tags = [tags]
+    if not isinstance(tags, list) or any(not isinstance(tag, str) or not tag.strip() for tag in tags):
+        raise TopologyError(f"{reference}: tags must be nonempty strings")
     normalized_dependencies = tuple(
         item if ":" in item else f"{stack_name}:{item}" for item in depends
     )
@@ -210,6 +216,7 @@ def _parse_component(stack_name: str, raw: Any) -> Component:
         enabled=enabled,
         depends_on=normalized_dependencies,
         ownership=ownership,
+        tags=tuple(dict.fromkeys(tag.strip() for tag in tags)),
         health=_parse_health(raw.get("health"), component_ref=reference),
     )
 
@@ -556,6 +563,7 @@ def write_host_snapshot(topology: Topology, *, host_name: str, destination: Path
                     "enabled": item.enabled,
                     "depends_on": local_dependencies,
                     "ownership": item.ownership,
+                    "tags": list(item.tags),
                     "health": {
                         "type": item.health.kind,
                         "target": item.health.target,
@@ -586,6 +594,7 @@ def write_host_snapshot(topology: Topology, *, host_name: str, destination: Path
                 "driver": item.driver,
                 "profile": item.profile,
                 "ownership": item.ownership,
+                "tags": list(item.tags),
             }
             for item in hosted
         ],

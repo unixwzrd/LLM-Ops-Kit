@@ -36,9 +36,13 @@ Back: [Documentation index](./INDEX.md)
 - [x] Confirm cascade order is dependency-safe and failed starts preserve pre-existing components.
 - [x] Run one dependency-ordered cold stop/start.
 - [x] Pass model, embedding, proxy, TTS, bridge, agent, dashboard, tunnel, and reconnection protocol checks.
+- [x] Confirm `llmops status`, component/profile drill-down, tag filtering, and `--json` output from the administrator configuration.
 - [x] Roll back to the prior runtime, validate, and return to the release candidate.
 
 ## Observation
 
-- [ ] Retain backups and prior runtimes through two successful operational reporting cycles.
+- [ ] Run the complete managed environment for a 48-hour soak period.
+- [ ] Capture `llmops status --json` at the start and after each of two consecutive scheduled daily operational reports.
+- [ ] Confirm both reports complete without unexplained component restarts, failed health checks, drift, protocol failures, or missing metrics.
+- [ ] Retain backups and prior runtimes through the completed soak period.
 - [ ] Record final evidence and mark the release audit only from current results.

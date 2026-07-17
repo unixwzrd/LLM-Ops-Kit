@@ -22,6 +22,7 @@ Commands:
   plan
   rollback
   stack
+  status
 
 Run `llmops <command> --help` for command-specific help.
 USAGE
@@ -36,7 +37,7 @@ case "$cmd" in
 esac
 
 case "$cmd" in
-  component|config|doctor|init|migrate-config|plan|stack)
+  component|config|doctor|init|migrate-config|plan|stack|status)
     shift
     exec "$LLMOPS_BIN_DIR/llmops-control" "$cmd" "$@"
     ;;

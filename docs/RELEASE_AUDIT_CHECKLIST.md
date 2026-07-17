@@ -13,4 +13,4 @@ Back: [Documentation index](./INDEX.md)
 - [x] All Markdown links resolve and public files contain no private machine defaults.
 - [x] `scripts/precheck --release` passes from a committed clean source tree.
 - [x] Release notes describe configuration changes, migration, upgrade, rollback, and uninstall.
-- [ ] Two operational reporting cycles pass before release tagging.
+- [ ] A 48-hour soak and two consecutive scheduled daily operational reports pass before release tagging.

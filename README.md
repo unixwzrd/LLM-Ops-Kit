@@ -40,6 +40,10 @@ llmops init --preset local-lan \
 ## Operate
 
 ```bash
+llmops status
+llmops status <component-or-tag>
+llmops status <profile-name> --json
+
 llmops component list
 llmops component plan restart <component>
 llmops component start <component>
@@ -55,6 +59,8 @@ llmops stack stop <stack>
 llmops stack restart <stack>
 llmops stack status <stack>
 ```
+
+`llmops status` checks every enabled component visible to the selected configuration. A selector can be a component ID, qualified component ID, profile, stack, driver, host, or component tag. A single-component selection includes the driver's detailed status output.
 
 Starting a component starts missing dependencies. Restarting affects only the requested component unless `--cascade` is supplied. Stopping a component with active dependents requires `--force` or `--cascade`.
 

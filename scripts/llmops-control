@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import json
 import os
 import sys
@@ -256,6 +257,117 @@ def cmd_component_status(args: argparse.Namespace) -> int:
     return 0 if result.ok else 1
 
 
+def _status_components(selector: Optional[str], *, include_disabled: bool) -> list[Any]:
+    components = CURRENT_TOPOLOGY.all_components()
+    if not include_disabled:
+        components = [component for component in components if component.enabled]
+    if not selector:
+        return components
+
+    folded = selector.casefold()
+    exact = [
+        component
+        for component in components
+        if component.qualified_id.casefold() == folded
+        or component.component_id.casefold() == folded
+    ]
+    if len(exact) > 1:
+        choices = ", ".join(component.qualified_id for component in exact)
+        raise TopologyError(f"ambiguous component '{selector}'; use one of: {choices}")
+    if exact:
+        return exact
+
+    matches = [
+        component
+        for component in components
+        if component.stack.casefold() == folded
+        or component.profile.casefold() == folded
+        or component.driver.casefold() == folded
+        or component.host.casefold() == folded
+        or folded in {tag.casefold() for tag in component.tags}
+    ]
+    if not matches:
+        raise TopologyError(f"status selector matched no components: {selector}")
+    return matches
+
+
+def _human_status(payload: list[dict[str, Any]]) -> None:
+    columns = ("status", "component", "host", "driver", "profile")
+    widths = {
+        column: max(len(column.upper()), *(len(str(item[column])) for item in payload))
+        for column in columns
+    }
+    print("  ".join(column.upper().ljust(widths[column]) for column in columns))
+    print("  ".join("-" * widths[column] for column in columns))
+    for item in payload:
+        print("  ".join(str(item[column]).ljust(widths[column]) for column in columns))
+    counts: dict[str, int] = {}
+    for item in payload:
+        counts[item["status"]] = counts.get(item["status"], 0) + 1
+    print("\n" + "  ".join(f"{name}={counts[name]}" for name in sorted(counts)))
+
+
+def _status_state(*, enabled: bool, returncode: Optional[int], error: str = "") -> str:
+    if not enabled:
+        return "disabled"
+    if error:
+        return "error"
+    if returncode == 0:
+        return "running"
+    if returncode == 255:
+        return "unreachable"
+    return "not-running"
+
+
+def cmd_status(args: argparse.Namespace) -> int:
+    components = _status_components(args.selector, include_disabled=args.all)
+    runner = ComponentRunner(CURRENT_TOPOLOGY)
+    enabled = [component for component in components if component.enabled]
+    workers = min(max(1, args.workers), max(1, len(enabled)))
+    def inspect(component: Any) -> tuple[str, Any, str]:
+        try:
+            return component.qualified_id, runner.status(component), ""
+        except (DriverError, OSError) as exc:
+            return component.qualified_id, None, str(exc)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+        inspected = list(pool.map(inspect, enabled))
+    by_component = {component: (result, error) for component, result, error in inspected}
+    payload: list[dict[str, Any]] = []
+    include_detail = args.verbose or (bool(args.selector) and len(components) == 1)
+    for component in components:
+        result, error = by_component.get(component.qualified_id, (None, ""))
+        status = _status_state(
+            enabled=component.enabled,
+            returncode=None if result is None else result.returncode,
+            error=error,
+        )
+        item = {
+            "status": status,
+            "component": component.qualified_id,
+            "host": component.host,
+            "driver": component.driver,
+            "profile": component.profile,
+            "tags": list(component.tags),
+            "returncode": None if result is None else result.returncode,
+        }
+        if error:
+            item["error"] = error
+        if include_detail:
+            item["stdout"] = "" if result is None else result.stdout
+            item["stderr"] = "" if result is None else result.stderr
+        payload.append(item)
+    if args.json:
+        emit(payload, json_output=True)
+    else:
+        _human_status(payload)
+        if args.selector and len(payload) == 1:
+            detail = payload[0].get("stdout", "") or payload[0].get("stderr", "")
+            if detail:
+                print(f"\n{detail}")
+    return 0 if all(item["status"] in {"running", "disabled"} for item in payload) else 1
+
+
 def cmd_component_mutate(args: argparse.Namespace) -> int:
     component = CURRENT_TOPOLOGY.resolve_component(args.component)
     executor = Executor(CURRENT_TOPOLOGY)
@@ -367,6 +479,13 @@ def build_parser() -> argparse.ArgumentParser:
     plan.add_argument("--action", choices=("start", "stop", "restart"), default="start")
     plan.add_argument("--stack")
     plan.set_defaults(func=cmd_plan)
+
+    status = sub.add_parser("status")
+    status.add_argument("selector", nargs="?")
+    status.add_argument("--all", action="store_true", help="include disabled components")
+    status.add_argument("--verbose", action="store_true", help="include driver output for every match")
+    status.add_argument("--workers", type=int, default=8)
+    status.set_defaults(func=cmd_status)
 
     config = sub.add_parser("config")
     config_sub = config.add_subparsers(dest="config_command", required=True)
