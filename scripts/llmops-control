@@ -398,9 +398,15 @@ def cmd_stack_list(args: argparse.Namespace) -> int:
 
 
 def stack_operations(args: argparse.Namespace) -> list[Any]:
-    stack = CURRENT_TOPOLOGY.stacks.get(args.stack)
+    stack_name = args.stack
+    if stack_name is None:
+        if len(CURRENT_TOPOLOGY.stacks) != 1:
+            choices = ", ".join(sorted(CURRENT_TOPOLOGY.stacks)) or "none configured"
+            raise TopologyError(f"stack name is required; available stacks: {choices}")
+        stack_name = next(iter(CURRENT_TOPOLOGY.stacks))
+    stack = CURRENT_TOPOLOGY.stacks.get(stack_name)
     if stack is None:
-        raise TopologyError(f"stack not found: {args.stack}")
+        raise TopologyError(f"stack not found: {stack_name}")
     return stack_plan(stack, args.action)
 
 
@@ -523,10 +529,13 @@ def build_parser() -> argparse.ArgumentParser:
     stack_plan_parser.add_argument("action", choices=("start", "stop", "restart"))
     stack_plan_parser.add_argument("stack")
     stack_plan_parser.set_defaults(func=cmd_stack_plan)
-    for action in ("start", "stop", "restart", "status"):
+    for action in ("start", "stop", "restart"):
         action_parser = stack_sub.add_parser(action)
         action_parser.set_defaults(action=action, func=cmd_stack_run)
         action_parser.add_argument("stack")
+    stack_status = stack_sub.add_parser("status")
+    stack_status.set_defaults(action="status", func=cmd_stack_run)
+    stack_status.add_argument("stack", nargs="?")
     return parser
 
 

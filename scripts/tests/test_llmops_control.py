@@ -33,6 +33,7 @@ CONTROL_SCRIPT = Path(__file__).resolve().parents[1] / "llmops-control"
 CONTROL_GLOBALS = runpy.run_path(str(CONTROL_SCRIPT), run_name="llmops_control_test")
 status_components = CONTROL_GLOBALS["_status_components"]
 status_state = CONTROL_GLOBALS["_status_state"]
+stack_operations = CONTROL_GLOBALS["stack_operations"]
 
 
 class FakeRunner:
@@ -330,6 +331,13 @@ class TopologyTests(ControlFixture):
 
 
 class PlannerTests(ControlFixture):
+    def test_stack_status_defaults_to_only_configured_stack(self) -> None:
+        stack_operations.__globals__["CURRENT_TOPOLOGY"] = self.topology
+        args = type("Args", (), {"stack": None, "action": "status"})()
+        operations = stack_operations(args)
+        self.assertEqual(len(operations), 4)
+        self.assertTrue(all(operation.action == "status" for operation in operations))
+
     def test_component_start_includes_dependencies(self) -> None:
         agent = self.topology.resolve_component("agent")
         plan = component_plan(self.topology, agent, "start")
