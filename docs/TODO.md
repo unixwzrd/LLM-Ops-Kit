@@ -39,7 +39,7 @@ config, XDG path, deployment, Secrets Kit, and housekeeping rework.
 - [ ] Decide and document service/account naming conventions for shared Secrets Kit examples.
 - [ ] Add explicit shell-tracing warnings to any wrapper docs that discuss secret-bearing runtime launches.
 - [ ] Validate launchd-managed OpenClaw with `agentctl launchd-*` and `LLMOPS_USE_SECKIT=1` on a real machine.
-- [ ] Remove dependence on `~/.openclaw/.env` as the primary long-term secret source once launchd validation is stable.
+- [ ] Remove dependence on plaintext `.env` files as long-term secret sources once external secret-provider validation is stable.
 
 ## Documentation
 
