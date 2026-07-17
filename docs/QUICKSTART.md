@@ -1,5 +1,8 @@
 # Quickstart
 
+**Created**: 2026-07-16
+**Updated**: 2026-07-17
+
 Back: [Documentation index](./INDEX.md)
 
 ## Prerequisites
@@ -9,12 +12,24 @@ Confirm macOS, Apple Silicon, Python 3.9 or newer, GNU Bash at `/usr/local/bin/b
 ## Fresh Install
 
 ```bash
-git clone <repository-url> LLM-Ops-Kit
-cd LLM-Ops-Kit
-/usr/local/bin/bash scripts/install-runtime.sh
+mkdir -p /tmp/llmops-install
+cd /tmp/llmops-install
+curl -fLO https://github.com/unixwzrd/LLM-Ops-Kit/releases/download/<version>/install-llmops
+curl -fLO https://github.com/unixwzrd/LLM-Ops-Kit/releases/download/<version>/install-llmops.sha256
+shasum -a 256 -c install-llmops.sha256
+chmod +x install-llmops
+./install-llmops --version <version>
 ```
 
-The installer creates an immutable release under `~/.local/llm-ops/releases/`, updates `current`, retains the prior release as `previous`, creates internal driver links under `~/.local/llm-ops/bin`, and exposes only `~/.local/bin/llmops` publicly.
+The bootstrap downloads and verifies `LLM-Ops-Kit-<version>.tar.xz`, then invokes its bundled installer. A Git checkout is not required. The installer creates an immutable release under `~/.local/llm-ops/releases/`, updates `current`, retains the prior release as `previous`, creates internal driver links under `~/.local/llm-ops/bin`, and exposes only `~/.local/bin/llmops` publicly.
+
+No release has been published yet; `<version>` remains a placeholder until operator-v1 acceptance is complete. The maintainer build command is:
+
+```bash
+python3 scripts/build-release.py --output-dir dist --version <version>
+```
+
+It emits the runtime archive, archive checksum, public manifest, standalone bootstrap, and bootstrap checksum. Release builds refuse dirty source trees.
 
 The installer reports when its public command directory is not on `PATH`; it does not silently edit shell startup files. Add that directory once or invoke `~/.local/bin/llmops` explicitly.
 

@@ -17,10 +17,16 @@ Linux is not a supported release target.
 ## Install and Initialize
 
 ```bash
-/usr/local/bin/bash scripts/install-runtime.sh
+curl -fLO https://github.com/unixwzrd/LLM-Ops-Kit/releases/download/<version>/install-llmops
+curl -fLO https://github.com/unixwzrd/LLM-Ops-Kit/releases/download/<version>/install-llmops.sha256
+shasum -a 256 -c install-llmops.sha256
+chmod +x install-llmops
+./install-llmops --version <version>
 ~/.local/bin/llmops init --preset single-host
 ~/.local/bin/llmops doctor --probe
 ```
+
+Installation downloads a checksum-verified runtime artifact and does not require a Git checkout. No release has been published yet; `<version>` remains a placeholder until operator-v1 acceptance is complete.
 
 Use `--preset local-lan` for separate model and agent hosts. Interactive initialization can discover existing model profiles, normalize selected profiles, and bind chosen chat, embedding, and TTS defaults into disabled starter components. Initialization never starts services.
 

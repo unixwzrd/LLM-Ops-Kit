@@ -17,9 +17,11 @@ Back: [Documentation index](./INDEX.md)
 
 ## General-User Distribution Gate
 
-- [ ] Produce a versioned, checksum-verified release artifact containing only installed runtime files. Installation and upgrade must not require a Git checkout or depend on the checkout location.
-- [ ] Add a repository-free bootstrap installer that downloads a selected GitHub release, verifies it, installs only the required components, and reports exact recovery steps without piping an unverified response directly into a privileged shell.
+- [x] Produce a versioned, checksum-verified release artifact containing only installed runtime files. Installation and upgrade do not require a Git checkout or depend on the checkout location.
+- [x] Add a repository-free bootstrap installer that downloads a selected GitHub release, verifies it, installs only the required components, and reports exact recovery steps without piping an unverified response directly into a privileged shell.
 - [ ] Add `llmops update` with local and remote version discovery, release selection, plan and JSON output, atomic apply, rollback, and handling for an older control command on either side of an SSH connection.
+  - [x] Local check, plan, JSON output, verified apply, immutable previous-release retention, and offline artifact operation.
+  - [ ] Remote discovery, older-peer bootstrap, coordinated host selection, and remote rollback reporting.
 - [ ] Add one application-owned Python runtime environment with a checksum-verified uv or `venv` bootstrap, offline/error handling, dependency locking, repair, upgrade, rollback, and purge semantics. Python-backed launchd services should use its explicit interpreter path without sourcing interactive shell profiles.
 - [ ] Add portable read-only observer snapshots so any trusted configured host can run global `llmops status` without receiving mutation authority or secret material.
 - [ ] Add explicit trusted-control snapshots and `llmops host` operations for approved operator hosts. Remote execution must use the configured absolute `llmops` path over SSH and must not depend on login-shell startup files.

@@ -41,7 +41,6 @@ INTERNAL_COMMANDS = (
     "tts-bridge",
     "tts",
     "runtime-maintenance",
-    "precheck",
 )
 
 
@@ -173,6 +172,11 @@ def _build_package(stage: Path, source_root: Path) -> Path:
         name
         for name in names
         if "tests" not in name.parts
+        and name not in {
+            Path("scripts/bootstrap-install.sh"),
+            Path("scripts/build-release.py"),
+            Path("scripts/precheck"),
+        }
         and "__pycache__" not in name.parts
         and not name.name.endswith((".pyc", ".pyo", ".DS_Store"))
         and (source_root / name).exists()

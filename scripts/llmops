@@ -23,6 +23,7 @@ Commands:
   deploy          Build and atomically deploy code plus configuration snapshots
   drift           Compare deployed runtime and configuration hashes with a bundle
   rollback        Exchange current and previous immutable runtime releases
+  update          Check, plan, or apply a verified published runtime release
 
 Read-only commands: status, plan, doctor, config, component status, stack status, drift.
 Mutating commands provide plans or dry runs where applicable.
@@ -47,6 +48,10 @@ case "$cmd" in
   deploy|drift|rollback)
     shift
     exec "${LLMOPS_PYTHON_BIN:-python3}" "$LLMOPS_HOME/current/scripts/lib/llmops_deployment.py" "$cmd" "$@"
+    ;;
+  update)
+    shift
+    exec "${LLMOPS_PYTHON_BIN:-python3}" "$LLMOPS_HOME/current/scripts/lib/llmops_update.py" "$@"
     ;;
 esac
 echo "llmops: unknown command: $cmd" >&2

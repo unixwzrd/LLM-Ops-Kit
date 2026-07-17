@@ -26,11 +26,13 @@ shell_targets=(
   "scripts/tts-bridge"
   "scripts/model-proxy"
   "scripts/install-runtime.sh"
+  "scripts/bootstrap-install.sh"
   "scripts/uninstall-runtime.sh"
 )
 
 python_targets=(
   "scripts/llmops-control"
+  "scripts/build-release.py"
   "scripts/lib/llmops_config.py"
   "scripts/lib/llmops_deployment.py"
   "scripts/lib/llmops_drivers.py"
@@ -43,6 +45,7 @@ python_targets=(
   "scripts/lib/llmops_probe.py"
   "scripts/lib/llmops_profiles.py"
   "scripts/lib/llmops_topology.py"
+  "scripts/lib/llmops_update.py"
 )
 
 echo "==> Shell syntax checks"

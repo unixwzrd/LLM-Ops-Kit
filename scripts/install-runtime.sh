@@ -8,7 +8,7 @@ STATE_HOME="${LLMOPS_STATE_HOME:-${XDG_STATE_HOME:-$HOME/.local/state}/llm-ops}"
 RELEASE_ID=""
 REPAIR=0
 
-INTERNAL_COMMANDS=(llmops llmops-control modelctl model-proxy tts-bridge tts runtime-maintenance precheck)
+INTERNAL_COMMANDS=(llmops llmops-control modelctl model-proxy tts-bridge tts runtime-maintenance)
 
 usage() {
   cat <<'USAGE'
@@ -136,7 +136,17 @@ trap cleanup EXIT INT TERM
 
 [[ ! -e "$release" ]] || { echo "install-runtime.sh: release already exists: $release" >&2; exit 2; }
 mkdir -p "$staging" "$INSTALL_BASE/releases"
-rsync -a --delete --exclude tests --exclude __pycache__ --exclude '*.pyc' "$SOURCE_DIR/scripts/" "$staging/scripts/"
+rsync -a --delete \
+  --exclude tests \
+  --exclude __pycache__ \
+  --exclude '*.pyc' \
+  --exclude bootstrap-install.sh \
+  --exclude build-release.py \
+  --exclude precheck \
+  "$SOURCE_DIR/scripts/" "$staging/scripts/"
+for metadata in RELEASE.json release-manifest.json; do
+  if [[ -f "$SOURCE_DIR/$metadata" ]]; then cp "$SOURCE_DIR/$metadata" "$staging/$metadata"; fi
+done
 [[ -x "$staging/scripts/llmops" && -x "$staging/scripts/llmops-control" ]] || {
   echo "install-runtime.sh: staged payload is incomplete" >&2
   exit 2

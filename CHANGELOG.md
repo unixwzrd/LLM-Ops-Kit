@@ -1,5 +1,12 @@
 # Changelog
 
+## Operator V1 Release Candidate
+
+- Added a runtime-only `.tar.xz` release artifact with per-file manifest and external SHA-256 checksum.
+- Added a separately checksummed bootstrap installer for repository-free installation.
+- Added `llmops update` check, plan, JSON, verified local apply, and offline artifact workflows.
+- Excluded tests and maintainer-only release tooling from installed runtime payloads.
+
 ## Unreleased - Operator V1 Release Candidate
 
 - Replaced proof-of-concept shell configuration with canonical JSON profiles, inventories, services, and dependency-aware stacks.
