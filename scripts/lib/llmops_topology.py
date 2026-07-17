@@ -243,7 +243,11 @@ def load_stacks(paths: LlmOpsPaths) -> dict[str, Stack]:
 def topological_order(stack: Stack, *, subset: Optional[Iterable[str]] = None) -> list[Component]:
     """Return dependency-first component order and reject cycles."""
 
-    selected = set(subset or (component.qualified_id for component in stack.components.values()))
+    selected = (
+        {component.qualified_id for component in stack.components.values()}
+        if subset is None
+        else set(subset)
+    )
     by_qualified = {component.qualified_id: component for component in stack.components.values()}
     order: list[Component] = []
     visiting: set[str] = set()

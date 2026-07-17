@@ -372,6 +372,12 @@ class ExecutorTests(ControlFixture):
             ["sample:proxy", "sample:agent"],
         )
 
+    def test_leaf_component_has_no_active_dependents(self) -> None:
+        runner = FakeRunner(running={"sample:chat", "sample:embedding", "sample:proxy", "sample:agent"})
+        executor = Executor(self.topology, runner=runner)
+        agent = self.topology.resolve_component("agent")
+        self.assertEqual(executor.active_dependents(agent), [])
+
     def test_read_only_inspection_does_not_create_operation_lock(self) -> None:
         runner = FakeRunner(running={"sample:chat"})
         executor = Executor(self.topology, runner=runner)
