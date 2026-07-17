@@ -145,18 +145,29 @@ def _git_provenance(source_root: Path) -> dict[str, Any]:
 def _build_package(stage: Path, source_root: Path) -> Path:
     package = stage / "package" / "llm-ops-kit.tar.gz"
     package.parent.mkdir(parents=True, exist_ok=True)
-
-    def include(info: tarfile.TarInfo) -> Optional[tarfile.TarInfo]:
-        parts = Path(info.name).parts
-        if "tests" in parts or "__pycache__" in parts:
-            return None
-        if info.name.endswith((".pyc", ".pyo", ".DS_Store")):
-            return None
-        return info
-
+    tracked = subprocess.run(
+        ["git", "-C", str(source_root), "ls-files", "-z", "--", "scripts", "bin"],
+        capture_output=True,
+        check=False,
+    )
+    if tracked.returncode != 0:
+        raise DeploymentError(f"cannot enumerate tracked deployment files: {tracked.stderr.decode(errors='replace')}")
+    names = [Path(raw.decode()) for raw in tracked.stdout.split(b"\0") if raw]
+    names = [
+        name
+        for name in names
+        if "tests" not in name.parts
+        and "__pycache__" not in name.parts
+        and not name.name.endswith((".pyc", ".pyo", ".DS_Store"))
+    ]
+    if not names:
+        raise DeploymentError(f"deployment source has no tracked runtime files: {source_root}")
     with tarfile.open(package, "w:gz") as archive:
-        for name in ("scripts", "bin"):
-            archive.add(source_root / name, arcname=Path("LLM-Ops-Kit") / name, filter=include)
+        for name in sorted(names):
+            source = source_root / name
+            if not source.exists() and not source.is_symlink():
+                raise DeploymentError(f"tracked deployment file is missing: {source}")
+            archive.add(source, arcname=Path("LLM-Ops-Kit") / name, recursive=False)
     return package
 
 

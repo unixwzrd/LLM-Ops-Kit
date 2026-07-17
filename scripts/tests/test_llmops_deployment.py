@@ -105,6 +105,10 @@ class DeploymentTests(unittest.TestCase):
             self.assertIn("config.json", names)
             self.assertIn("inventory.json", names)
             self.assertFalse(any(name.endswith(".env") for name in names))
+            with tarfile.open(stage / "package" / "llm-ops-kit.tar.gz", "r:gz") as archive:
+                package_names = archive.getnames()
+            self.assertFalse(any("tests" in Path(name).parts for name in package_names))
+            self.assertFalse(any(name.endswith((".env", ".DS_Store", ".pyc")) for name in package_names))
 
     def test_internal_links_exclude_agent_specific_adapters(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
