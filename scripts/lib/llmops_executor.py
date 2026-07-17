@@ -162,8 +162,8 @@ class Executor:
                             raise ExecutionError(
                                 f"{component.qualified_id}: start failed: {result.stderr or result.stdout}"
                             )
-                        self.runner.wait_healthy(component)
                         started.append(component)
+                        self.runner.wait_healthy(component)
                     elif action == "restart":
                         result = self.runner.run(component, "restart")
                         results.append(result)

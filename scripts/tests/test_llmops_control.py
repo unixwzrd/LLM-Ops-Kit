@@ -14,7 +14,7 @@ LIB = Path(__file__).resolve().parents[1] / "lib"
 sys.path.insert(0, str(LIB))
 
 from llmops_config import load_config
-from llmops_drivers import CommandResult, _launchd_command
+from llmops_drivers import CommandResult, DriverError, _launchd_command
 from llmops_executor import Executor, ExecutionError, Operation, component_plan, stack_plan
 from llmops_inventory import InventoryError, load_inventory
 from llmops_paths import resolve_paths
@@ -32,9 +32,10 @@ from llmops_topology import (
 class FakeRunner:
     """Stateful runner used to test orchestration without processes or SSH."""
 
-    def __init__(self, running: Optional[set[str]] = None, fail_start: str = "") -> None:
+    def __init__(self, running: Optional[set[str]] = None, fail_start: str = "", fail_health: str = "") -> None:
         self.running = set(running or set())
         self.fail_start = fail_start
+        self.fail_health = fail_health
         self.calls: list[tuple[str, str]] = []
 
     def status(self, component):
@@ -54,6 +55,8 @@ class FakeRunner:
         return CommandResult(component.qualified_id, action, "fake", 0, "", "")
 
     def wait_healthy(self, component):
+        if component.qualified_id == self.fail_health:
+            raise DriverError("readiness timed out")
         return CommandResult(component.qualified_id, "health", "fake", 0, "", "")
 
 
@@ -362,6 +365,15 @@ class ExecutorTests(ControlFixture):
             executor.execute(component_plan(self.topology, agent, "start"))
         self.assertEqual(runner.running, {"sample:chat"})
         self.assertNotIn(("sample:chat", "stop"), runner.calls)
+
+    def test_failed_readiness_rolls_back_the_started_component(self) -> None:
+        runner = FakeRunner(fail_health="sample:chat")
+        executor = Executor(self.topology, runner=runner)
+        chat = self.topology.resolve_component("chat")
+        with self.assertRaisesRegex(Exception, "readiness timed out"):
+            executor.execute(component_plan(self.topology, chat, "start"))
+        self.assertNotIn("sample:chat", runner.running)
+        self.assertIn(("sample:chat", "stop"), runner.calls)
 
     def test_active_dependents_reports_only_running_components(self) -> None:
         runner = FakeRunner(running={"sample:proxy", "sample:agent"})
