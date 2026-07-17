@@ -46,6 +46,16 @@ def _path_check(topology: Topology, host_name: str, label: str, path: str, *, en
     return _item(host_name, label, status, f"not found: {path}", f"correct the referenced path for host {host_name}")
 
 
+def _executable_check(topology: Topology, host_name: str, label: str, executable: str, *, enabled: bool) -> dict[str, str]:
+    if "/" in executable or executable.startswith(("~", "$", "env:", "seckit:")):
+        return _path_check(topology, host_name, label, executable, enabled=enabled)
+    completed = _run(topology, host_name, f"command -v {shlex.quote(executable)}")
+    if completed.returncode == 0:
+        return _item(host_name, label, "ok", completed.stdout.strip())
+    status = "error" if enabled else "warning"
+    return _item(host_name, label, status, f"not found in PATH: {executable}", f"install the executable or configure an explicit path for host {host_name}")
+
+
 def _port_check(topology: Topology, host_name: str, label: str, host: str, port: str, *, enabled: bool) -> dict[str, str]:
     completed = _run(topology, host_name, f"nc -z -w 1 {shlex.quote(host)} {int(port)}")
     occupied = completed.returncode == 0
@@ -98,14 +108,14 @@ def probe_topology(topology: Topology) -> dict[str, Any]:
                 checks.append(_path_check(topology, component.host, f"{component.qualified_id}:model", model_path, enabled=component.enabled))
             python_path = values.get("TTS_PYTHON_BIN")
             if python_path:
-                checks.append(_path_check(topology, component.host, f"{component.qualified_id}:python", python_path, enabled=component.enabled))
+                checks.append(_executable_check(topology, component.host, f"{component.qualified_id}:python", python_path, enabled=component.enabled))
             if values.get("HOST") and values.get("PORT", "").isdigit():
                 checks.append(_port_check(topology, component.host, f"{component.qualified_id}:port", values["HOST"], values["PORT"], enabled=component.enabled))
         elif component.driver in {"model-proxy", "tts-bridge"}:
             values = service_values(component.driver, profile)
             python_key = "MODEL_PROXY_PYTHON_BIN" if component.driver == "model-proxy" else "TTS_BRIDGE_PYTHON_BIN"
             if values.get(python_key):
-                checks.append(_path_check(topology, component.host, f"{component.qualified_id}:python", values[python_key], enabled=component.enabled))
+                checks.append(_executable_check(topology, component.host, f"{component.qualified_id}:python", values[python_key], enabled=component.enabled))
             port = values.get("MODEL_PROXY_LISTEN_PORT" if component.driver == "model-proxy" else "TTS_BRIDGE_PORT")
             listen_host = values.get("MODEL_PROXY_LISTEN_HOST" if component.driver == "model-proxy" else "TTS_BRIDGE_HOST", "127.0.0.1")
             if port and port.isdigit():

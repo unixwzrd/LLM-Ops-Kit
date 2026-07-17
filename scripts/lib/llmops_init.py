@@ -26,6 +26,7 @@ PROFILE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 SECRET_FIELD = re.compile(r"(?:KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)", re.IGNORECASE)
 MODEL_TYPES = {"llm", "embedding", "tts"}
 PATH_PREFIXES = ("/", "~/", "$HOME/", "${HOME}/", "env:", "seckit:")
+EXECUTABLE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]*$")
 
 
 @dataclass(frozen=True)
@@ -123,8 +124,10 @@ def _normalize_model(path: Path) -> ModelCandidate:
         raise InitError(f"model path must be absolute or a provider reference in {path}: {model_path}")
     if isinstance(environment, dict):
         for key, value in environment.items():
-            if key.endswith("PYTHON_BIN") and value and not str(value).startswith(PATH_PREFIXES):
-                raise InitError(f"{key} must be an absolute path or provider reference in {path}")
+            if key.endswith("PYTHON_BIN") and value and not (
+                str(value).startswith(PATH_PREFIXES) or EXECUTABLE_NAME.fullmatch(str(value))
+            ):
+                raise InitError(f"{key} must be an executable name, absolute path, or provider reference in {path}")
     normalized["import"] = {"source_sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
     return ModelCandidate(name, model_type, path, normalized, tuple(converted))
 

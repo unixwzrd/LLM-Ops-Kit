@@ -74,7 +74,7 @@ class InitTests(unittest.TestCase):
                         "type": "llm",
                         "env": {
                             "MODEL": "$HOME/models/chat.gguf",
-                            "TTS_PYTHON_BIN": "${HOME}/venvs/tts/bin/python",
+                            "TTS_PYTHON_BIN": "python",
                             "HOST": "127.0.0.1",
                             "PORT": 11434,
                             "API_KEY": "literal-secret",
@@ -100,6 +100,7 @@ class InitTests(unittest.TestCase):
             self.assertEqual(imported["environment"]["API_KEY"], "env:API_KEY")
             self.assertEqual(imported["environment"]["MODEL_PROFILE"], "chat-model")
             self.assertEqual(imported["environment"]["MODEL"], "$HOME/models/chat.gguf")
+            self.assertEqual(imported["environment"]["TTS_PYTHON_BIN"], "python")
             stack = json.loads((paths.stacks_dir / "starter.json").read_text(encoding="utf-8"))
             chat = next(item for item in stack["components"] if item["id"] == "chat")
             self.assertEqual(chat["profile"], "chat-model")
