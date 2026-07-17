@@ -7,13 +7,13 @@ Back: [Documentation index](./INDEX.md)
 
 ## Operator V1 Release Gate
 
-- [ ] Pass clean-checkout precheck on macOS.
-- [ ] Pass isolated fresh install, upgrade, repair, rollback, default uninstall, and purge uninstall on the model host.
-- [ ] Pass the same isolated lifecycle on the agent host.
-- [ ] Restore proof-of-concept fixtures and pass one-way migration twice on each host.
-- [ ] Deploy one clean immutable release to both hosts and confirm zero drift.
-- [ ] Restart one model component without restarting its dependents.
-- [ ] Pass one dependency-ordered cold stop and start of the configured agent stack.
+- [x] Pass clean-checkout precheck on macOS.
+- [x] Pass isolated fresh install, upgrade, repair, rollback, default uninstall, and purge uninstall on the model host.
+- [x] Pass the same isolated lifecycle on the agent host.
+- [x] Restore proof-of-concept fixtures and pass one-way migration twice on each host.
+- [x] Deploy one clean immutable release to both hosts and confirm zero drift.
+- [x] Restart one model component without restarting its dependents.
+- [x] Pass one dependency-ordered cold stop and start of the configured agent stack.
 - [ ] Retain the prior runtime through two operational reporting cycles.
 
 ## Post-V1

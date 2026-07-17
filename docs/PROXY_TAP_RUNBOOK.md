@@ -318,7 +318,7 @@ request_start
 ## Troubleshooting
 
 - If you see `jq: ... INVALID_CHARACTER`, remove trailing spaces after `\` or use single-line commands.
-- If no output appears, verify proxy is active and OpenClaw `baseUrl` points to `http://127.0.0.1:18080/v1`.
+- If no output appears, verify the proxy is active and the configured agent endpoint points to the proxy listener.
 - If you get only `request_start` and no `request_end`, request is still in-flight or hung upstream.
 - `model-proxy.rendered.log` is populated only when proxy runs with `--chat-template`.
 - If outputs look duplicated, confirm you do not have multiple `tail -F ... | jq ...` pipelines running.

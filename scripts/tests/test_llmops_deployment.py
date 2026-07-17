@@ -10,6 +10,7 @@ import tarfile
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 LIB = Path(__file__).resolve().parents[1] / "lib"
 sys.path.insert(0, str(LIB))
@@ -118,6 +119,30 @@ class DeploymentTests(unittest.TestCase):
         self.assertNotIn("agentctl", script)
         self.assertNotIn("openclaw", script)
         self.assertNotIn("hermes", script)
+
+    def test_dirty_source_is_refused_without_override(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config = self._configuration(root)
+            args = argparse.Namespace(
+                config_home=str(config),
+                inventory=None,
+                host_name=None,
+                role=None,
+                tag=None,
+                bundle_id="dirty-release",
+                stage_root=str(root / "stage"),
+                allow_dirty=False,
+                dry_run=True,
+                source=str(deployment.REPO_ROOT),
+            )
+            with mock.patch.object(
+                deployment,
+                "_git_provenance",
+                return_value={"git_commit": "test", "git_dirty": True, "toolkit_version": "test"},
+            ):
+                with self.assertRaisesRegex(deployment.DeploymentError, "refuses a dirty source tree"):
+                    deployment.stage_bundle(args)
 
 
 if __name__ == "__main__":

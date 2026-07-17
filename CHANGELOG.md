@@ -13,6 +13,9 @@ All notable changes to LLM-Ops-Kit will be documented in this file.
 - Removed repository synchronization, post-commit synchronization, compatibility configuration archives, launcher-name model profiles, and legacy runtime-link scripts.
 - Added immutable fresh install, upgrade, repair, uninstall, and purge behavior with isolated regression coverage.
 - Rewrote public operator documentation around clean macOS installation, component and stack operation, LAN deployment, drift, and rollback.
+- Validated the clean-break release through isolated install, repair, upgrade, rollback, uninstall, purge, and one-way migration on separate model and agent hosts.
+- Hardened deployment packaging to include only Git-tracked runtime files and added driver-specific profile validation.
+- Fixed installed snapshot resolution for direct component commands, idempotent launchd stops, and empty dependent-graph handling found during full cold-cycle acceptance.
 
 ### 2026-07-16 - Clean launchd/Conda runtime validation
 
