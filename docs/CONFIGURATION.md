@@ -1,21 +1,25 @@
 # Configuration
 
-**Created**: 2026-07-16
-**Updated**: 2026-07-16
-
 Back: [Documentation index](./INDEX.md)
 
 ## Authority and Precedence
 
-Configuration precedence is shipped runtime defaults, global JSON, referenced profile JSON, host snapshot values, then temporary CLI overrides. Existing process environment may provide secrets and documented emergency overrides, but no shell configuration file is read implicitly.
+Configuration precedence is shipped runtime defaults, global JSON, referenced profile JSON, host snapshot values, then temporary CLI overrides. Process environment may provide secrets and documented emergency overrides, but no shell configuration file is read implicitly.
 
 `LLMOPS_CONFIG_HOME`, `LLMOPS_DATA_HOME`, `LLMOPS_STATE_HOME`, and `LLMOPS_CACHE_HOME` select alternate roots. Installed immutable releases use their bundled `current/config` snapshot unless `LLMOPS_CONFIG_HOME` is explicitly set.
 
-The administrator may set `deployment.source_root` in `config.json` to the clean source checkout used for packaging. `llmops deploy --source <path>` is a temporary override.
+Canonical configuration contains:
+
+```text
+config.json
+inventory.json
+models/*.json
+agents/*.json
+services/*.json
+stacks/*.json
+```
 
 ## Inventory
-
-`inventory.json` defines hosts and transport:
 
 ```json
 {
@@ -48,7 +52,7 @@ Supported roles are `admin`, `llm`, `agent`, and `hybrid`. Supported transports 
   "host": "model-host",
   "driver": "modelctl",
   "profile": "chat",
-  "enabled": true,
+  "enabled": false,
   "depends_on": [],
   "ownership": "managed",
   "health": {
@@ -59,21 +63,37 @@ Supported roles are `admin`, `llm`, `agent`, and `hybrid`. Supported transports 
 }
 ```
 
-Drivers are `modelctl`, `process`, `launchd`, `model-proxy`, `tts-bridge`, `ssh-tunnel`, `agent`, and gated `command`. Generic process and agent profiles define lifecycle actions as argv arrays. There are no privileged Hermes or OpenClaw adapters.
+Drivers are `modelctl`, `process`, `launchd`, `model-proxy`, `tts-bridge`, `ssh-tunnel`, `agent`, and gated `command`. Generic process and agent profiles define lifecycle actions as argument arrays. No agent implementation receives privileged treatment.
+
+## Reusing Model Profiles
+
+Interactive `llmops init` discovers model profiles under an existing default configuration root when the destination differs. Use `--model-defaults-from <path>` to select another source explicitly.
+
+```bash
+llmops init --preset local-lan \
+  --model-defaults-from <existing-config-root> \
+  --import-model ChatModel \
+  --import-model EmbeddingModel \
+  --default-chat ChatModel \
+  --default-embedding EmbeddingModel
+```
+
+Legacy `env` objects are normalized to `environment`. Structured profiles remain structured. Imported model names must be unique, model and interpreter paths must be absolute or provider references, and model types must be `llm`, `embedding`, or `tts`. Source files are never modified.
 
 ## Secrets
 
-Never put secret values in tracked JSON. Use environment references or provider references in profiles. Deployment snapshots reject likely embedded secret values and never include `.env` files.
+Never put secret values in tracked JSON. Use `env:<VARIABLE>` or `seckit:<reference>` values. Imported legacy literal secret fields are converted to environment references without copying the literal value.
 
-For current external secret injection, launch the command with required variables already present or set `LLMOPS_ENV_FILE` to an explicit untracked file. LLM-Ops-Kit does not search `$HOME/.env`, repository `.env` files, or agent directories.
+For current external secret injection, launch the command with required variables already present or set `LLMOPS_ENV_FILE` to an explicit untracked file. LLM-Ops-Kit does not search home, repository, or agent `.env` files.
 
 ## Validation
 
 ```bash
 llmops doctor
+llmops doctor --probe
 llmops config show --json
 llmops component list --json
 llmops plan --action start --json
 ```
 
-Validation rejects missing profiles, empty inventory, unknown hosts, dependency cycles, ambiguous references, unsupported drivers, disabled command-driver use, embedded secrets, and known port conflicts.
+Static validation rejects missing profiles, empty inventory, unknown hosts, dependency cycles, ambiguous references, unsupported drivers, disabled command-driver use, embedded secrets, and known configured port conflicts. Active probing checks connectivity and runtime prerequisites without starting or stopping anything.

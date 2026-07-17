@@ -18,7 +18,6 @@ shift || true
 load_shell_env
 source_json_service_profile_defaults model-proxy
 
-PROXY_TAP_BIN="${MODEL_PROXY_TAP_BIN:-$LLMOPS_ROOT/bin/model-proxy-tap}"
 MODEL_PROXY_PYTHON_BIN="${MODEL_PROXY_PYTHON_BIN:-}"
 MODEL_PROXY_LOG_ROTATE_SECONDS="${MODEL_PROXY_LOG_ROTATE_SECONDS:-86400}"
 MODEL_PROXY_LOG_ROTATE_KEEP="${MODEL_PROXY_LOG_ROTATE_KEEP:-5}"
@@ -64,6 +63,16 @@ if [[ "$action" == "-h" || "$action" == "--help" ]]; then
 fi
 
 extra_args=("$@")
+
+resolve_python() {
+  if [[ -z "$MODEL_PROXY_PYTHON_BIN" ]]; then
+    MODEL_PROXY_PYTHON_BIN="$(command -v python3 || true)"
+  fi
+  if [[ -z "$MODEL_PROXY_PYTHON_BIN" || ! -x "$MODEL_PROXY_PYTHON_BIN" ]]; then
+    echo "model-proxy: Python interpreter is not executable: ${MODEL_PROXY_PYTHON_BIN:-not found}" >&2
+    return 2
+  fi
+}
 
 has_upstream_arg() {
   local i arg
@@ -255,15 +264,8 @@ start_proxy() {
   fi
 
   local -a proxy_cmd
-  if [[ -n "$MODEL_PROXY_PYTHON_BIN" ]]; then
-    if [[ ! -x "$MODEL_PROXY_PYTHON_BIN" ]]; then
-      echo "model-proxy: Python interpreter is not executable: $MODEL_PROXY_PYTHON_BIN" >&2
-      return 2
-    fi
-    proxy_cmd=("$MODEL_PROXY_PYTHON_BIN" "$LLMOPS_ROOT/scripts/model_proxy_tap.py")
-  else
-    proxy_cmd=("$PROXY_TAP_BIN")
-  fi
+  resolve_python
+  proxy_cmd=("$MODEL_PROXY_PYTHON_BIN" "$LLMOPS_ROOT/scripts/model_proxy_tap.py")
 
   if ! has_upstream_arg && [[ -n "$configured_upstream_host" && -n "$configured_upstream_port" ]]; then
     if (( ${#extra_args[@]} > 0 )); then
@@ -450,7 +452,7 @@ render_proxy() {
     next="${extra_args[$((i + 1))]:-}"
     case "$arg" in
       -i|--input|--render-input)
-        ((i++))
+        i=$((i + 1))
         ;;
       -i=*|--input=*|--render-input=*)
         ;;
@@ -461,17 +463,11 @@ render_proxy() {
   done
 
   if (( ${#forwarded_args[@]} > 0 )); then
-    if [[ -n "$MODEL_PROXY_PYTHON_BIN" ]]; then
-      "$MODEL_PROXY_PYTHON_BIN" "$LLMOPS_ROOT/scripts/model_proxy_tap.py" --render-input "$render_input" "${forwarded_args[@]}"
-    else
-      "$PROXY_TAP_BIN" --render-input "$render_input" "${forwarded_args[@]}"
-    fi
+    resolve_python
+    "$MODEL_PROXY_PYTHON_BIN" "$LLMOPS_ROOT/scripts/model_proxy_tap.py" --render-input "$render_input" "${forwarded_args[@]}"
   else
-    if [[ -n "$MODEL_PROXY_PYTHON_BIN" ]]; then
-      "$MODEL_PROXY_PYTHON_BIN" "$LLMOPS_ROOT/scripts/model_proxy_tap.py" --render-input "$render_input"
-    else
-      "$PROXY_TAP_BIN" --render-input "$render_input"
-    fi
+    resolve_python
+    "$MODEL_PROXY_PYTHON_BIN" "$LLMOPS_ROOT/scripts/model_proxy_tap.py" --render-input "$render_input"
   fi
 }
 

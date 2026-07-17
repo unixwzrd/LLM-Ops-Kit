@@ -1,31 +1,41 @@
 # LLM-Ops-Kit
 
-**Created**: 2026-02-20
-**Updated**: 2026-07-16
+LLM-Ops-Kit is a macOS-first local-LAN control layer for models, agents, proxies, bridges, tunnels, dashboards, and supporting services. It coordinates existing processes without containers, model downloads, or agent-specific runtime code.
 
-LLM-Ops-Kit is a macOS-first, local-LAN control layer for models, agents, proxies, bridges, tunnels, dashboards, and supporting services. It coordinates existing processes without Docker, Kubernetes, model downloads, or agent-specific runtime code.
-
-`llmops` is the only public control command. A component is independently manageable. A stack is a named dependency graph used for coordinated operation.
+`llmops` is the only public control command. Components are independently manageable; stacks are named dependency graphs for coordinated operation.
 
 ## Supported Platform
 
 - macOS on Apple Silicon
 - Python 3.9 or newer
-- GNU Bash available as `/usr/local/bin/bash`
+- GNU Bash at `/usr/local/bin/bash`
 - SSH for remote hosts
 - launchd for supervised services
 
 Linux is not a supported release target.
 
-## Install
+## Install and Initialize
 
 ```bash
 /usr/local/bin/bash scripts/install-runtime.sh
 ~/.local/bin/llmops init --preset single-host
-~/.local/bin/llmops doctor
+~/.local/bin/llmops doctor --probe
 ```
 
-Use `--preset local-lan` for separate model and agent hosts. Initialization creates disabled examples and never starts services.
+Use `--preset local-lan` for separate model and agent hosts. Interactive initialization can discover existing model profiles, normalize selected profiles, and bind chosen chat, embedding, and TTS defaults into disabled starter components. Initialization never starts services.
+
+For deterministic automation:
+
+```bash
+llmops init --preset local-lan \
+  --model-host model-host.local \
+  --agent-host agent-host.local \
+  --model-defaults-from ~/.config/llm-ops \
+  --import-model ChatModel \
+  --import-model EmbeddingModel \
+  --default-chat ChatModel \
+  --default-embedding EmbeddingModel
+```
 
 ## Operate
 
@@ -48,45 +58,43 @@ llmops stack status <stack>
 
 Starting a component starts missing dependencies. Restarting affects only the requested component unless `--cascade` is supplied. Stopping a component with active dependents requires `--force` or `--cascade`.
 
-## Configuration
+## Configuration and Migration
 
-Canonical JSON lives under `~/.config/llm-ops/`:
+Canonical JSON lives under `~/.config/llm-ops/`. Runtime releases consume their bundled role-filtered configuration snapshot unless `LLMOPS_CONFIG_HOME` explicitly selects another root.
 
-```text
-config.json
-inventory.json
-stacks/*.json
-models/*.json
-agents/*.json
-services/*.json
+The runtime never reads proof-of-concept shell configuration. Use a reviewed one-way migration:
+
+```bash
+llmops migrate-config --legacy-home ~/.llm-ops --dry-run --json
+llmops migrate-config --legacy-home ~/.llm-ops
+llmops doctor --probe
 ```
 
-The runtime never reads proof-of-concept shell configuration. Use `llmops migrate-config --legacy-home ~/.llm-ops` once, review the JSON, then remove the old configuration from operation.
-
-Environment variables are limited to path selection, explicit secret injection, and documented emergency process overrides. An optional `LLMOPS_ENV_FILE` is a secret-injection boundary, not a configuration source.
+Environment variables are limited to path selection, explicit secret injection, and documented emergency overrides. `LLMOPS_ENV_FILE` is an explicit secret-injection boundary, not a configuration source.
 
 ## Deployment
 
-The administrator checkout is the one-way desired-state authority. `llmops deploy` packages code and a role-filtered JSON snapshot into one immutable release per host. `current` selects the active release and `previous` retains the rollback target.
+The administrator checkout is the one-way desired-state authority. Deployment packages tracked runtime code and one role-filtered JSON snapshot into an immutable release per host.
 
 ```bash
-llmops deploy --config-home ~/.config/llm-ops --bundle-id <release> --dry-run
-llmops deploy --config-home ~/.config/llm-ops --bundle-id <release>
+llmops deploy --bundle-id <release> --dry-run
+llmops deploy --bundle-id <release>
 llmops drift --stage ~/.local/share/llm-ops/stage/<release>
 llmops rollback
 ```
 
-Deployment refuses dirty source by default. `--allow-dirty` is intended only for a deliberate canary and is recorded in the manifest.
+Dirty deployment sources are refused unless `--allow-dirty` is explicitly supplied and recorded.
 
 ## Documentation
 
-- [Documentation index](docs/INDEX.md)
 - [Quickstart](docs/QUICKSTART.md)
 - [Configuration](docs/CONFIGURATION.md)
+- [Migration](docs/MIGRATION.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Deployment](docs/DEPLOYMENT_OVERVIEW.md)
 - [Upgrade and rollback](docs/UPGRADE_AND_ROLLBACK.md)
 - [Model profiles](docs/MODELCTL_GUIDE.md)
+- [Model proxy](docs/PROXY_TAP_RUNBOOK.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
 
 ## License

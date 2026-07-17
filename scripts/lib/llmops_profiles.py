@@ -70,6 +70,23 @@ def _clean(values: dict[str, Any]) -> dict[str, str]:
     return {key: str(value) for key, value in values.items() if value not in (None, "")}
 
 
+def resolve_references(values: dict[str, str], env: dict[str, str]) -> dict[str, str]:
+    """Resolve explicit environment references for runtime execution."""
+
+    resolved: dict[str, str] = {}
+    for key, value in values.items():
+        if value.startswith("env:"):
+            variable = value.removeprefix("env:")
+            if not variable or variable not in env:
+                raise ProfileError(f"unresolved environment reference for {key}: {value}")
+            resolved[key] = env[variable]
+        elif value.startswith("seckit:"):
+            raise ProfileError(f"unresolved Secrets-Kit reference for {key}; configure the provider before runtime use")
+        else:
+            resolved[key] = value
+    return resolved
+
+
 def model_values(profile: dict[str, Any]) -> dict[str, str]:
     """Resolve a model profile into the stable modelctl runtime vocabulary."""
 
@@ -171,18 +188,21 @@ def service_values(name: str, profile: dict[str, Any]) -> dict[str, str]:
     raise ProfileError(f"unsupported service profile: {name}")
 
 
-def resolved_values(kind: str, name: str, profile: dict[str, Any]) -> dict[str, str]:
+def resolved_values(kind: str, name: str, profile: dict[str, Any], *, runtime_env: Optional[dict[str, str]] = None) -> dict[str, str]:
     """Resolve one profile into stable runtime values."""
 
     if kind == "model":
-        return model_values(profile)
+        values = model_values(profile)
+        return resolve_references(values, runtime_env) if runtime_env is not None else values
     if kind == "service":
-        return service_values(name, profile)
+        values = service_values(name, profile)
+        return resolve_references(values, runtime_env) if runtime_env is not None else values
     if kind == "agent":
         environment = profile.get("environment", {})
         if not isinstance(environment, dict):
             raise ProfileError("agent environment must be a JSON object")
-        return _clean(environment)
+        values = _clean(environment)
+        return resolve_references(values, runtime_env) if runtime_env is not None else values
     raise ProfileError(f"unsupported profile kind: {kind}")
 
 
@@ -193,6 +213,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--profile-path")
     parser.add_argument("--config-home")
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--resolve-references", action="store_true")
     return parser
 
 
@@ -208,7 +229,12 @@ def main(argv: Optional[list[str]] = None) -> int:
             paths=resolve_paths(env),
             path=Path(args.profile_path) if args.profile_path else None,
         )
-        values = resolved_values(args.kind, args.name, profile)
+        values = resolved_values(
+            args.kind,
+            args.name,
+            profile,
+            runtime_env=dict(os.environ) if args.resolve_references else None,
+        )
     except ProfileError as exc:
         print(f"llmops: {exc}", file=sys.stderr)
         return 2

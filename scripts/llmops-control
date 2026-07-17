@@ -17,9 +17,10 @@ from llmops_config import ConfigError, load_config
 from llmops_drivers import ComponentRunner, DriverError, build_component_command
 from llmops_executor import ExecutionError, Executor, component_plan, stack_plan
 from llmops_inventory import InventoryError, load_inventory
-from llmops_init import InitError, initialize
+from llmops_init import InitError, ModelCandidate, discover_model_profiles, initialize
 from llmops_migration import MigrationError, migrate
 from llmops_paths import LlmOpsPaths, resolve_paths
+from llmops_probe import probe_topology
 from llmops_topology import Topology, TopologyError, load_stacks, validate_topology
 
 
@@ -76,7 +77,7 @@ def operation_payload(operations: list[Any]) -> list[dict[str, str]]:
 
 def cmd_doctor(args: argparse.Namespace) -> int:
     errors = validate_topology(CURRENT_TOPOLOGY)
-    payload = {
+    payload: dict[str, Any] = {
         "ok": not errors,
         "config_home": str(CURRENT_TOPOLOGY.paths.config_home),
         "inventory": str(CURRENT_TOPOLOGY.paths.inventory_file),
@@ -84,8 +85,12 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         "components": len(CURRENT_TOPOLOGY.all_components()),
         "errors": errors,
     }
+    if args.probe and not errors:
+        probes = probe_topology(CURRENT_TOPOLOGY)
+        payload["probes"] = probes["checks"]
+        payload["ok"] = bool(payload["ok"] and probes["ok"])
     emit(payload, json_output=args.json)
-    return 0 if not errors else 2
+    return 0 if payload["ok"] else 2
 
 
 def cmd_config_show(args: argparse.Namespace) -> int:
@@ -105,15 +110,65 @@ def cmd_init(args: argparse.Namespace) -> int:
     if args.config_home:
         env["LLMOPS_CONFIG_HOME"] = args.config_home
     paths = resolve_paths(env)
-    created = initialize(
+    source = Path(args.model_defaults_from).expanduser() if args.model_defaults_from else Path.home() / ".config" / "llm-ops"
+    candidates: dict[str, ModelCandidate] = {}
+    if source.resolve() != paths.config_home.resolve() and source.exists():
+        candidates = discover_model_profiles(source)
+    selected = list(dict.fromkeys(args.import_model or []))
+    if args.import_all_models:
+        selected = sorted(candidates)
+    if args.no_model_import:
+        selected = []
+    defaults = {
+        "llm": args.default_chat,
+        "embedding": args.default_embedding,
+        "tts": args.default_tts,
+    }
+    explicit_import = bool(selected or args.import_all_models or args.no_model_import)
+    if candidates and not explicit_import and not args.json and sys.stdin.isatty():
+        print("Existing model profiles:")
+        for candidate in candidates.values():
+            print(f"  {candidate.name} ({candidate.model_type})")
+        choice = input("Import model defaults? [s]elect/[a]ll/[n]one: ").strip().lower()
+        if choice in {"a", "all"}:
+            selected = sorted(candidates)
+        elif choice in {"s", "select"}:
+            names = input("Model names (comma-separated): ").strip()
+            selected = list(dict.fromkeys(item.strip() for item in names.split(",") if item.strip()))
+        elif choice not in {"", "n", "none"}:
+            raise InitError(f"unsupported model import choice: {choice}")
+        for model_type, label in (("llm", "chat"), ("embedding", "embedding"), ("tts", "TTS")):
+            choices = [name for name in selected if name in candidates and candidates[name].model_type == model_type]
+            if not choices:
+                continue
+            answer = input(f"Default {label} profile [{'/'.join(choices)}; blank for none]: ").strip()
+            if answer:
+                defaults[model_type] = answer
+    if selected and not candidates:
+        raise InitError(f"no model defaults found under: {source}")
+    result = initialize(
         paths,
         preset=args.preset,
         force=args.force,
         user=args.user or os.environ.get("USER", "operator"),
         model_host=args.model_host,
         agent_host=args.agent_host,
+        model_candidates=candidates,
+        import_models=selected,
+        default_chat=defaults["llm"],
+        default_embedding=defaults["embedding"],
+        default_tts=defaults["tts"],
     )
-    emit({"ok": True, "preset": args.preset, "created": [str(path) for path in created]}, json_output=args.json)
+    emit(
+        {
+            "ok": True,
+            "preset": args.preset,
+            "created": [str(path) for path in result.created],
+            "imported_models": list(result.imported_models),
+            "converted_secret_fields": list(result.converted_secrets),
+        },
+        json_output=args.json,
+    )
     return 0
 
 
@@ -126,6 +181,7 @@ def cmd_migrate_config(args: argparse.Namespace) -> int:
         resolve_paths(env),
         dry_run=args.dry_run,
         force=args.force,
+        allow_partial=args.allow_partial,
     )
     emit(
         {
@@ -133,6 +189,9 @@ def cmd_migrate_config(args: argparse.Namespace) -> int:
             "unchanged": result.unchanged,
             "source_hash": result.source_hash,
             "written": [str(path) for path in result.written],
+            "mappings": list(result.mappings),
+            "warnings": list(result.warnings),
+            "skipped": list(result.skipped),
         },
         json_output=args.json,
     )
@@ -278,6 +337,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     doctor = sub.add_parser("doctor")
+    doctor.add_argument("--probe", action="store_true")
     doctor.set_defaults(func=cmd_doctor)
 
     init = sub.add_parser("init")
@@ -285,6 +345,14 @@ def build_parser() -> argparse.ArgumentParser:
     init.add_argument("--user")
     init.add_argument("--model-host", default="model-host.local")
     init.add_argument("--agent-host", default="agent-host.local")
+    init.add_argument("--model-defaults-from")
+    init.add_argument("--import-model", action="append", default=[])
+    import_mode = init.add_mutually_exclusive_group()
+    import_mode.add_argument("--import-all-models", action="store_true")
+    import_mode.add_argument("--no-model-import", action="store_true")
+    init.add_argument("--default-chat")
+    init.add_argument("--default-embedding")
+    init.add_argument("--default-tts")
     init.add_argument("--force", action="store_true")
     init.set_defaults(func=cmd_init, topology_required=False)
 
@@ -292,6 +360,7 @@ def build_parser() -> argparse.ArgumentParser:
     migrate_config.add_argument("--legacy-home", default="~/.llm-ops")
     migrate_config.add_argument("--dry-run", action="store_true")
     migrate_config.add_argument("--force", action="store_true")
+    migrate_config.add_argument("--allow-partial", action="store_true")
     migrate_config.set_defaults(func=cmd_migrate_config, topology_required=False)
 
     plan = sub.add_parser("plan")

@@ -3,11 +3,10 @@
 
 Logs request/response metadata and JSON bodies to NDJSON while proxying traffic.
 
-Typical use:
-  model-proxy-tap --upstream http://<upstream-host>:<upstream-port> --listen-port 18080 \
-    --log ~/.local/state/llm-ops/logs/model-proxy.ndjson
+This module is an internal driver. Operators configure and invoke it through
+the ``llmops`` component interface or the managed ``model-proxy`` service.
 
-Then point OpenClaw llamacpp baseUrl to:
+Then point an OpenAI-compatible client base URL to:
   http://127.0.0.1:18080/v1
 """
 

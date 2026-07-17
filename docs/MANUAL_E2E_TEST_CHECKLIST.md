@@ -1,49 +1,44 @@
 # Manual End-to-End Acceptance
 
-**Created**: 2026-07-16
-**Updated**: 2026-07-16
-
 Back: [Documentation index](./INDEX.md)
 
-## Source
+## Source and Backups
 
-- [x] `git status --short` is clean.
-- [x] `scripts/precheck` passes.
-- [x] `llmops --help` exposes only the documented public commands.
-- [x] A repository search finds no removed synchronization commands or agent-specific adapters.
+- [ ] Create checksummed runtime and configuration backups on both hosts.
+- [ ] Commit the release candidate locally and confirm a clean source tree.
+- [ ] Confirm `scripts/precheck --release` passes.
+- [ ] Build and distribute test source exclusively from `git archive HEAD`.
 
-## Isolated Installation
+## Fresh Installation
 
-- [x] Install from a clean checkout into isolated install, config, data, state, cache, and public-bin roots.
-- [x] Confirm `current` resolves to the new release and no `previous` exists on first install.
-- [x] Run `llmops init`, `doctor`, `config show`, and non-mutating plans.
-- [x] Run `--repair` twice and confirm idempotence.
-- [x] Upgrade from a second release and confirm `previous` identifies the first release.
-- [x] Uninstall and confirm unrelated model and agent data remains untouched.
-- [x] Repeat with `--purge` and confirm only selected LLM-Ops-Kit roots are removed.
+- [ ] Install into isolated install, config, data, state, cache, and public command roots on both hosts.
+- [ ] Exercise interactive model discovery and selective import against saved profiles.
+- [ ] Exercise deterministic non-interactive import and compare output.
+- [ ] Confirm legacy `env` normalization and secret-reference conversion.
+- [ ] Bind selected chat, embedding, and TTS defaults while leaving every generated component disabled.
+- [ ] Run static doctor, active probe, configuration display, and non-mutating plans.
+- [ ] Run repair twice, upgrade the isolated runtime, and exchange current and previous through rollback.
+- [ ] Verify default uninstall preserves configuration and purge removes only selected toolkit roots.
 
 ## Migration
 
-- [x] Restore proof-of-concept fixtures into an isolated legacy root.
-- [x] Run migration dry-run and inspect destinations.
-- [x] Run migration and confirm only JSON plus the migration marker is written.
-- [x] Run migration again and confirm an unchanged no-op.
-- [x] Change a source fixture and confirm migration refuses without `--force`.
-- [x] Confirm runtime behavior is unchanged when legacy files are edited after migration.
+- [ ] Preview real proof-of-concept fixtures and inspect every mapping, warning, and skip.
+- [ ] Confirm unknown inputs block normal migration and `--allow-partial` migrates only classified inputs.
+- [ ] Confirm repeat migration is an unchanged no-op and changed sources require reviewed force.
+- [ ] Confirm runtime behavior never changes when legacy files are edited after migration.
 
-## Deployment
+## Live Upgrade and Runtime
 
-- [x] Dry-run a selected-host deployment.
-- [x] Inspect package and host snapshots for secrets, `.env` files, tests, logs, databases, and model weights.
-- [x] Deploy to both hosts and confirm code and host-filtered configuration share one release.
-- [x] Confirm `llmops drift --json` reports no differences.
-- [x] Exchange `current` and `previous` with rollback, verify, then return to the new release.
+- [ ] Upgrade both live hosts without changing canonical configuration hashes.
+- [ ] Confirm current and previous release targets and zero drift.
+- [ ] Restart one model component without restarting dependents.
+- [ ] Confirm stop refuses active dependents without force or cascade.
+- [ ] Confirm cascade order is dependency-safe and failed starts preserve pre-existing components.
+- [ ] Run one dependency-ordered cold stop/start.
+- [ ] Pass model, embedding, proxy, TTS, bridge, agent, dashboard, tunnel, and reconnection protocol checks.
+- [ ] Roll back to the prior runtime, validate, and return to the release candidate.
 
-## Runtime
+## Observation
 
-- [x] Start missing dependencies through one component start.
-- [x] Restart a model component and confirm dependents remain running.
-- [x] Confirm stop refuses active dependents without `--force` or `--cascade`.
-- [x] Confirm cascade order is dependency-safe.
-- [x] Confirm a failed start leaves pre-existing components running.
-- [x] Run chat, embedding, proxy, TTS, agent, dashboard, and tunnel protocol checks for the configured environment.
+- [ ] Retain backups and prior runtimes through two successful operational reporting cycles.
+- [ ] Record final evidence and mark the release audit only from current results.

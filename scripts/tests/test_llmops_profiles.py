@@ -4,17 +4,19 @@
 from __future__ import annotations
 
 import json
+import shutil
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 LIB = Path(__file__).resolve().parents[1] / "lib"
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
 sys.path.insert(0, str(LIB))
 
 from llmops_migration import MigrationError, migrate
 from llmops_paths import resolve_paths
-from llmops_profiles import ProfileError, load_profile, model_values, service_values
+from llmops_profiles import ProfileError, load_profile, model_values, resolve_references, service_values
 
 
 class ProfileTests(unittest.TestCase):
@@ -48,8 +50,37 @@ class ProfileTests(unittest.TestCase):
             {"MODEL_PROXY_LISTEN_PORT": "11434"},
         )
 
+    def test_runtime_environment_references_are_resolved_explicitly(self) -> None:
+        self.assertEqual(resolve_references({"API_KEY": "env:MODEL_API_KEY"}, {"MODEL_API_KEY": "value"}), {"API_KEY": "value"})
+        with self.assertRaisesRegex(ProfileError, "unresolved environment reference"):
+            resolve_references({"API_KEY": "env:MISSING"}, {})
+
 
 class MigrationTests(unittest.TestCase):
+    def test_realistic_legacy_fixture_maps_all_supported_types(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            legacy = root / "legacy"
+            shutil.copytree(FIXTURES / "legacy", legacy)
+            paths = resolve_paths(
+                {
+                    "HOME": str(root),
+                    "LLMOPS_CONFIG_HOME": str(root / "canonical"),
+                    "LLMOPS_DATA_HOME": str(root / "data"),
+                    "LLMOPS_STATE_HOME": str(root / "state"),
+                    "LLMOPS_CACHE_HOME": str(root / "cache"),
+                }
+            )
+            preview = migrate(legacy, paths, dry_run=True)
+            self.assertEqual({item["kind"] for item in preview.mappings}, {"model", "service", "agent", "inventory"})
+            result = migrate(legacy, paths)
+            self.assertFalse(result.skipped)
+            tts = json.loads((paths.models_dir / "TTSModel.json").read_text(encoding="utf-8"))
+            agent = json.loads((paths.agents_dir / "generic.json").read_text(encoding="utf-8"))
+            self.assertEqual(tts["environment"]["TTS_API_KEY"], "env:TTS_API_KEY")
+            self.assertEqual(agent["environment"]["AGENT_API_TOKEN"], "env:AGENT_API_TOKEN")
+            self.assertFalse(agent["enabled"])
+
     def test_migration_is_one_way_and_idempotent(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -79,6 +110,37 @@ class MigrationTests(unittest.TestCase):
             (legacy / "config" / "chat.env").write_text("MODEL=/models/new.gguf\n", encoding="utf-8")
             with self.assertRaisesRegex(MigrationError, "source changed"):
                 migrate(legacy, paths)
+
+    def test_migration_classifies_services_and_reports_unknown_inputs(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            legacy = root / "legacy"
+            (legacy / "config").mkdir(parents=True)
+            (legacy / "config.env").write_text("HOST=127.0.0.1\n", encoding="utf-8")
+            (legacy / "config" / "model-proxy.env").write_text(
+                "LLMOPS_UPSTREAM_HOST=models.local\nLLMOPS_UPSTREAM_PORT=11434\nAPI_KEY=secret\n",
+                encoding="utf-8",
+            )
+            (legacy / "config" / "notes.env").write_text("UNRELATED=value\n", encoding="utf-8")
+            paths = resolve_paths(
+                {
+                    "HOME": str(root),
+                    "LLMOPS_CONFIG_HOME": str(root / "canonical"),
+                    "LLMOPS_DATA_HOME": str(root / "data"),
+                    "LLMOPS_STATE_HOME": str(root / "state"),
+                    "LLMOPS_CACHE_HOME": str(root / "cache"),
+                }
+            )
+            preview = migrate(legacy, paths, dry_run=True)
+            unknown = str((legacy / "config" / "notes.env").resolve())
+            self.assertEqual(preview.skipped, (unknown,))
+            self.assertEqual(preview.mappings[0]["kind"], "service")
+            with self.assertRaisesRegex(MigrationError, "unclassified inputs"):
+                migrate(legacy, paths)
+            result = migrate(legacy, paths, allow_partial=True)
+            service = json.loads((paths.services_dir / "model-proxy.json").read_text(encoding="utf-8"))
+            self.assertEqual(service["environment"]["API_KEY"], "env:API_KEY")
+            self.assertIn(unknown, result.skipped)
 
 
 if __name__ == "__main__":

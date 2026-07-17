@@ -4,7 +4,10 @@
 from __future__ import annotations
 
 import os
+import json
+import shutil
 import subprocess
+import tarfile
 import tempfile
 import unittest
 from pathlib import Path
@@ -89,6 +92,61 @@ class InstallerTests(unittest.TestCase):
             self.run_command(uninstall + ["--purge"], env)
             for path in (install, config, data, state, cache):
                 self.assertFalse(path.exists(), str(path))
+
+    def test_git_archive_is_installable_and_proxy_render_uses_python(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repository = root / "repository"
+            shutil.copytree(
+                REPO_ROOT / "scripts",
+                repository / "scripts",
+                ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+            )
+            subprocess.run(["git", "init", "-q", str(repository)], check=True)
+            subprocess.run(["git", "-C", str(repository), "add", "scripts"], check=True)
+            subprocess.run(
+                [
+                    "git", "-C", str(repository),
+                    "-c", "user.name=LLM Ops Test",
+                    "-c", "user.email=test@example.invalid",
+                    "commit", "-qm", "archive fixture",
+                ],
+                check=True,
+            )
+            archive = root / "source.tar"
+            with archive.open("wb") as stream:
+                subprocess.run(["git", "-C", str(repository), "archive", "HEAD"], stdout=stream, check=True)
+            source = root / "source"
+            source.mkdir()
+            with tarfile.open(archive) as bundle:
+                bundle.extractall(source)
+            self.assertFalse((source / "bin").exists())
+            env = {
+                **os.environ,
+                "HOME": str(root / "home"),
+                "LLMOPS_HOME": str(root / "install"),
+                "LLMOPS_CONFIG_HOME": str(root / "config"),
+                "LLMOPS_STATE_HOME": str(root / "state"),
+            }
+            install = [
+                "/usr/local/bin/bash",
+                str(source / "scripts" / "install-runtime.sh"),
+                "--source", str(source),
+                "--prefix", str(root / "install"),
+                "--public-bin-dir", str(root / "public-bin"),
+                "--state-home", str(root / "state"),
+                "--release-id", "archive-test",
+            ]
+            self.run_command(install, env)
+            payload = root / "payload.json"
+            payload.write_text(
+                json.dumps({"messages": [{"role": "user", "content": "test"}]}),
+                encoding="utf-8",
+            )
+            self.run_command(
+                [str(root / "install" / "bin" / "model-proxy"), "render", "--input", str(payload)],
+                env,
+            )
 
 
 if __name__ == "__main__":

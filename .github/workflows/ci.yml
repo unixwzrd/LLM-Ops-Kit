@@ -6,7 +6,10 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: macos-14
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.11", "3.13"]
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -14,13 +17,20 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python-version }}
 
       - name: Install shellcheck
+        shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y shellcheck
+          case "$(uname -m)" in
+            arm64) shellcheck_arch=aarch64 ;;
+            x86_64) shellcheck_arch=x86_64 ;;
+            *) echo "unsupported CI architecture: $(uname -m)" >&2; exit 2 ;;
+          esac
+          curl -fsSL --retry 3 "https://github.com/koalaman/shellcheck/releases/download/stable/shellcheck-stable.darwin.${shellcheck_arch}.tar.xz" -o "$RUNNER_TEMP/shellcheck.tar.xz"
+          tar -xJf "$RUNNER_TEMP/shellcheck.tar.xz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/shellcheck-stable" >> "$GITHUB_PATH"
 
       - name: Run local precheck
         run: |
-          scripts/precheck
+          scripts/precheck --release

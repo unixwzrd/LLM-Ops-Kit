@@ -123,7 +123,7 @@ def _source_root(args: argparse.Namespace, topology: Topology) -> Path:
     deployment = topology.config.data.get("deployment", {})
     configured = deployment.get("source_root") if isinstance(deployment, dict) else None
     source = Path(args.source or configured or REPO_ROOT).expanduser().resolve()
-    if not (source / "scripts").is_dir() or not (source / "bin").is_dir():
+    if not (source / "scripts").is_dir():
         raise DeploymentError(f"invalid deployment source checkout: {source}")
     return source
 
@@ -146,7 +146,7 @@ def _build_package(stage: Path, source_root: Path) -> Path:
     package = stage / "package" / "llm-ops-kit.tar.gz"
     package.parent.mkdir(parents=True, exist_ok=True)
     tracked = subprocess.run(
-        ["git", "-C", str(source_root), "ls-files", "-z", "--", "scripts", "bin"],
+        ["git", "-C", str(source_root), "ls-files", "-z", "--", "scripts"],
         capture_output=True,
         check=False,
     )
@@ -159,14 +159,13 @@ def _build_package(stage: Path, source_root: Path) -> Path:
         if "tests" not in name.parts
         and "__pycache__" not in name.parts
         and not name.name.endswith((".pyc", ".pyo", ".DS_Store"))
+        and (source_root / name).exists()
     ]
     if not names:
         raise DeploymentError(f"deployment source has no tracked runtime files: {source_root}")
     with tarfile.open(package, "w:gz") as archive:
         for name in sorted(names):
             source = source_root / name
-            if not source.exists() and not source.is_symlink():
-                raise DeploymentError(f"tracked deployment file is missing: {source}")
             archive.add(source, arcname=Path("LLM-Ops-Kit") / name, recursive=False)
     return package
 

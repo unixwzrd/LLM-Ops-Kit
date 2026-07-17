@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One-way migration from the proof-of-concept shell configuration."""
+"""One-way classified migration from proof-of-concept configuration."""
 
 from __future__ import annotations
 
@@ -13,9 +13,11 @@ from typing import Any, Optional
 
 try:
     from llmops_config import default_config
+    from llmops_init import sanitize_secret_references
     from llmops_paths import LlmOpsPaths
 except ModuleNotFoundError:  # pragma: no cover
     from .llmops_config import default_config
+    from .llmops_init import sanitize_secret_references
     from .llmops_paths import LlmOpsPaths
 
 
@@ -25,21 +27,22 @@ class MigrationError(RuntimeError):
 
 VARIABLE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 DEFAULT_VALUE = re.compile(r"^\$\{([A-Za-z_][A-Za-z0-9_]*):-([^}]*)\}$")
+SERVICES = {"model-proxy", "model_proxy", "tts-bridge", "tts_bridge"}
 
 
 @dataclass(frozen=True)
 class MigrationResult:
-    """Summary of a migration or idempotent no-op."""
-
     source_hash: str
     written: tuple[Path, ...]
     unchanged: bool
+    mappings: tuple[dict[str, Any], ...]
+    warnings: tuple[str, ...]
+    skipped: tuple[str, ...]
 
 
 def _assignment_value(raw: str, known: dict[str, str]) -> str:
-    value = raw.strip()
     try:
-        tokens = shlex.split(value, comments=True, posix=True)
+        tokens = shlex.split(raw.strip(), comments=True, posix=True)
     except ValueError:
         return ""
     if len(tokens) != 1:
@@ -74,8 +77,6 @@ def parse_assignments(path: Path) -> dict[str, str]:
 
 
 def source_files(legacy_home: Path) -> list[Path]:
-    """Return deterministic legacy inputs from the explicitly selected home."""
-
     candidates = [legacy_home / "config.env"]
     candidates.extend(sorted((legacy_home / "config").glob("*.env")))
     candidates.extend(sorted((legacy_home / "config").glob("*.sh")))
@@ -85,12 +86,10 @@ def source_files(legacy_home: Path) -> list[Path]:
     return [path for path in candidates if path.is_file()]
 
 
-def source_hash(files: list[Path]) -> str:
-    """Hash source names and bytes so repeated migration is deterministic."""
-
+def source_hash(files: list[Path], legacy_home: Path) -> str:
     digest = hashlib.sha256()
     for path in files:
-        digest.update(str(path).encode("utf-8"))
+        digest.update(str(path.relative_to(legacy_home)).encode("utf-8"))
         digest.update(b"\0")
         digest.update(path.read_bytes())
         digest.update(b"\0")
@@ -151,89 +150,98 @@ def _simple_yaml_inventory(path: Path) -> dict[str, Any]:
     return {"schema_version": 1, "defaults": defaults, "hosts": hosts}
 
 
-def _documents(legacy_home: Path, paths: LlmOpsPaths, digest: str) -> dict[Path, dict[str, Any]]:
+def _classify(path: Path, values: dict[str, str]) -> Optional[str]:
+    if path.parent.name == "agents":
+        return "agent"
+    stem = path.stem.lower()
+    if stem in SERVICES or any(key.startswith(("MODEL_PROXY_", "TTS_BRIDGE_", "LLMOPS_UPSTREAM_")) for key in values):
+        return "service"
+    if "MODEL" in values or "MODEL_TYPE" in values or "TTS_SERVER_MODULE" in values:
+        return "model"
+    return None
+
+
+def _documents(legacy_home: Path, paths: LlmOpsPaths, digest: str) -> tuple[dict[Path, dict[str, Any]], list[dict[str, Any]], list[str], list[str]]:
     files = source_files(legacy_home)
     global_values = parse_assignments(legacy_home / "config.env")
     config = default_config()
-    config["migration"] = {
-        "version": 1,
-        "source_home": str(legacy_home),
-        "source_hash": digest,
-        "sources": [str(path) for path in files],
-    }
+    config["migration"] = {"version": 1, "source_hash": digest}
     documents: dict[Path, dict[str, Any]] = {paths.config_file: config}
-    for path in sorted((legacy_home / "config").glob("*")):
-        if not path.is_file() or path.suffix not in {".env", ".sh"}:
+    mappings: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    skipped: list[str] = []
+
+    for path in files:
+        if path == legacy_home / "config.env" or path.name.startswith("inventory."):
             continue
         values = {**global_values, **parse_assignments(path)}
-        documents[paths.models_dir / f"{path.stem}.json"] = {
-            "schema_version": 1,
-            "name": path.stem,
-            "environment": values,
-            "migrated_from": str(path),
-        }
-    for path in sorted((legacy_home / "config" / "agents").glob("*.env")):
-        documents[paths.agents_dir / f"{path.stem}.json"] = {
-            "schema_version": 1,
-            "name": path.stem,
-            "environment": {**global_values, **parse_assignments(path)},
-            "actions": {},
-            "migrated_from": str(path),
-        }
-    inventory = next(
-        (path for path in files if path.name in {"inventory.json", "inventory.yml", "inventory.yaml"}),
-        None,
-    )
+        kind = _classify(path, values)
+        if kind is None:
+            skipped.append(str(path))
+            warnings.append(f"unclassified legacy input: {path}")
+            continue
+        payload: dict[str, Any]
+        if kind == "model":
+            model_type = values.get("MODEL_TYPE", "tts" if "TTS_SERVER_MODULE" in values else "llm").lower()
+            payload = {"schema_version": 1, "name": path.stem, "type": model_type, "environment": values}
+            destination = paths.models_dir / f"{path.stem}.json"
+        elif kind == "service":
+            service_name = "tts-bridge" if "tts" in path.stem.lower() or any(key.startswith("TTS_BRIDGE_") for key in values) else "model-proxy"
+            payload = {"schema_version": 1, "name": service_name, "environment": values}
+            destination = paths.services_dir / f"{service_name}.json"
+        else:
+            payload = {"schema_version": 1, "name": path.stem, "enabled": False, "environment": values, "actions": {}}
+            destination = paths.agents_dir / f"{path.stem}.json"
+            warnings.append(f"agent lifecycle actions require review: {path}")
+        if destination in documents:
+            skipped.append(str(path))
+            warnings.append(f"multiple legacy inputs map to {destination}: {path}")
+            continue
+        payload, converted = sanitize_secret_references(payload)
+        documents[destination] = payload
+        mappings.append({"source": str(path), "destination": str(destination), "kind": kind, "converted_secret_fields": list(converted)})
+
+    inventory = next((path for path in files if path.name in {"inventory.json", "inventory.yml", "inventory.yaml"}), None)
     if inventory is not None:
-        documents[paths.inventory_file] = (
-            _json_inventory(inventory) if inventory.suffix == ".json" else _simple_yaml_inventory(inventory)
-        )
-    return documents
+        documents[paths.inventory_file] = _json_inventory(inventory) if inventory.suffix == ".json" else _simple_yaml_inventory(inventory)
+        mappings.append({"source": str(inventory), "destination": str(paths.inventory_file), "kind": "inventory", "converted_secret_fields": []})
+    return documents, mappings, warnings, skipped
 
 
-def migrate(
-    legacy_home: Path,
-    paths: LlmOpsPaths,
-    *,
-    dry_run: bool = False,
-    force: bool = False,
-) -> MigrationResult:
-    """Migrate once, refusing implicit overwrite and never reading legacy data at runtime."""
+def migrate(legacy_home: Path, paths: LlmOpsPaths, *, dry_run: bool = False, force: bool = False, allow_partial: bool = False) -> MigrationResult:
+    """Migrate once without executing or retaining legacy runtime inputs."""
 
     legacy_home = legacy_home.expanduser().resolve()
     files = source_files(legacy_home)
     if not files:
         raise MigrationError(f"no proof-of-concept configuration found under: {legacy_home}")
-    digest = source_hash(files)
+    digest = source_hash(files, legacy_home)
     marker = paths.config_home / ".migration-v1.json"
     if marker.is_file():
         existing = json.loads(marker.read_text(encoding="utf-8"))
         if existing.get("source_hash") == digest:
-            return MigrationResult(digest, tuple(), True)
+            return MigrationResult(digest, tuple(), True, tuple(), tuple(), tuple())
         if not force:
             raise MigrationError("migration source changed; rerun with --force after reviewing the diff")
-    documents = _documents(legacy_home, paths, digest)
+    documents, mappings, warnings, skipped = _documents(legacy_home, paths, digest)
+    if skipped and not allow_partial and not dry_run:
+        raise MigrationError("migration found unclassified inputs; review the dry-run and rerun with --allow-partial: " + ", ".join(skipped))
+    documents[marker] = {"schema_version": 1, "source_hash": digest}
     conflicts = [path for path in documents if path.exists()]
     if conflicts and not force:
         raise MigrationError("destination exists; use --force after backup: " + ", ".join(map(str, conflicts)))
     if dry_run:
-        return MigrationResult(digest, tuple(sorted(documents)), False)
-    written: list[Path] = []
-    for path, payload in sorted(documents.items()):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = path.with_name(f".{path.name}.tmp")
-        temporary.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        temporary.replace(path)
-        written.append(path)
-    marker.parent.mkdir(parents=True, exist_ok=True)
-    marker.write_text(
-        json.dumps(
-            {"schema_version": 1, "source_home": str(legacy_home), "source_hash": digest},
-            indent=2,
-            sort_keys=True,
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-    written.append(marker)
-    return MigrationResult(digest, tuple(written), False)
+        return MigrationResult(digest, tuple(sorted(documents)), False, tuple(mappings), tuple(warnings), tuple(skipped))
+    temporary: list[tuple[Path, Path]] = []
+    try:
+        for path, payload in sorted(documents.items()):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            candidate = path.with_name(f".{path.name}.migration-tmp")
+            candidate.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            temporary.append((candidate, path))
+        for candidate, path in temporary:
+            candidate.replace(path)
+    finally:
+        for candidate, _ in temporary:
+            candidate.unlink(missing_ok=True)
+    return MigrationResult(digest, tuple(path for _, path in temporary), False, tuple(mappings), tuple(warnings), tuple(skipped))

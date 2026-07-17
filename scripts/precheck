@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+RELEASE_CHECK=0
+if [[ "${1:-}" == "--release" ]]; then
+  RELEASE_CHECK=1
+  shift
+fi
+[[ $# -eq 0 ]] || { echo "usage: precheck [--release]" >&2; exit 2; }
+
 SOURCE="${BASH_SOURCE[0]}"
 while [[ -h "$SOURCE" ]]; do
   DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
@@ -29,8 +36,10 @@ python_targets=(
   "scripts/lib/llmops_drivers.py"
   "scripts/lib/llmops_executor.py"
   "scripts/lib/llmops_inventory.py"
+  "scripts/lib/llmops_init.py"
   "scripts/lib/llmops_migration.py"
   "scripts/lib/llmops_paths.py"
+  "scripts/lib/llmops_probe.py"
   "scripts/lib/llmops_profiles.py"
   "scripts/lib/llmops_topology.py"
 )
@@ -51,5 +60,13 @@ python3 -m py_compile "${python_targets[@]}"
 
 echo "==> Python regression tests"
 python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+
+if [[ "$RELEASE_CHECK" -eq 1 ]]; then
+  echo "==> Release source hygiene"
+  [[ -z "$(git status --short)" ]] || { git status --short >&2; echo "precheck: release source is dirty" >&2; exit 2; }
+  for path in bin stage tmp docs/internal docs/reports docs/scripts grammars scripts/agents scripts/config scripts/models; do
+    [[ ! -e "$path" ]] || { echo "precheck: obsolete or generated path remains: $path" >&2; exit 2; }
+  done
+fi
 
 echo "precheck: OK"

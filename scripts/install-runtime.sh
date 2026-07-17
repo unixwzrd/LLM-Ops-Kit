@@ -108,7 +108,7 @@ if [[ "$REPAIR" -eq 1 ]]; then
   exit 0
 fi
 
-[[ -d "$SOURCE_DIR/scripts" && -d "$SOURCE_DIR/bin" ]] || {
+[[ -d "$SOURCE_DIR/scripts" ]] || {
   echo "install-runtime.sh: invalid source checkout: $SOURCE_DIR" >&2
   exit 2
 }
@@ -155,7 +155,6 @@ trap cleanup EXIT INT TERM
 [[ ! -e "$release" ]] || { echo "install-runtime.sh: release already exists: $release" >&2; exit 2; }
 mkdir -p "$staging" "$INSTALL_BASE/releases"
 rsync -a --delete --exclude tests --exclude __pycache__ --exclude '*.pyc' "$SOURCE_DIR/scripts/" "$staging/scripts/"
-rsync -a --delete "$SOURCE_DIR/bin/" "$staging/bin/"
 [[ -x "$staging/scripts/llmops" && -x "$staging/scripts/llmops-control" ]] || {
   echo "install-runtime.sh: staged payload is incomplete" >&2
   exit 2

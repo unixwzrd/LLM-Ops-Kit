@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "defaults": {
+    "user": "operator",
+    "install_root": "~/.local/llm-ops"
+  },
+  "hosts": [
+    {
+      "name": "local",
+      "role": "hybrid",
+      "host": "localhost",
+      "transport": "local"
+    }
+  ]
+}

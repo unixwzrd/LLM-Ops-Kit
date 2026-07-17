@@ -1,339 +1,43 @@
-# Model Proxy Tap Runbook
+# Model Proxy Runbook
 
-**Created**: 2026-02-22
-**Updated**: 2026-05-09
+Back: [Documentation index](./INDEX.md)
 
-- [Model Proxy Tap Runbook](#model-proxy-tap-runbook)
-  - [Purpose](#purpose)
-  - [Start Proxy (Default)](#start-proxy-default)
-  - [Start Proxy With Rendered Prompt Logging](#start-proxy-with-rendered-prompt-logging)
-  - [Strict Flush Mode](#strict-flush-mode)
-  - [Local Example (Template)](#local-example-template)
-  - [Direct Logs (No jq)](#direct-logs-no-jq)
-  - [jq Parse Pattern (Important)](#jq-parse-pattern-important)
-  - [Live Traffic View](#live-traffic-view)
-  - [Token And Timing Stats View](#token-and-timing-stats-view)
-  - [Role / Tool Summary View](#role--tool-summary-view)
-  - [Rendered Prompt (Human Readable)](#rendered-prompt-human-readable)
-  - [Rendered Prompt (Only Body)](#rendered-prompt-only-body)
-  - [Extract Latest Rendered Prompt To File](#extract-latest-rendered-prompt-to-file)
-  - [Framed Raw Request Stream](#framed-raw-request-stream)
-  - [Combined Raw File (Recommended)](#combined-raw-file-recommended)
-  - [Full Pretty Request/Response Blocks](#full-pretty-requestresponse-blocks)
-  - [Troubleshooting](#troubleshooting)
-  - [Clean Restart + 3-Request Validation](#clean-restart--3-request-validation)
+The model proxy records request and response metadata, token usage, timings, raw framed traffic, and optional rendered prompts while forwarding OpenAI-compatible requests unchanged by default.
 
-## Purpose
-
-Capture what an agent sends to the model with enough observability to debug prompt shaping, tool-call flow, retries, and timeouts.
-
-## Start Proxy (Default)
+## Operate the Component
 
 ```bash
-~/bin/model-proxy-tap
+llmops component status model-proxy
+llmops component start model-proxy
+llmops component restart model-proxy
+llmops component logs model-proxy
+llmops component stop model-proxy
 ```
 
-Default wrapper values (`~/bin/model-proxy-tap`):
+The proxy profile defines listen address, upstream address, Python interpreter, chat template, and log rotation. The typed component driver invokes the installed implementation; no separately installed wrapper is required.
 
-- `UPSTREAM=http://<upstream-host>:<upstream-port>`
-- `LISTEN_HOST=127.0.0.1`
-- `LISTEN_PORT=18080`
-- `LOG_PATH=~/.local/state/llm-ops/logs/model-proxy.ndjson`
-- `RAW_LOG=~/.local/state/llm-ops/logs/model-proxy.raw.log` (combined request + response)
-- `RENDERED_PROMPT_LOG=~/.local/state/llm-ops/logs/model-proxy.rendered.log`
-- `LOG_FSYNC=0`
+## Render Diagnostics
 
-Traffic-safety note:
-
-- By default the proxy forwards the original request body unchanged.
-- `--chat-template` only produces derived logging artifacts (`model-proxy.ndjson`, raw framed logs, and `model-proxy.rendered.log`); it does not rewrite traffic sent upstream.
-- Request rewriting happens only if you opt in to `--latest-image-only`.
-
-Sample output:
-
-```text
-model-proxy-tap listening on http://127.0.0.1:18080 -> http://<upstream-host>:<upstream-port> ...
-```
-
-## Start Proxy With Rendered Prompt Logging
+Render mode is an advanced diagnostic on the host that owns the proxy component:
 
 ```bash
-~/bin/model-proxy-tap --chat-template ~/projects/LLM-Ops-Kit/scripts/templates/chatml-tools.jinja
+~/.local/llm-ops/bin/model-proxy render --input <payload.json>
+~/.local/llm-ops/bin/model-proxy render --input <payload.json> --chat-template <template.jinja>
 ```
 
-Note: template-load status is reflected in NDJSON fields (`rendered_prompt` / `rendered_prompt_error`).
+This internal driver command writes the same raw and rendered diagnostic artifacts without starting the listener. Use `-` as the input path to read JSON from standard input.
 
-## Strict Flush Mode
+## Traffic Behavior
 
-```bash
-LOG_FSYNC=1 ~/bin/model-proxy-tap
-```
+- The original request body is forwarded unchanged by default.
+- A chat template creates derived logging artifacts; it does not rewrite upstream traffic.
+- Request rewriting occurs only when an explicit rewriting option is enabled.
+- Logs may contain prompts and responses and must be protected as operational data.
 
-No special banner is guaranteed for fsync mode; verify by expected log durability behavior.
+## Logs
 
-## Local Example (Template)
+Default state is under `~/.local/state/llm-ops/logs/`. Use the profile to relocate logs or change rotation limits. `runtime-maintenance` applies toolkit retention settings without deleting model or agent state.
 
-```text
-UPSTREAM=http://<upstream-host>:<upstream-port>
-LISTEN_HOST=127.0.0.1
-LISTEN_PORT=18080
-```
+## Validation
 
-## Direct Logs (No jq)
-
-```bash
-tail -F ~/.local/state/llm-ops/logs/model-proxy.raw.log
-```
-
-Sample output:
-
-```text
-=== RAW_REQUEST START 2026-02-23T23:57:36.210Z ===
-{"model":"Qwen3...","messages":[...],"tools":[...]}
-=== RAW_REQUEST END 2026-02-23T23:57:36.210Z ===
-```
-
-```bash
-tail -F ~/.local/state/llm-ops/logs/model-proxy.rendered.log
-```
-
-Sample output:
-
-```text
-=== RENDERED_PROMPT START 2026-02-23T23:57:36.210Z ===
-<|im_start|>system
-...
-<|im_start|>assistant
-=== RENDERED_PROMPT END 2026-02-23T23:57:36.210Z ===
-```
-
-## jq Parse Pattern (Important)
-
-Use this pattern so commands work whether lines are plain JSON objects or JSON strings:
-
-```jq
-(fromjson? // .)
-```
-
-## Live Traffic View
-
-```bash
-tail -F ~/.local/state/llm-ops/logs/model-proxy.ndjson | jq --unbuffered -r '
-  (fromjson? // .)
-  | select(.path=="/v1/chat/completions")
-  | [.ts, .event, (.response_status // "-"), (.duration_ms // "-")]
-  | @tsv'
-```
-
-Sample output:
-
-```text
-2026-02-23T23:57:36.210342+00:00	request_start	-	-
-2026-02-23T23:57:37.910112+00:00	request_end	200	1699
-```
-
-## Token And Timing Stats View
-
-`request_end` records include `response_stats` when the upstream response exposes structured usage and timing fields, for example from llama.cpp OpenAI-compatible responses.
-
-```bash
-tail -F ~/.local/state/llm-ops/logs/model-proxy.ndjson | jq --unbuffered -r '
-  (fromjson? // .)
-  | select(.event=="request_end" and .path=="/v1/chat/completions")
-  | .response_stats as $s
-  | [
-      .ts,
-      (.response_status|tostring),
-      ("prompt=" + (($s.usage.prompt_tokens // "-")|tostring)),
-      ("completion=" + (($s.usage.completion_tokens // "-")|tostring)),
-      ("total=" + (($s.usage.total_tokens // "-")|tostring)),
-      ("cached=" + (($s.usage.cached_prompt_tokens // "-")|tostring)),
-      ("prompt_ms=" + (($s.timings.prompt_ms // "-")|tostring)),
-      ("predicted_ms=" + (($s.timings.predicted_ms // "-")|tostring)),
-      ("prompt_tps=" + (($s.timings.prompt_per_second // "-")|tostring)),
-      ("predicted_tps=" + (($s.timings.predicted_per_second // "-")|tostring)),
-      ("finish=" + ((($s.finish_reasons // []) | join(",")) // ""))
-    ]
-  | @tsv'
-```
-
-Sample output:
-
-```text
-2026-03-22T04:10:07.000000+00:00	200	prompt=15	completion=7	total=22	cached=0	prompt_ms=153.79	predicted_ms=159.97	prompt_tps=97.53	predicted_tps=43.75	finish=stop
-```
-
-## Role / Tool Summary View
-
-```bash
-tail -F ~/.local/state/llm-ops/logs/model-proxy.ndjson | jq --unbuffered -r '
-  (fromjson? // .)
-  | select(.event=="request_start" and .path=="/v1/chat/completions")
-  | .request_summary as $s
-  | [
-      .ts,
-      ("roles=" + (($s.role_counts // {})|tojson)),
-      ("tools=" + (($s.tool_call_counts // {})|tojson)),
-      ("last_user=" + (($s.last_user_preview // "")|gsub("\\s+";" ")))
-    ]
-  | @tsv'
-```
-
-Sample output:
-
-```text
-2026-02-23T23:57:36.210342+00:00	roles={"developer":1,"user":1}	tools={}	last_user=Please use web_search with query only...
-```
-
-## Rendered Prompt (Human Readable)
-
-```bash
-tail -F ~/.local/state/llm-ops/logs/model-proxy.ndjson | jq --unbuffered -r '
-  (fromjson? // .)
-  | select(.event=="request_start" and .path=="/v1/chat/completions")
-  | .ts as $ts
-  | if (.rendered_prompt // "") != "" then
-      [$ts, "=== RENDERED_PROMPT ===", .rendered_prompt, ""]
-    elif (.rendered_prompt_error // "") != "" then
-      [$ts, "=== TEMPLATE_ERROR ===", .rendered_prompt_error, ""]
-    else
-      [$ts, "=== RENDERED_PROMPT ===", "<empty>", ""]
-    end
-  | join("\n")
-'
-```
-
-Sample output:
-
-```text
-2026-02-23T23:57:36.210342+00:00
-=== RENDERED PROMPT ===
-<|im_start|>system
-...
-<|im_start|>assistant
-```
-
-## Rendered Prompt (Only Body)
-
-```bash
-tail -F ~/.local/state/llm-ops/logs/model-proxy.ndjson | jq --unbuffered -r '
-  (fromjson? // .)
-  | select(.event=="request_start" and .path=="/v1/chat/completions")
-  | .rendered_prompt'
-```
-
-Sample output:
-
-```text
-<|im_start|>system
-Make tool calls when needed.
-...
-<|im_start|>assistant
-```
-
-## Extract Latest Rendered Prompt To File
-
-```bash
-jq -s -r '
-  map(if type=="string" then (fromjson? // empty) else . end)
-  | map(select(.event=="request_start" and .path=="/v1/chat/completions"))
-  | last
-  | .rendered_prompt // ""
-' ~/.local/state/llm-ops/logs/model-proxy.ndjson > /tmp/last-rendered-prompt.txt
-```
-
-Sample output:
-
-```text
-# command writes file only
-# inspect with:
-wc -l /tmp/last-rendered-prompt.txt
-# 214 /tmp/last-rendered-prompt.txt
-```
-
-## Framed Raw Request Stream
-
-```bash
-tail -F ~/.local/state/llm-ops/logs/model-proxy.ndjson | jq --unbuffered -r '
-  (fromjson? // .)
-  | select(.event=="request_start" and .path=="/v1/chat/completions")
-  | [
-      .ts,
-      "================ REQUEST START ================",
-      (.request_text // ""),
-      "================= REQUEST END =================",
-      ""
-    ]
-  | join("\n")'
-```
-
-## Combined Raw File (Recommended)
-
-```bash
-tail -F ~/.local/state/llm-ops/logs/model-proxy.raw.log
-```
-
-Sample output:
-
-```text
-=== RAW_REQUEST START 2026-02-28T01:23:45.000000+00:00 ===
-{"model":"...","messages":[...]}
-=== RAW_REQUEST END 2026-02-28T01:23:45.000000+00:00 ===
-
-=== RAW_RESPONSE status=200 START 2026-02-28T01:23:45.000000+00:00 ===
-data: {...}
-=== RAW_RESPONSE status=200 END 2026-02-28T01:23:46.732000+00:00 ===
-```
-
-Sample output:
-
-```text
-2026-02-23T23:57:36.210342+00:00
-================ REQUEST START ================
-{"model":"...","messages":[...],"tools":[...]}
-================= REQUEST END =================
-```
-
-## Full Pretty Request/Response Blocks
-
-```bash
-tail -F ~/.local/state/llm-ops/logs/model-proxy.ndjson | jq --unbuffered -r '
-  (fromjson? // .)
-  | [.ts, (.event // ""), .path, "=== REQUEST ===", (.request_text // ""), "=== RESPONSE ===", (.response_text // ""), ""]
-  | join("\n")'
-```
-
-Sample output:
-
-```text
-2026-02-23T23:57:36.210342+00:00
-request_start
-/v1/chat/completions
-=== REQUEST ===
-{"model":"..."}
-=== RESPONSE ===
-
-```
-
-## Troubleshooting
-
-- If you see `jq: ... INVALID_CHARACTER`, remove trailing spaces after `\` or use single-line commands.
-- If no output appears, verify the proxy is active and the configured agent endpoint points to the proxy listener.
-- If you get only `request_start` and no `request_end`, request is still in-flight or hung upstream.
-- `model-proxy.rendered.log` is populated only when proxy runs with `--chat-template`.
-- If outputs look duplicated, confirm you do not have multiple `tail -F ... | jq ...` pipelines running.
-
-## Clean Restart + 3-Request Validation
-
-After truncating logs and restarting services:
-
-1. Web request (tool-heavy)
-2. Plain chat request
-3. Memory recall request
-
-For each request, verify:
-
-- `request_start` appears
-- matching `request_end` appears
-- role/tool counts are sane
-- no repeated `CRITICAL` loop events
+Confirm `llmops doctor --probe` succeeds, restart the component, send one known request through the configured listener, and verify the response, proxy health, token metadata, and raw/rendered artifact timestamps.
