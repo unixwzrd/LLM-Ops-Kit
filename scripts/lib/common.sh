@@ -4,6 +4,8 @@ set -euo pipefail
 llmops_default_config_home() {
   if [[ -n "${LLMOPS_CONFIG_HOME:-}" ]]; then
     printf '%s\n' "$LLMOPS_CONFIG_HOME"
+  elif [[ -f "${LLMOPS_HOME:-$HOME/.local/llm-ops}/current/config/config.json" ]]; then
+    printf '%s/current/config\n' "${LLMOPS_HOME:-$HOME/.local/llm-ops}"
   elif [[ -n "${XDG_CONFIG_HOME:-}" ]]; then
     printf '%s/llm-ops\n' "$XDG_CONFIG_HOME"
   else
