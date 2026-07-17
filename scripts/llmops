@@ -12,19 +12,22 @@ usage() {
 Usage: llmops <command> [args...]
 
 Commands:
-  component
-  config
-  deploy
-  doctor
-  drift
-  init
-  migrate-config
-  plan
-  rollback
-  stack
-  status
+  status          Show aggregate component status; optionally filter or drill down
+  component       List, inspect, plan, start, stop, restart, or read one component
+  stack           List, inspect, plan, start, stop, or restart a component stack
+  plan            Preview dependency-ordered operations without changing anything
+  doctor          Validate configuration and optionally probe hosts and dependencies
+  config          Display resolved configuration and runtime paths
+  init            Create guided single-host or local-LAN configuration
+  migrate-config  Preview or import supported proof-of-concept configuration
+  deploy          Build and atomically deploy code plus configuration snapshots
+  drift           Compare deployed runtime and configuration hashes with a bundle
+  rollback        Exchange current and previous immutable runtime releases
 
-Run `llmops <command> --help` for command-specific help.
+Read-only commands: status, plan, doctor, config, component status, stack status, drift.
+Mutating commands provide plans or dry runs where applicable.
+
+Run `llmops <command> --help` for command-specific options and examples.
 USAGE
 }
 

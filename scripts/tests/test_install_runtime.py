@@ -59,6 +59,9 @@ class InstallerTests(unittest.TestCase):
             self.assertEqual((install / "current").resolve(), (install / "releases" / "release-1").resolve())
             self.assertFalse((install / "previous").exists())
             self.assertTrue((public_bin / "llmops").is_symlink())
+            help_result = self.run_command([str(public_bin / "llmops"), "--help"], env)
+            self.assertIn("status          Show aggregate component status", help_result.stdout)
+            self.assertIn("deploy          Build and atomically deploy", help_result.stdout)
             self.run_command([str(public_bin / "llmops"), "init", "--preset", "single-host"], env)
             self.run_command([str(public_bin / "llmops"), "doctor"], env)
 
