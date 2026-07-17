@@ -16,6 +16,8 @@ cd LLM-Ops-Kit
 
 The installer creates an immutable release under `~/.local/llm-ops/releases/`, updates `current`, retains the prior release as `previous`, creates internal driver links under `~/.local/llm-ops/bin`, and exposes only `~/.local/bin/llmops` publicly.
 
+The installer reports when its public command directory is not on `PATH`; it does not silently edit shell startup files. Add that directory once or invoke `~/.local/bin/llmops` explicitly.
+
 ## Guided Initialization
 
 Single host:

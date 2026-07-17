@@ -179,3 +179,7 @@ trap - EXIT INT TERM
 echo "INSTALLED: $release"
 echo "CURRENT: $(readlink "$CURRENT")"
 if [[ -L "$PREVIOUS" ]]; then echo "PREVIOUS: $(readlink "$PREVIOUS")"; fi
+case ":$PATH:" in
+  *":$PUBLIC_BIN_DIR:"*) ;;
+  *) echo "PATH NOTICE: add $PUBLIC_BIN_DIR to PATH or invoke $PUBLIC_BIN_DIR/llmops explicitly" ;;
+esac
