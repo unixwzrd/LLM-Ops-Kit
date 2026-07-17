@@ -31,7 +31,14 @@ def _item(host: str, check: str, status: str, detail: str, correction: str = "")
 def _path_check(topology: Topology, host_name: str, label: str, path: str, *, enabled: bool) -> dict[str, str]:
     if path.startswith(("env:", "seckit:")):
         return _item(host_name, label, "ok", f"provider reference: {path}")
-    expanded = path.replace("~/", "$HOME/", 1) if path.startswith("~/") else shlex.quote(path)
+    if path.startswith("~/"):
+        expanded = '"$HOME"/' + shlex.quote(path[2:])
+    elif path.startswith("$HOME/"):
+        expanded = '"$HOME"/' + shlex.quote(path[6:])
+    elif path.startswith("${HOME}/"):
+        expanded = '"$HOME"/' + shlex.quote(path[8:])
+    else:
+        expanded = shlex.quote(path)
     completed = _run(topology, host_name, f"test -e {expanded}")
     if completed.returncode == 0:
         return _item(host_name, label, "ok", path)
