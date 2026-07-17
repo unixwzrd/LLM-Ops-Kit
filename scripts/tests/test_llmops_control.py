@@ -14,7 +14,7 @@ LIB = Path(__file__).resolve().parents[1] / "lib"
 sys.path.insert(0, str(LIB))
 
 from llmops_config import load_config
-from llmops_drivers import CommandResult
+from llmops_drivers import CommandResult, _launchd_command
 from llmops_executor import Executor, ExecutionError, Operation, component_plan, stack_plan
 from llmops_inventory import InventoryError, load_inventory
 from llmops_paths import resolve_paths
@@ -257,6 +257,15 @@ class TopologyTests(ControlFixture):
             config=self.topology.config,
         )
         self.assertTrue(any("port conflict" in error for error in validate_topology(topology)))
+
+    def test_launchd_stop_is_idempotent_when_service_is_unloaded(self) -> None:
+        command = _launchd_command(
+            {"label": "org.example.test"},
+            self.topology.resolve_component("agent"),
+            "stop",
+        )
+        self.assertIn("if launchctl print", command)
+        self.assertIn("launchctl bootout", command)
 
     def test_host_snapshot_contains_only_profiles_used_on_host(self) -> None:
         destination = self.root / "snapshot"

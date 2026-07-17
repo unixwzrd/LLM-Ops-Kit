@@ -100,7 +100,10 @@ def _launchd_command(profile: dict[str, Any], component: Component, action: str)
             )
         return f"launchctl kickstart -k {domain}"
     if action == "stop":
-        return f"launchctl bootout {domain}"
+        return (
+            f"if launchctl print {domain} >/dev/null 2>&1; then "
+            f"launchctl bootout {domain}; fi"
+        )
     if action == "restart":
         return f"launchctl kickstart -k {domain}"
     raise DriverError(f"{component.qualified_id}: unsupported launchd action: {action}")
