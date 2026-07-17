@@ -23,6 +23,8 @@ Back: [Documentation index](./INDEX.md)
 
 ## Post-V1
 
+- [ ] Add a typed MLXForge engine driver so model lifecycle and health checks can migrate from llama.cpp without changing stack or component interfaces.
+- [ ] Evaluate an optional Textual TUI or loopback-only static web console for guided inventory, profile, dependency, and status management. It must consume the existing control/JSON interfaces rather than implement another orchestration path.
 - [ ] Integrate Secrets-Kit only through explicit provider references after its release contract stabilizes.
 - [ ] Remove plaintext `.env` secret injection after the external provider path is validated.
 - [ ] Add signed release manifests if distribution expands beyond a trusted LAN.
