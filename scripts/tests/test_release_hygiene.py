@@ -18,9 +18,15 @@ def tracked_files() -> list[Path]:
     completed = subprocess.run(
         ["git", "-C", str(ROOT), "ls-files", "-z"],
         capture_output=True,
-        check=True,
+        check=False,
     )
-    return [ROOT / item.decode() for item in completed.stdout.split(b"\0") if item and (ROOT / item.decode()).exists()]
+    if completed.returncode == 0:
+        return [ROOT / item.decode() for item in completed.stdout.split(b"\0") if item and (ROOT / item.decode()).exists()]
+    return [
+        path
+        for path in ROOT.rglob("*")
+        if path.is_file() and "__pycache__" not in path.parts and path.suffix not in {".pyc", ".pyo"}
+    ]
 
 
 class ReleaseHygieneTests(unittest.TestCase):

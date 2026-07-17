@@ -8,6 +8,7 @@ import concurrent.futures
 import hashlib
 import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -133,7 +134,20 @@ def _git_provenance(source_root: Path) -> dict[str, Any]:
     status = subprocess.run(["git", "-C", str(source_root), "status", "--porcelain"], capture_output=True, text=True, check=False)
     describe = subprocess.run(["git", "-C", str(source_root), "describe", "--tags", "--always", "--dirty"], capture_output=True, text=True, check=False)
     if revision.returncode != 0 or status.returncode != 0:
-        raise DeploymentError(f"deployment source is not a Git checkout: {source_root}")
+        release_file = source_root / "RELEASE.json"
+        try:
+            release = json.loads(release_file.read_text(encoding="utf-8"))
+            commit = str(release["git_commit"])
+        except (OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
+            raise DeploymentError(f"deployment source has no Git or release provenance: {source_root}") from exc
+        if not re.fullmatch(r"[0-9a-f]{40}", commit):
+            raise DeploymentError(f"deployment source has invalid release provenance: {release_file}")
+        return {
+            "root": str(source_root),
+            "git_commit": commit,
+            "git_dirty": False,
+            "toolkit_version": commit[:12],
+        }
     return {
         "root": str(source_root),
         "git_commit": revision.stdout.strip(),
@@ -150,9 +164,11 @@ def _build_package(stage: Path, source_root: Path) -> Path:
         capture_output=True,
         check=False,
     )
-    if tracked.returncode != 0:
-        raise DeploymentError(f"cannot enumerate tracked deployment files: {tracked.stderr.decode(errors='replace')}")
-    names = [Path(raw.decode()) for raw in tracked.stdout.split(b"\0") if raw]
+    if tracked.returncode == 0:
+        names = [Path(raw.decode()) for raw in tracked.stdout.split(b"\0") if raw]
+    else:
+        _git_provenance(source_root)
+        names = [path.relative_to(source_root) for path in (source_root / "scripts").rglob("*") if path.is_file()]
     names = [
         name
         for name in names
