@@ -46,7 +46,18 @@ class DeploymentTests(unittest.TestCase):
             encoding="utf-8",
         )
         (config / "models" / "chat.json").write_text(
-            json.dumps({"schema_version": 1, "environment": {"MODEL": "/models/chat.gguf"}}),
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "environment": {
+                        "MODEL_PROFILE": "chat",
+                        "MODEL_TYPE": "llm",
+                        "MODEL": "/models/chat.gguf",
+                        "HOST": "127.0.0.1",
+                        "PORT": 11434,
+                    },
+                }
+            ),
             encoding="utf-8",
         )
         (config / "stacks" / "test.json").write_text(

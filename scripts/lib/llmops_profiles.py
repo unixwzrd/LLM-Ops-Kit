@@ -87,6 +87,7 @@ def model_values(profile: dict[str, Any]) -> dict[str, str]:
         return _clean(explicit)
     return _clean(
         {
+            "MODEL_PROFILE": profile.get("name"),
             "MODEL_TYPE": profile.get("type", profile.get("model_type", "llm")),
             "MODEL": profile.get("model_path"),
             "PORT": runtime.get("port"),

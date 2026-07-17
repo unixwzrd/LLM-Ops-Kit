@@ -28,6 +28,7 @@ class ProfileTests(unittest.TestCase):
         values = model_values(
             {
                 "schema_version": 1,
+                "name": "chat",
                 "type": "llm",
                 "model_path": "/models/chat.gguf",
                 "runtime": {"host": "127.0.0.1", "port": 11434},
@@ -36,6 +37,7 @@ class ProfileTests(unittest.TestCase):
             }
         )
         self.assertEqual(values["MODEL"], "/models/chat.gguf")
+        self.assertEqual(values["MODEL_PROFILE"], "chat")
         self.assertEqual(values["PORT"], "11434")
         self.assertEqual(values["USE_MLOCK"], "1")
         self.assertEqual(values["EXTRA_FLAGS"], "--metrics")

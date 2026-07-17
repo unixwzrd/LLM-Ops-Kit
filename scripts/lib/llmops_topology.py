@@ -15,10 +15,12 @@ try:
     from llmops_config import LlmOpsConfig
     from llmops_inventory import HostRecord
     from llmops_paths import LlmOpsPaths
+    from llmops_profiles import ProfileError, model_values, service_values
 except ModuleNotFoundError:  # pragma: no cover
     from .llmops_config import LlmOpsConfig
     from .llmops_inventory import HostRecord
     from .llmops_paths import LlmOpsPaths
+    from .llmops_profiles import ProfileError, model_values, service_values
 
 
 SUPPORTED_DRIVERS = {
@@ -303,26 +305,90 @@ def dependent_closure(stack: Stack, component: Component) -> set[str]:
     return selected
 
 
-def _profile_bindings(profile: dict[str, Any]) -> set[tuple[str, int]]:
+def _profile_bindings(profile: dict[str, Any], values: Optional[dict[str, str]] = None) -> set[tuple[str, int]]:
     bindings: set[tuple[str, int]] = set()
     candidates = [profile]
-    server = profile.get("server")
-    if isinstance(server, dict):
-        candidates.append(server)
-    listen = profile.get("listen")
-    if isinstance(listen, dict):
-        candidates.append(listen)
+    for section in ("runtime", "server", "listen"):
+        candidate = profile.get(section)
+        if isinstance(candidate, dict):
+            candidates.append(candidate)
     for candidate in candidates:
-        host = candidate.get("host")
+        host = candidate.get("host", candidate.get("listen_host"))
         port = candidate.get("port", candidate.get("listen_port"))
-        if isinstance(host, str) and isinstance(port, int):
-            bindings.add((host, port))
+        if isinstance(host, str) and isinstance(port, (int, str)) and str(port).isdigit():
+            bindings.add((host, int(port)))
+    if values:
+        host = values.get("HOST") or values.get("MODEL_PROXY_LISTEN_HOST") or values.get("TTS_BRIDGE_HOST")
+        port = values.get("PORT") or values.get("MODEL_PROXY_LISTEN_PORT") or values.get("TTS_BRIDGE_PORT")
+        if host and port and str(port).isdigit():
+            bindings.add((host, int(port)))
     url = profile.get("listen_url")
     if isinstance(url, str):
         parsed = urlparse(url)
         if parsed.hostname and parsed.port:
             bindings.add((parsed.hostname, parsed.port))
     return bindings
+
+
+def _required(values: dict[str, str], names: tuple[str, ...], *, component: Component) -> list[str]:
+    return [
+        f"{component.qualified_id}: profile missing required runtime value: {name}"
+        for name in names
+        if not values.get(name)
+    ]
+
+
+def _validate_profile(component: Component, profile: dict[str, Any]) -> tuple[list[str], dict[str, str]]:
+    """Validate driver-specific profile contracts without contacting managed hosts."""
+
+    errors: list[str] = []
+    values: dict[str, str] = {}
+    try:
+        if component.driver == "modelctl":
+            values = model_values(profile)
+            errors.extend(
+                _required(
+                    values,
+                    ("MODEL_PROFILE", "MODEL_TYPE", "MODEL", "HOST", "PORT"),
+                    component=component,
+                )
+            )
+            model_type = values.get("MODEL_TYPE")
+            if model_type not in {"llm", "embedding", "tts"}:
+                errors.append(f"{component.qualified_id}: unsupported model type: {model_type or '<missing>'}")
+            if model_type == "embedding":
+                errors.extend(_required(values, ("POOLING",), component=component))
+            if model_type == "tts":
+                errors.extend(
+                    _required(values, ("TTS_PYTHON_BIN", "TTS_SERVER_MODULE"), component=component)
+                )
+        elif component.driver in {"model-proxy", "tts-bridge"}:
+            values = service_values(component.driver, profile)
+            required = (
+                ("LLMOPS_UPSTREAM_HOST", "LLMOPS_UPSTREAM_PORT", "MODEL_PROXY_LISTEN_HOST", "MODEL_PROXY_LISTEN_PORT")
+                if component.driver == "model-proxy"
+                else ("TTS_BRIDGE_UPSTREAM_BASE", "TTS_BRIDGE_PORT")
+            )
+            errors.extend(_required(values, required, component=component))
+        elif component.driver in {"launchd", "ssh-tunnel"}:
+            if not isinstance(profile.get("label"), str) or not profile.get("label"):
+                errors.append(f"{component.qualified_id}: launchd profile requires label")
+            if "plist" in profile and (not isinstance(profile["plist"], str) or not profile["plist"]):
+                errors.append(f"{component.qualified_id}: launchd plist must be a path string")
+        elif component.driver in {"agent", "process", "command"}:
+            actions = profile.get("actions")
+            if not isinstance(actions, dict):
+                errors.append(f"{component.qualified_id}: profile actions must be an object")
+            else:
+                for action in ("start", "stop", "restart", "status"):
+                    argv = actions.get(action)
+                    if not isinstance(argv, list) or not argv or any(not isinstance(token, str) or not token for token in argv):
+                        errors.append(
+                            f"{component.qualified_id}: action {action} must be a nonempty argv array"
+                        )
+    except ProfileError as exc:
+        errors.append(f"{component.qualified_id}: {exc}")
+    return errors, values
 
 
 def validate_topology(topology: Topology) -> list[str]:
@@ -353,7 +419,9 @@ def validate_topology(topology: Topology) -> list[str]:
             except TopologyError as exc:
                 errors.append(str(exc))
                 continue
-            for bind_host, port in _profile_bindings(profile):
+            profile_errors, values = _validate_profile(component, profile)
+            errors.extend(profile_errors)
+            for bind_host, port in _profile_bindings(profile, values):
                 key = (component.host, bind_host, port)
                 if key in bound and bound[key] != component.qualified_id:
                     errors.append(

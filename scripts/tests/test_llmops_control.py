@@ -97,19 +97,34 @@ class ControlFixture(unittest.TestCase):
             directory.mkdir(parents=True)
         self.write_json(
             self.paths.models_dir / "chat.json",
-            {"schema_version": 1, "model_type": "llm", "host": "127.0.0.1", "port": 11434},
+            {
+                "schema_version": 1,
+                "name": "chat",
+                "type": "llm",
+                "model_path": "/models/chat.gguf",
+                "runtime": {"host": "127.0.0.1", "port": 11434, "threads": 4},
+                "llama": {"ctx_size": 4096, "gpu_layers": "all", "batch_size": 512, "ubatch_size": 512},
+            },
         )
         self.write_json(
             self.paths.models_dir / "embedding.json",
-            {"schema_version": 1, "model_type": "embedding", "host": "127.0.0.1", "port": 11435},
+            {
+                "schema_version": 1,
+                "name": "embedding",
+                "type": "embedding",
+                "model_path": "/models/embedding.gguf",
+                "runtime": {"host": "127.0.0.1", "port": 11435, "threads": 4},
+                "llama": {"ctx_size": 512, "gpu_layers": "all", "batch_size": 512, "ubatch_size": 512},
+                "environment": {"MODEL_PROFILE": "embedding", "MODEL_TYPE": "embedding", "MODEL": "/models/embedding.gguf", "HOST": "127.0.0.1", "PORT": 11435, "THREADS": 4, "THREADS_BATCH": 4, "CTX_SIZE": 512, "GPU_LAYERS": "all", "BATCH_SIZE": 512, "UBATCH_SIZE": 512, "POOLING": "mean"},
+            },
         )
         self.write_json(
             self.paths.services_dir / "proxy.json",
-            {"schema_version": 1, "listen": {"host": "127.0.0.1", "port": 11434}},
+            {"schema_version": 1, "runtime": {"listen_host": "127.0.0.1", "listen_port": 11434, "upstream_host": "127.0.0.1", "upstream_port": 11433}},
         )
         self.write_json(
             self.paths.agents_dir / "sample-agent.json",
-            {"schema_version": 1, "command": "/usr/local/bin/sample-agent"},
+            {"schema_version": 1, "actions": {action: ["/usr/bin/true"] for action in ("start", "stop", "restart", "status")}},
         )
         self.write_json(
             self.paths.stacks_dir / "sample.json",
@@ -215,7 +230,7 @@ class TopologyTests(ControlFixture):
         )
         self.write_json(
             self.paths.services_dir / "custom.json",
-            {"schema_version": 1, "actions": {"status": ["true"]}},
+            {"schema_version": 1, "actions": {action: ["/usr/bin/true"] for action in ("start", "stop", "restart", "status")}},
         )
         self.write_json(self.paths.stacks_dir / "sample.json", stack)
         topology = Topology(
@@ -225,6 +240,23 @@ class TopologyTests(ControlFixture):
             config=self.topology.config,
         )
         self.assertTrue(any("allow_command_driver" in error for error in validate_topology(topology)))
+
+    def test_profile_runtime_contract_is_validated(self) -> None:
+        self.write_json(self.paths.models_dir / "chat.json", {"schema_version": 1, "name": "chat", "type": "llm"})
+        errors = validate_topology(self.topology)
+        self.assertTrue(any("missing required runtime value: MODEL" in error for error in errors))
+
+    def test_nested_runtime_port_conflict_is_rejected(self) -> None:
+        stack = json.loads((self.paths.stacks_dir / "sample.json").read_text(encoding="utf-8"))
+        stack["components"][2]["host"] = "model-host"
+        self.write_json(self.paths.stacks_dir / "sample.json", stack)
+        topology = Topology(
+            stacks=load_stacks(self.paths),
+            hosts=self.topology.hosts,
+            paths=self.paths,
+            config=self.topology.config,
+        )
+        self.assertTrue(any("port conflict" in error for error in validate_topology(topology)))
 
     def test_host_snapshot_contains_only_profiles_used_on_host(self) -> None:
         destination = self.root / "snapshot"
