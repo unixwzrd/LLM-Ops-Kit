@@ -63,6 +63,10 @@ def redact_headers(headers: dict[str, str]) -> dict[str, str]:
     return redacted
 
 
+def _raise_template_exception(message: str) -> None:
+    raise jinja2.TemplateError(message)
+
+
 def load_chat_template_renderer(template_path_str: str | None) -> tuple[str | None, Any, str | None]:
     if not template_path_str:
         return None, None, None
@@ -77,6 +81,7 @@ def load_chat_template_renderer(template_path_str: str | None) -> tuple[str | No
             lstrip_blocks=False,
             autoescape=False,
         )
+        env.globals["raise_exception"] = _raise_template_exception
         return str(template_path), env.from_string(template_text), None
     except Exception as e:
         return template_path_str, None, f"TemplateLoadError: {e}"
