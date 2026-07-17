@@ -17,9 +17,14 @@ Back: [Documentation index](./INDEX.md)
 
 ## General-User Distribution Gate
 
+- [ ] Produce a versioned, checksum-verified release artifact containing only installed runtime files. Installation and upgrade must not require a Git checkout or depend on the checkout location.
+- [ ] Add a repository-free bootstrap installer that downloads a selected GitHub release, verifies it, installs only the required components, and reports exact recovery steps without piping an unverified response directly into a privileged shell.
+- [ ] Add `llmops update` with local and remote version discovery, release selection, plan and JSON output, atomic apply, rollback, and handling for an older control command on either side of an SSH connection.
 - [ ] Add one application-owned Python runtime environment with a checksum-verified uv or `venv` bootstrap, offline/error handling, dependency locking, repair, upgrade, rollback, and purge semantics. Python-backed launchd services should use its explicit interpreter path without sourcing interactive shell profiles.
 - [ ] Add portable read-only observer snapshots so any trusted configured host can run global `llmops status` without receiving mutation authority or secret material.
 - [ ] Add explicit trusted-control snapshots and `llmops host` operations for approved operator hosts. Remote execution must use the configured absolute `llmops` path over SSH and must not depend on login-shell startup files.
+- [ ] Distribute a complete sanitized topology catalog to trusted control hosts while retaining role-filtered runtime profiles for managed hosts. Synchronization must be one-way from the desired-state authority, checksummed, atomic, and conflict-aware.
+- [ ] Make configuration and toolkit-version drift visible from every trusted control host. Refuse automatic merging of independently edited host configuration and provide an explicit reconciliation workflow.
 - [ ] Package an agent-neutral LLM-Ops-Kit skill that uses `doctor`, `plan`, `status`, and JSON output for setup and operations while requiring explicit approval for mutations and SSH provisioning.
 
 ## Post-V1
