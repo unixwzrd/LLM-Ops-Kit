@@ -41,6 +41,7 @@ Back: [Documentation index](./INDEX.md)
 
 ## Observation
 
+- [x] Restart the soak clock after restoring the crashed Qwen3TTS component and passing an end-to-end voice-clone request through `tts-bridge`.
 - [ ] Run the complete managed environment for a 48-hour soak period.
 - [ ] Capture `llmops status --json` at the start and after each of two consecutive scheduled daily operational reports.
 - [ ] Confirm both reports complete without unexplained component restarts, failed health checks, drift, protocol failures, or missing metrics.

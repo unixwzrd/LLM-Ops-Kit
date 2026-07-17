@@ -151,6 +151,33 @@ class InstallerTests(unittest.TestCase):
                 env,
             )
 
+    def test_model_restart_archives_existing_log(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            log = root / "state" / "logs" / "tts-server-test.log"
+            log.parent.mkdir(parents=True)
+            log.write_text("prior crash evidence\n", encoding="utf-8")
+            env = {
+                **os.environ,
+                "HOME": str(root),
+                "LLMOPS_STATE_HOME": str(root / "state"),
+            }
+            self.run_command(
+                [
+                    "/usr/local/bin/bash",
+                    "-c",
+                    '. "$1"; archive_log_for_restart "$2"; prepare_log_file "$2"',
+                    "_",
+                    str(REPO_ROOT / "scripts" / "lib" / "common.sh"),
+                    str(log),
+                ],
+                env,
+            )
+            archived = list(log.parent.glob("tts-server-test.log.*"))
+            self.assertEqual(len(archived), 1)
+            self.assertEqual(archived[0].read_text(encoding="utf-8"), "prior crash evidence\n")
+            self.assertEqual(log.read_text(encoding="utf-8"), "")
+
 
 if __name__ == "__main__":
     unittest.main()

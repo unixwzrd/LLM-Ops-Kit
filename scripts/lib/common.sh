@@ -255,6 +255,19 @@ prepare_log_file() {
   touch "$log_file"
 }
 
+archive_log_for_restart() {
+  local log_file="$1"
+  local stamp rotated
+  [[ -s "$log_file" ]] || return 0
+  stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+  rotated="${log_file}.${stamp}"
+  if [[ -e "$rotated" ]]; then
+    rotated="${rotated}.$$"
+  fi
+  mv "$log_file" "$rotated"
+  prune_rotated_logs "$log_file"
+}
+
 prune_runtime_backups() {
   local keep="${1:-$LLMOPS_BACKUP_KEEP}"
   local max_age_days="${2:-$LLMOPS_BACKUP_MAX_AGE_DAYS}"

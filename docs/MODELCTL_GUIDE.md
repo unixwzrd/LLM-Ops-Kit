@@ -48,3 +48,5 @@ llmops component status <stack>:<model-component>
 ```
 
 There are no launcher-name profiles, repository shell profiles, model registry mutation, or implicit agent switching.
+
+Each model start archives a nonempty prior server log before opening a new one. Lifecycle events are appended to `~/.local/state/llm-ops/logs/model-lifecycle.log`. If a managed process exits unexpectedly, the next status inspection records `unexpected_exit_detected` before clearing stale PID state. Automatic restart remains an explicit future policy rather than a default because model memory and startup cost vary substantially.

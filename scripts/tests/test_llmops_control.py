@@ -10,6 +10,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from typing import Optional
+from unittest import mock
 
 LIB = Path(__file__).resolve().parents[1] / "lib"
 sys.path.insert(0, str(LIB))
@@ -33,6 +34,7 @@ CONTROL_SCRIPT = Path(__file__).resolve().parents[1] / "llmops-control"
 CONTROL_GLOBALS = runpy.run_path(str(CONTROL_SCRIPT), run_name="llmops_control_test")
 status_components = CONTROL_GLOBALS["_status_components"]
 status_state = CONTROL_GLOBALS["_status_state"]
+remote_status = CONTROL_GLOBALS["_remote_status"]
 stack_operations = CONTROL_GLOBALS["stack_operations"]
 
 
@@ -98,8 +100,8 @@ class ControlFixture(unittest.TestCase):
                     "transport": "local",
                 },
                 "hosts": [
-                    {"name": "model-host", "role": "llm", "host": "localhost"},
-                    {"name": "agent-host", "role": "agent", "host": "localhost"},
+                    {"name": "model-host", "role": "llm", "host": "localhost", "control_host": "model.local"},
+                    {"name": "agent-host", "role": "agent", "host": "localhost", "control_host": "agent.local"},
                 ],
             },
         )
@@ -193,6 +195,7 @@ class InventoryTests(ControlFixture):
         hosts = load_inventory(self.paths.inventory_file)
         self.assertEqual(sorted(hosts), ["agent-host", "model-host"])
         self.assertEqual(hosts["model-host"].transport, "local")
+        self.assertEqual(hosts["model-host"].control_host, "model.local")
 
     def test_inventory_rejects_duplicate_hosts(self) -> None:
         raw = json.loads(self.paths.inventory_file.read_text(encoding="utf-8"))
@@ -317,6 +320,47 @@ class TopologyTests(ControlFixture):
             [item["id"] for item in resolved["components"]],
             ["sample:chat", "sample:embedding"],
         )
+
+    def test_host_snapshots_share_complete_secret_free_catalog(self) -> None:
+        model = self.root / "model-snapshot"
+        agent = self.root / "agent-snapshot"
+        write_host_snapshot(self.topology, host_name="model-host", destination=model)
+        write_host_snapshot(self.topology, host_name="agent-host", destination=agent)
+        self.assertEqual(
+            (model / "catalog.json").read_bytes(),
+            (agent / "catalog.json").read_bytes(),
+        )
+        catalog = json.loads((model / "catalog.json").read_text(encoding="utf-8"))
+        self.assertEqual(
+            [item["id"] for item in catalog["components"]],
+            ["sample:chat", "sample:embedding", "sample:proxy", "sample:agent"],
+        )
+        self.assertEqual(
+            {item["name"]: item["host"] for item in catalog["hosts"]},
+            {"agent-host": "agent.local", "model-host": "model.local"},
+        )
+        self.assertNotIn("ssh_key", (model / "catalog.json").read_text(encoding="utf-8"))
+
+    def test_remote_status_uses_absolute_command_and_local_mode(self) -> None:
+        args = type(
+            "Args",
+            (),
+            {"all": False, "verbose": False, "host_timeout": 10},
+        )()
+        host = {
+            "host": "model.local",
+            "user": "operator",
+            "port": 22,
+            "public_bin_dir": "~/.local/bin",
+        }
+        completed = mock.Mock(returncode=0, stdout="[]\n", stderr="")
+        with mock.patch.object(remote_status.__globals__["subprocess"], "run", return_value=completed) as run:
+            payload, error = remote_status(host, None, args)
+        self.assertEqual(payload, [])
+        self.assertEqual(error, "")
+        command = run.call_args.args[0]
+        self.assertIn("operator@model.local", command)
+        self.assertIn('"$HOME"/.local/bin/llmops status --local --json', command[-1])
 
     def test_host_snapshot_rejects_embedded_secret_values(self) -> None:
         profile = json.loads((self.paths.models_dir / "chat.json").read_text(encoding="utf-8"))

@@ -81,7 +81,7 @@ Use `<stack>:<component>` when a short ID is ambiguous. Generated components rem
 
 `llmops stack status` may omit the stack name when exactly one stack is configured. Mutating stack commands always require an explicit stack name.
 
-The administrator configuration has the complete cross-host view. Immutable role-filtered snapshots intentionally expose only components assigned to that managed host. A future observer snapshot will provide a portable read-only global view from additional trusted hosts without distributing mutation authority.
+Immutable releases retain role-filtered runtime profiles for local execution and include the same secret-free observer catalog on every managed host. `llmops status` uses that catalog to query each owning host over SSH; `llmops status --json` returns one combined topology view. Peer checks use the configured absolute public command path and do not depend on shell startup files. A host with `host: localhost` in the deployment inventory must define a routable `control_host` for peer status.
 
 ## Existing Proof-of-Concept Installation
 

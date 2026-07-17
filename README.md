@@ -66,7 +66,7 @@ llmops stack restart <stack>
 llmops stack status <stack>
 ```
 
-`llmops status` checks every enabled component visible to the selected configuration. A selector can be a component ID, qualified component ID, profile, stack, driver, host, or component tag. A single-component selection includes the driver's detailed status output.
+`llmops status` checks every enabled component in the deployed observer catalog and identifies the owning host for each result. A selector can be a component ID, qualified component ID, profile, stack, driver, host, or component tag. A single-component selection includes the driver's detailed status output. Role-filtered profiles remain local to their owning hosts; only secret-free topology metadata is shared.
 
 Starting a component starts missing dependencies. Restarting affects only the requested component unless `--cascade` is supplied. Stopping a component with active dependents requires `--force` or `--cascade`.
 

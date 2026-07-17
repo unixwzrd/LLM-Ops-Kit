@@ -36,6 +36,7 @@ stacks/*.json
       "name": "model-host",
       "role": "llm",
       "host": "model-host.local",
+      "control_host": "model-host.local",
       "transport": "ssh"
     }
   ]
@@ -43,6 +44,8 @@ stacks/*.json
 ```
 
 Supported roles are `admin`, `llm`, `agent`, and `hybrid`. Supported transports are `local` and `ssh`.
+
+`host` is the address used by the deployment authority. `control_host` is the routable address placed in the shared observer catalog for peer-to-peer status checks and defaults to `host`. Set `control_host` explicitly when `host` is `localhost`, a loopback address, or otherwise meaningful only to the deployment authority.
 
 ## Components
 

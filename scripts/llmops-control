@@ -7,6 +7,8 @@ import argparse
 import concurrent.futures
 import json
 import os
+import shlex
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Optional
@@ -319,8 +321,7 @@ def _status_state(*, enabled: bool, returncode: Optional[int], error: str = "") 
     return "not-running"
 
 
-def cmd_status(args: argparse.Namespace) -> int:
-    components = _status_components(args.selector, include_disabled=args.all)
+def _inspect_status(components: list[Any], args: argparse.Namespace) -> list[dict[str, Any]]:
     runner = ComponentRunner(CURRENT_TOPOLOGY)
     enabled = [component for component in components if component.enabled]
     workers = min(max(1, args.workers), max(1, len(enabled)))
@@ -357,6 +358,176 @@ def cmd_status(args: argparse.Namespace) -> int:
             item["stdout"] = "" if result is None else result.stdout
             item["stderr"] = "" if result is None else result.stderr
         payload.append(item)
+    return payload
+
+
+def _load_observer_catalog() -> Optional[dict[str, Any]]:
+    path = CURRENT_TOPOLOGY.paths.config_home / "catalog.json"
+    if not path.is_file():
+        return None
+    try:
+        catalog = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise TopologyError(f"invalid observer catalog {path}: {exc}") from exc
+    if not isinstance(catalog, dict) or catalog.get("schema_version") != 1:
+        raise TopologyError(f"invalid observer catalog schema: {path}")
+    if not isinstance(catalog.get("hosts"), list) or not isinstance(catalog.get("components"), list):
+        raise TopologyError(f"observer catalog is incomplete: {path}")
+    return catalog
+
+
+def _catalog_components(
+    catalog: dict[str, Any], selector: Optional[str], *, include_disabled: bool
+) -> list[dict[str, Any]]:
+    components = [item for item in catalog["components"] if isinstance(item, dict)]
+    if not include_disabled:
+        components = [item for item in components if item.get("enabled") is True]
+    if not selector:
+        return components
+    folded = selector.casefold()
+    exact = [
+        item
+        for item in components
+        if str(item.get("id", "")).casefold() == folded
+        or str(item.get("component_id", "")).casefold() == folded
+    ]
+    if len(exact) > 1:
+        choices = ", ".join(str(item["id"]) for item in exact)
+        raise TopologyError(f"ambiguous component '{selector}'; use one of: {choices}")
+    if exact:
+        return exact
+    matches = [
+        item
+        for item in components
+        if str(item.get("stack", "")).casefold() == folded
+        or str(item.get("profile", "")).casefold() == folded
+        or str(item.get("driver", "")).casefold() == folded
+        or str(item.get("host", "")).casefold() == folded
+        or folded in {str(tag).casefold() for tag in item.get("tags", [])}
+    ]
+    if not matches:
+        raise TopologyError(f"status selector matched no components: {selector}")
+    return matches
+
+
+def _current_snapshot_host() -> Optional[str]:
+    path = CURRENT_TOPOLOGY.paths.config_home / "resolved.json"
+    try:
+        resolved = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    host = resolved.get("host") if isinstance(resolved, dict) else None
+    return host if isinstance(host, str) and host else None
+
+
+def _remote_llmops_path(public_bin_dir: str) -> str:
+    if public_bin_dir == "~":
+        return '"$HOME"/llmops'
+    if public_bin_dir.startswith("~/"):
+        return '"$HOME"/' + shlex.quote(public_bin_dir[2:] + "/llmops")
+    return shlex.quote(str(Path(public_bin_dir).expanduser() / "llmops"))
+
+
+def _remote_status(
+    host: dict[str, Any], selector: Optional[str], args: argparse.Namespace
+) -> tuple[list[dict[str, Any]], str]:
+    command = [
+        "ssh",
+        "-p",
+        str(host.get("port", 22)),
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "StrictHostKeyChecking=accept-new",
+        f"{host['user']}@{host['host']}",
+    ]
+    remote = [_remote_llmops_path(str(host.get("public_bin_dir", "~/.local/bin"))), "status"]
+    if selector:
+        remote.append(shlex.quote(selector))
+    remote.extend(("--local", "--json"))
+    if args.all:
+        remote.append("--all")
+    if args.verbose:
+        remote.append("--verbose")
+    command.append(" ".join(remote))
+    try:
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=args.host_timeout,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return [], str(exc)
+    try:
+        payload = json.loads(completed.stdout)
+    except json.JSONDecodeError:
+        detail = completed.stderr.strip() or completed.stdout.strip() or f"exit {completed.returncode}"
+        return [], detail
+    if not isinstance(payload, list):
+        return [], "remote status returned an invalid payload"
+    return [item for item in payload if isinstance(item, dict)], ""
+
+
+def _catalog_status(args: argparse.Namespace, catalog: dict[str, Any]) -> list[dict[str, Any]]:
+    selected = _catalog_components(catalog, args.selector, include_disabled=args.all)
+    by_host: dict[str, list[dict[str, Any]]] = {}
+    for item in selected:
+        by_host.setdefault(str(item.get("host", "")), []).append(item)
+    hosts = {
+        str(item.get("name", "")): item
+        for item in catalog["hosts"]
+        if isinstance(item, dict) and item.get("name")
+    }
+    current_host = _current_snapshot_host()
+
+    def inspect_host(host_name: str) -> tuple[str, list[dict[str, Any]], str]:
+        if host_name == current_host:
+            local_ids = {str(item.get("id")) for item in by_host[host_name]}
+            local = [
+                component
+                for component in _status_components(args.selector, include_disabled=args.all)
+                if component.qualified_id in local_ids
+            ]
+            return host_name, _inspect_status(local, args), ""
+        host = hosts.get(host_name)
+        if host is None:
+            return host_name, [], f"observer catalog has no host record for {host_name}"
+        payload, error = _remote_status(host, args.selector, args)
+        return host_name, payload, error
+
+    workers = min(max(1, args.workers), max(1, len(by_host)))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+        results = list(pool.map(inspect_host, sorted(by_host)))
+    payload: list[dict[str, Any]] = []
+    for host_name, items, error in results:
+        if not error:
+            payload.extend(items)
+            continue
+        for component in by_host[host_name]:
+            payload.append(
+                {
+                    "status": "unreachable",
+                    "component": component.get("id", ""),
+                    "host": host_name,
+                    "driver": component.get("driver", ""),
+                    "profile": component.get("profile", ""),
+                    "tags": component.get("tags", []),
+                    "returncode": 255,
+                    "error": error,
+                }
+            )
+    return sorted(payload, key=lambda item: str(item.get("component", "")))
+
+
+def cmd_status(args: argparse.Namespace) -> int:
+    catalog = None if args.local else _load_observer_catalog()
+    if catalog is None:
+        components = _status_components(args.selector, include_disabled=args.all)
+        payload = _inspect_status(components, args)
+    else:
+        payload = _catalog_status(args, catalog)
     if args.json:
         emit(payload, json_output=True)
     else:
@@ -491,6 +662,8 @@ def build_parser() -> argparse.ArgumentParser:
     status.add_argument("--all", action="store_true", help="include disabled components")
     status.add_argument("--verbose", action="store_true", help="include driver output for every match")
     status.add_argument("--workers", type=int, default=8)
+    status.add_argument("--host-timeout", type=int, default=20)
+    status.add_argument("--local", action="store_true", help=argparse.SUPPRESS)
     status.set_defaults(func=cmd_status)
 
     config = sub.add_parser("config")

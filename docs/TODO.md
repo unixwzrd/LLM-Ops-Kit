@@ -13,6 +13,7 @@ Back: [Documentation index](./INDEX.md)
 - [x] Confirm zero deployment drift and protocol health for model, embedding, proxy, TTS, bridge, agent, dashboard, and tunnel components.
 - [x] Pass component restart, dependency enforcement, cascade behavior, and complete cold stop/start.
 - [ ] Complete a 48-hour soak spanning two consecutive scheduled daily operational reports while retaining the prior runtime and backups.
+  - Soak restarted at 2026-07-17 15:51 CDT after the Qwen3TTS process crashed. The bridge remained available and correctly reported upstream failure; the TTS model was restored and end-to-end generation passed.
 - [ ] Obtain a green macOS CI run after the release candidate is pushed for review.
 
 ## General-User Distribution Gate
@@ -23,9 +24,10 @@ Back: [Documentation index](./INDEX.md)
   - [x] Local check, plan, JSON output, verified apply, immutable previous-release retention, and offline artifact operation.
   - [ ] Remote discovery, older-peer bootstrap, coordinated host selection, and remote rollback reporting.
 - [ ] Add one application-owned Python runtime environment with a checksum-verified uv or `venv` bootstrap, offline/error handling, dependency locking, repair, upgrade, rollback, and purge semantics. Python-backed launchd services should use its explicit interpreter path without sourcing interactive shell profiles.
-- [ ] Add portable read-only observer snapshots so any trusted configured host can run global `llmops status` without receiving mutation authority or secret material.
+- [x] Add portable read-only observer snapshots so any trusted configured host can run global `llmops status` without receiving mutation authority or secret material.
 - [ ] Add explicit trusted-control snapshots and `llmops host` operations for approved operator hosts. Remote execution must use the configured absolute `llmops` path over SSH and must not depend on login-shell startup files.
-- [ ] Distribute a complete sanitized topology catalog to trusted control hosts while retaining role-filtered runtime profiles for managed hosts. Synchronization must be one-way from the desired-state authority, checksummed, atomic, and conflict-aware.
+- [x] Distribute a complete sanitized topology catalog to managed hosts while retaining role-filtered runtime profiles. Synchronization is one-way from the desired-state authority, checksummed, and atomic.
+- [ ] Validate identical catalog hashes and global status from both live hosts after the soak and release-candidate deployment.
 - [ ] Make configuration and toolkit-version drift visible from every trusted control host. Refuse automatic merging of independently edited host configuration and provide an explicit reconciliation workflow.
 - [ ] Package an agent-neutral LLM-Ops-Kit skill that uses `doctor`, `plan`, `status`, and JSON output for setup and operations while requiring explicit approval for mutations and SSH provisioning.
 
@@ -37,3 +39,4 @@ Back: [Documentation index](./INDEX.md)
 - [ ] Remove plaintext `.env` secret injection after the external provider path is validated.
 - [ ] Add signed release manifests if distribution expands beyond a trusted LAN.
 - [ ] Consider guided model downloads only as a separately approved feature.
+- [ ] Add an explicit per-component restart policy and supervisor integration. Keep automatic restart disabled by default for high-memory model processes.

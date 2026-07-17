@@ -471,6 +471,46 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def write_topology_catalog(topology: Topology, destination: Path) -> Path:
+    """Write the shared, secret-free observer catalog used for cross-host status."""
+
+    catalog = {
+        "schema_version": 1,
+        "hosts": [
+            {
+                "name": host.name,
+                "role": host.role,
+                "host": host.control_host or host.host,
+                "user": host.user,
+                "port": host.port,
+                "public_bin_dir": host.public_bin_dir,
+                "tags": list(host.tags),
+            }
+            for host in sorted(topology.hosts.values(), key=lambda item: item.name)
+        ],
+        "components": [
+            {
+                "id": component.qualified_id,
+                "stack": component.stack,
+                "component_id": component.component_id,
+                "host": component.host,
+                "driver": component.driver,
+                "profile": component.profile,
+                "enabled": component.enabled,
+                "ownership": component.ownership,
+                "tags": list(component.tags),
+                "depends_on": list(component.depends_on),
+            }
+            for component in topology.all_components()
+        ],
+    }
+    destination.write_text(
+        json.dumps(catalog, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return destination
+
+
 def write_host_snapshot(topology: Topology, *, host_name: str, destination: Path) -> Path:
     """Write a deterministic, secret-free profile snapshot for one host."""
 
@@ -532,6 +572,7 @@ def write_host_snapshot(topology: Topology, *, host_name: str, destination: Path
                 "proxy_jump": host.proxy_jump,
                 "tags": list(host.tags),
                 "transport": "local",
+                "control_host": host.control_host or host.host,
             }
         ],
     }
@@ -541,6 +582,9 @@ def write_host_snapshot(topology: Topology, *, host_name: str, destination: Path
         encoding="utf-8",
     )
     copied.append({"path": "inventory.json", "sha256": _sha256(inventory_path)})
+
+    catalog_path = write_topology_catalog(topology, destination / "catalog.json")
+    copied.append({"path": "catalog.json", "sha256": _sha256(catalog_path)})
 
     hosted_ids = {item.qualified_id for item in hosted}
     external_dependencies: dict[str, list[str]] = {}

@@ -33,6 +33,7 @@ class HostRecord:
     proxy_jump: Optional[str]
     tags: tuple[str, ...]
     transport: str = "ssh"
+    control_host: str = ""
 
     @property
     def destination(self) -> str:
@@ -63,6 +64,22 @@ class HostRecord:
         if self.proxy_jump:
             command.extend(["-o", f"ProxyJump={self.proxy_jump}"])
         command.append(self.destination)
+        return command
+
+    def control_ssh_base(self) -> list[str]:
+        """Return SSH arguments suitable for commands issued by peer control hosts."""
+
+        destination = f"{self.user}@{self.control_host or self.host}"
+        command = [
+            "ssh",
+            "-p",
+            str(self.port),
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            "StrictHostKeyChecking=accept-new",
+        ]
+        command.append(destination)
         return command
 
 
@@ -129,6 +146,7 @@ def load_inventory(path: Path) -> dict[str, HostRecord]:
             proxy_jump=str(merged["proxy_jump"]) if merged.get("proxy_jump") else None,
             tags=tuple(tags),
             transport=transport,
+            control_host=str(merged.get("control_host", merged["host"])),
         )
     return hosts
 

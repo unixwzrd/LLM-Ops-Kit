@@ -294,6 +294,19 @@ else
   model_log_file="$LLMOPS_LOG_DIR/llama-server-$MODEL_PROFILE.log"
 fi
 state_file="$LLMOPS_RUN_DIR/$pid_name.state"
+lifecycle_log_file="$LLMOPS_LOG_DIR/model-lifecycle.log"
+
+record_lifecycle() {
+  local event="$1"
+  local detail="${2:-}"
+  prepare_log_file "$lifecycle_log_file"
+  printf '%s profile=%s type=%s event=%s%s\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    "$MODEL_PROFILE" \
+    "$MODEL_TYPE" \
+    "$event" \
+    "${detail:+ $detail}" >> "$lifecycle_log_file"
+}
 
 write_model_state() {
   local pid="$1"
@@ -384,6 +397,7 @@ status_model() {
       print_model_settings
     fi
     stop_log_marktime "$pid_name"
+    record_lifecycle "unexpected_exit_detected" "pid=$pid"
     rm -f "$pid_file"
     clear_model_state
     echo "  action=cleared_stale_pidfile"
@@ -424,7 +438,9 @@ start_model() {
 
   LOG_FILE="$model_log_file"
   prune_runtime_artifacts
+  archive_log_for_restart "$LOG_FILE"
   prepare_log_file "$LOG_FILE"
+  record_lifecycle "start_requested"
   EXTRA_ARGS=()
   MM_FLAGS=()
   TEMPLATE_FLAGS=()
@@ -587,12 +603,14 @@ start_model() {
   write_pid "$pid_name" "$pid"
   write_model_state "$pid"
   start_log_marktime "$pid_name" "$MODEL_PROFILE" "$LOG_FILE"
+  record_lifecycle "started" "pid=$pid"
   echo "Started $pid_name pid=$pid log=$LOG_FILE"
   sleep 1
   status_model 0 || true
 }
 
 stop_model() {
+  record_lifecycle "stop_requested"
   if pid="$(read_pid "$pid_name" 2>/dev/null)"; then
     if is_pid_running "$pid" && ! pid_matches_expected_process "$pid"; then
       echo "$pid_name: pid mismatch pid=$pid, refusing to kill unexpected process" >&2
@@ -604,6 +622,7 @@ stop_model() {
   stop_by_name "$pid_name"
   stop_log_marktime "$pid_name"
   clear_model_state
+  record_lifecycle "stopped"
 }
 
 server_base_url() {

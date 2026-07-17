@@ -105,6 +105,7 @@ class DeploymentTests(unittest.TestCase):
                 names = archive.getnames()
             self.assertIn("config.json", names)
             self.assertIn("inventory.json", names)
+            self.assertIn("catalog.json", names)
             self.assertFalse(any(name.endswith(".env") for name in names))
             with tarfile.open(stage / "package" / "llm-ops-kit.tar.gz", "r:gz") as archive:
                 package_names = archive.getnames()
