@@ -28,6 +28,46 @@ class MigrationError(RuntimeError):
 VARIABLE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 DEFAULT_VALUE = re.compile(r"^\$\{([A-Za-z_][A-Za-z0-9_]*):-([^}]*)\}$")
 SERVICES = {"model-proxy", "model_proxy", "tts-bridge", "tts_bridge"}
+MODEL_ALIASES = {
+    "MODEL_HOST": "HOST",
+    "MODEL_NAME": "MODEL_PROFILE",
+    "MODEL_PATH": "MODEL",
+    "MODEL_PORT": "PORT",
+}
+MODEL_DEFAULT_KEYS = {
+    "BATCH_SIZE",
+    "CACHE_PROMPT",
+    "CACHE_REUSE",
+    "CHAT_TEMPLATE",
+    "CTX_SIZE",
+    "DIRECT_IO",
+    "EXTRA_FLAGS",
+    "FLASH_ATTENTION",
+    "GPU_LAYERS",
+    "HOST",
+    "MIN_P",
+    "MMPROJ",
+    "MODEL_TYPE",
+    "NO_CPU_MOE",
+    "NO_HOST",
+    "PERF",
+    "PORT",
+    "PRESENCE_PENALTY",
+    "REPEAT_PENALTY",
+    "SLOT_SAVE_PATH",
+    "SPEC_NGRAM_SIZE_M",
+    "SPEC_NGRAM_SIZE_N",
+    "SPEC_TYPE",
+    "TEMP",
+    "THREADS",
+    "THREADS_BATCH",
+    "TOP_K",
+    "TOP_P",
+    "UBATCH_SIZE",
+    "USE_CUSTOM_TEMPLATE",
+    "USE_MLOCK",
+    "USE_NO_MMAP",
+}
 
 
 @dataclass(frozen=True)
@@ -154,11 +194,40 @@ def _classify(path: Path, values: dict[str, str]) -> Optional[str]:
     if path.parent.name == "agents":
         return "agent"
     stem = path.stem.lower()
-    if stem in SERVICES or any(key.startswith(("MODEL_PROXY_", "TTS_BRIDGE_", "LLMOPS_UPSTREAM_")) for key in values):
+    if stem in SERVICES:
         return "service"
-    if "MODEL" in values or "MODEL_TYPE" in values or "TTS_SERVER_MODULE" in values:
+    if any(key in values for key in ("MODEL", "MODEL_PATH", "MODEL_TYPE", "TTS_SERVER_MODULE")):
         return "model"
+    if any(key.startswith(("MODEL_PROXY_", "TTS_BRIDGE_", "LLMOPS_UPSTREAM_")) for key in values):
+        return "service"
     return None
+
+
+def _normalize_model_values(local_values: dict[str, str], global_values: dict[str, str]) -> dict[str, str]:
+    defaults: dict[str, str] = {}
+    for key, value in global_values.items():
+        canonical = MODEL_ALIASES.get(key, key)
+        if canonical in MODEL_DEFAULT_KEYS:
+            defaults[canonical] = value
+    normalized = dict(defaults)
+    for key, value in local_values.items():
+        normalized[MODEL_ALIASES.get(key, key)] = value
+    return normalized
+
+
+def _global_service_values(values: dict[str, str]) -> tuple[dict[str, dict[str, str]], list[str]]:
+    groups = {"model-proxy": {}, "tts-bridge": {}}
+    used: set[str] = set()
+    for key, value in values.items():
+        if key.startswith(("LLMOPS_UPSTREAM_", "MODEL_PROXY_")):
+            groups["model-proxy"][key] = value
+            used.add(key)
+        elif key.startswith(("TTS_BRIDGE_", "OPENAI_TTS_")):
+            groups["tts-bridge"][key] = value
+            used.add(key)
+        elif MODEL_ALIASES.get(key, key) in MODEL_DEFAULT_KEYS:
+            used.add(key)
+    return groups, sorted(set(values) - used)
 
 
 def _documents(legacy_home: Path, paths: LlmOpsPaths, digest: str) -> tuple[dict[Path, dict[str, Any]], list[dict[str, Any]], list[str], list[str]]:
@@ -174,23 +243,25 @@ def _documents(legacy_home: Path, paths: LlmOpsPaths, digest: str) -> tuple[dict
     for path in files:
         if path == legacy_home / "config.env" or path.name.startswith("inventory."):
             continue
-        values = {**global_values, **parse_assignments(path)}
-        kind = _classify(path, values)
+        local_values = parse_assignments(path)
+        kind = _classify(path, local_values)
         if kind is None:
             skipped.append(str(path))
             warnings.append(f"unclassified legacy input: {path}")
             continue
         payload: dict[str, Any]
         if kind == "model":
+            values = _normalize_model_values(local_values, global_values)
             model_type = values.get("MODEL_TYPE", "tts" if "TTS_SERVER_MODULE" in values else "llm").lower()
             payload = {"schema_version": 1, "name": path.stem, "type": model_type, "environment": values}
             destination = paths.models_dir / f"{path.stem}.json"
         elif kind == "service":
+            values = local_values
             service_name = "tts-bridge" if "tts" in path.stem.lower() or any(key.startswith("TTS_BRIDGE_") for key in values) else "model-proxy"
             payload = {"schema_version": 1, "name": service_name, "environment": values}
             destination = paths.services_dir / f"{service_name}.json"
         else:
-            payload = {"schema_version": 1, "name": path.stem, "enabled": False, "environment": values, "actions": {}}
+            payload = {"schema_version": 1, "name": path.stem, "enabled": False, "environment": local_values, "actions": {}}
             destination = paths.agents_dir / f"{path.stem}.json"
             warnings.append(f"agent lifecycle actions require review: {path}")
         if destination in documents:
@@ -200,6 +271,26 @@ def _documents(legacy_home: Path, paths: LlmOpsPaths, digest: str) -> tuple[dict
         payload, converted = sanitize_secret_references(payload)
         documents[destination] = payload
         mappings.append({"source": str(path), "destination": str(destination), "kind": kind, "converted_secret_fields": list(converted)})
+
+    if global_values:
+        groups, unmapped = _global_service_values(global_values)
+        global_path = legacy_home / "config.env"
+        for service_name, values in groups.items():
+            if not values:
+                continue
+            destination = paths.services_dir / f"{service_name}.json"
+            existing = documents.get(destination)
+            if existing is None:
+                payload: dict[str, Any] = {"schema_version": 1, "name": service_name, "environment": values}
+            else:
+                payload = dict(existing)
+                payload["environment"] = {**values, **dict(existing.get("environment", {}))}
+            payload, converted = sanitize_secret_references(payload)
+            documents[destination] = payload
+            mappings.append({"source": str(global_path), "destination": str(destination), "kind": "service", "converted_secret_fields": list(converted)})
+        if unmapped:
+            skipped.append(str(global_path))
+            warnings.append("unmapped global fields in config.env: " + ", ".join(unmapped))
 
     inventory = next((path for path in files if path.name in {"inventory.json", "inventory.yml", "inventory.yaml"}), None)
     if inventory is not None:

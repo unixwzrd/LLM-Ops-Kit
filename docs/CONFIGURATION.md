@@ -78,7 +78,9 @@ llmops init --preset local-lan \
   --default-embedding EmbeddingModel
 ```
 
-Legacy `env` objects are normalized to `environment`. Structured profiles remain structured. Imported model names must be unique, model and interpreter paths must be absolute or provider references, and model types must be `llm`, `embedding`, or `tts`. Source files are never modified.
+Legacy `env` objects are normalized to `environment`. Structured profiles remain structured. Imported model names must be unique, model paths must be absolute, home-relative, or provider references, and model types must be `llm`, `embedding`, or `tts`. Source files are never modified.
+
+Python-backed components select an interpreter explicitly through fields such as `TTS_PYTHON_BIN` or structured `runtime.python_bin`. The value may be an absolute or home-relative interpreter path from Conda, `python -m venv`, virtualenv, or uv, or a simple executable name resolved through the service PATH. An explicit interpreter path is recommended for launchd because it uses the environment's installed packages without sourcing interactive shell profiles. Shell activation is neither required nor performed implicitly.
 
 ## Secrets
 

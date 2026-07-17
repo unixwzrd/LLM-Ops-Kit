@@ -142,6 +142,37 @@ class MigrationTests(unittest.TestCase):
             self.assertEqual(service["environment"]["API_KEY"], "env:API_KEY")
             self.assertIn(unknown, result.skipped)
 
+    def test_global_service_values_do_not_reclassify_models(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            legacy = root / "legacy"
+            (legacy / "config").mkdir(parents=True)
+            (legacy / "config.env").write_text(
+                "HOST=127.0.0.1\nTTS_BRIDGE_PORT=11440\nLLMOPS_UPSTREAM_HOST=models.local\n",
+                encoding="utf-8",
+            )
+            (legacy / "config" / "chat.env").write_text(
+                "MODEL_PATH=/models/chat.gguf\nMODEL_NAME=chat\nMODEL_PORT=11434\n",
+                encoding="utf-8",
+            )
+            paths = resolve_paths(
+                {
+                    "HOME": str(root),
+                    "LLMOPS_CONFIG_HOME": str(root / "canonical"),
+                    "LLMOPS_DATA_HOME": str(root / "data"),
+                    "LLMOPS_STATE_HOME": str(root / "state"),
+                    "LLMOPS_CACHE_HOME": str(root / "cache"),
+                }
+            )
+            result = migrate(legacy, paths)
+            self.assertFalse(result.skipped)
+            model = json.loads((paths.models_dir / "chat.json").read_text(encoding="utf-8"))
+            self.assertEqual(model["environment"]["MODEL"], "/models/chat.gguf")
+            self.assertEqual(model["environment"]["MODEL_PROFILE"], "chat")
+            self.assertNotIn("TTS_BRIDGE_PORT", model["environment"])
+            self.assertTrue((paths.services_dir / "model-proxy.json").is_file())
+            self.assertTrue((paths.services_dir / "tts-bridge.json").is_file())
+
 
 if __name__ == "__main__":
     unittest.main()
