@@ -13,6 +13,7 @@ Usage: llmops <command> [args...]
 
 Commands:
   status          Show aggregate component status; optionally filter or drill down
+  host            List hosts or plan/run restricted llmops operations on a peer
   component       List, inspect, plan, start, stop, restart, or read one component
   stack           List, inspect, plan, start, stop, or restart a component stack
   plan            Preview dependency-ordered operations without changing anything
@@ -41,7 +42,7 @@ case "$cmd" in
 esac
 
 case "$cmd" in
-  component|config|doctor|init|migrate-config|plan|stack|status)
+  component|config|doctor|host|init|migrate-config|plan|stack|status)
     shift
     exec "$LLMOPS_BIN_DIR/llmops-control" "$cmd" "$@"
     ;;

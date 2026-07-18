@@ -476,6 +476,9 @@ def write_topology_catalog(topology: Topology, destination: Path) -> Path:
 
     catalog = {
         "schema_version": 1,
+        "trusted_control_hosts": sorted(
+            host.name for host in topology.hosts.values() if host.trusted_control
+        ),
         "hosts": [
             {
                 "name": host.name,
@@ -573,6 +576,7 @@ def write_host_snapshot(topology: Topology, *, host_name: str, destination: Path
                 "tags": list(host.tags),
                 "transport": "local",
                 "control_host": host.control_host or host.host,
+                "trusted_control": host.trusted_control,
             }
         ],
     }

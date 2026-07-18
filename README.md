@@ -68,6 +68,16 @@ llmops stack status <stack>
 
 `llmops status` checks every enabled component in the deployed observer catalog and identifies the owning host for each result. A selector can be a component ID, qualified component ID, profile, stack, driver, host, or component tag. A single-component selection includes the driver's detailed status output. Role-filtered profiles remain local to their owning hosts; only secret-free topology metadata is shared.
 
+Hosts explicitly marked `trusted_control` may plan or run restricted LLM-Ops-Kit operations on peers. Peer commands use the configured absolute public command path and never depend on login-shell startup files:
+
+```bash
+llmops host list
+llmops host plan xanax-model component restart chat
+llmops host run xanax-model component restart chat
+```
+
+Host operations accept only status, doctor, component, and stack command families. They reject alternate configuration roots and arbitrary shell commands.
+
 Starting a component starts missing dependencies. Restarting affects only the requested component unless `--cascade` is supplied. Stopping a component with active dependents requires `--force` or `--cascade`.
 
 ## Configuration and Migration

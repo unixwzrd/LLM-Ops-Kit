@@ -373,7 +373,134 @@ def _load_observer_catalog() -> Optional[dict[str, Any]]:
         raise TopologyError(f"invalid observer catalog schema: {path}")
     if not isinstance(catalog.get("hosts"), list) or not isinstance(catalog.get("components"), list):
         raise TopologyError(f"observer catalog is incomplete: {path}")
+    trusted = catalog.get("trusted_control_hosts", [])
+    if not isinstance(trusted, list) or any(not isinstance(item, str) for item in trusted):
+        raise TopologyError(f"observer catalog has invalid trusted_control_hosts: {path}")
     return catalog
+
+
+def _catalog_hosts(catalog: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {
+        str(item.get("name", "")): item
+        for item in catalog["hosts"]
+        if isinstance(item, dict) and item.get("name")
+    }
+
+
+def _validate_host_operation(operation: list[str]) -> None:
+    if not operation:
+        raise TopologyError("host operation is required")
+    if any(
+        token == "--local"
+        or token in {"--config-home", "--inventory"}
+        or token.startswith(("--config-home=", "--inventory="))
+        for token in operation
+    ):
+        raise TopologyError("host operations cannot override deployed configuration")
+    allowed: dict[str, set[str] | None] = {
+        "status": None,
+        "doctor": None,
+        "component": {"list", "plan", "start", "stop", "restart", "status", "logs"},
+        "stack": {"list", "plan", "start", "stop", "restart", "status"},
+    }
+    command = operation[0]
+    if command not in allowed:
+        raise TopologyError(f"host operation is not allowed: {command}")
+    subcommands = allowed[command]
+    if subcommands is not None and (len(operation) < 2 or operation[1] not in subcommands):
+        raise TopologyError(f"host {command} operation is not allowed")
+
+
+def _host_command(host: dict[str, Any], operation: list[str], *, json_output: bool) -> list[str]:
+    remote = [_remote_llmops_path(str(host.get("public_bin_dir", "~/.local/bin"))), *map(shlex.quote, operation)]
+    if json_output and "--json" not in operation:
+        remote.append("--json")
+    return [
+        "ssh",
+        "-p",
+        str(host.get("port", 22)),
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "StrictHostKeyChecking=accept-new",
+        f"{host['user']}@{host['host']}",
+        " ".join(remote),
+    ]
+
+
+def _host_context(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, Any]]:
+    catalog = _load_observer_catalog()
+    if catalog is None:
+        raise TopologyError("host operations require a deployed observer catalog")
+    current_host = _current_snapshot_host()
+    if current_host not in set(catalog.get("trusted_control_hosts", [])):
+        raise TopologyError(f"host is not trusted for remote control: {current_host or 'unknown'}")
+    hosts = _catalog_hosts(catalog)
+    target = hosts.get(args.host)
+    if target is None:
+        raise TopologyError(f"catalog host not found: {args.host}")
+    return catalog, target
+
+
+def cmd_host_list(args: argparse.Namespace) -> int:
+    catalog = _load_observer_catalog()
+    if catalog is None:
+        raise TopologyError("host list requires a deployed observer catalog")
+    trusted = set(catalog.get("trusted_control_hosts", []))
+    payload = [
+        {
+            "host": name,
+            "address": item.get("host", ""),
+            "user": item.get("user", ""),
+            "role": item.get("role", ""),
+            "trusted_control": name in trusted,
+        }
+        for name, item in sorted(_catalog_hosts(catalog).items())
+    ]
+    emit(payload, json_output=args.json)
+    return 0
+
+
+def cmd_host_operation(args: argparse.Namespace) -> int:
+    _, target = _host_context(args)
+    operation = list(args.operation)
+    if operation and operation[0] == "--":
+        operation = operation[1:]
+    _validate_host_operation(operation)
+    command = _host_command(target, operation, json_output=args.json)
+    if args.host_action == "plan":
+        emit({"host": args.host, "command": " ".join(shlex.quote(item) for item in command)}, json_output=args.json)
+        return 0
+    try:
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=args.host_timeout,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise TopologyError(f"host operation failed: {exc}") from exc
+    if args.json:
+        try:
+            remote_output: Any = json.loads(completed.stdout)
+        except json.JSONDecodeError:
+            remote_output = completed.stdout.strip()
+        emit(
+            {
+                "host": args.host,
+                "returncode": completed.returncode,
+                "output": remote_output,
+                "stderr": completed.stderr.strip(),
+            },
+            json_output=True,
+        )
+    else:
+        if completed.stdout:
+            print(completed.stdout, end="")
+        if completed.stderr:
+            print(completed.stderr, end="", file=sys.stderr)
+    return completed.returncode
 
 
 def _catalog_components(
@@ -665,6 +792,17 @@ def build_parser() -> argparse.ArgumentParser:
     status.add_argument("--host-timeout", type=int, default=20)
     status.add_argument("--local", action="store_true", help=argparse.SUPPRESS)
     status.set_defaults(func=cmd_status)
+
+    host = sub.add_parser("host")
+    host_sub = host.add_subparsers(dest="host_action", required=True)
+    host_list = host_sub.add_parser("list")
+    host_list.set_defaults(func=cmd_host_list)
+    for action in ("plan", "run"):
+        host_operation = host_sub.add_parser(action)
+        host_operation.add_argument("host")
+        host_operation.add_argument("operation", nargs=argparse.REMAINDER)
+        host_operation.add_argument("--host-timeout", type=int, default=900)
+        host_operation.set_defaults(func=cmd_host_operation)
 
     config = sub.add_parser("config")
     config_sub = config.add_subparsers(dest="config_command", required=True)

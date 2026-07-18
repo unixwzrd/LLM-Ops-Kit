@@ -47,6 +47,8 @@ Supported roles are `admin`, `llm`, `agent`, and `hybrid`. Supported transports 
 
 `host` is the address used by the deployment authority. `control_host` is the routable address placed in the shared observer catalog for peer-to-peer status checks and defaults to `host`. Set `control_host` explicitly when `host` is `localhost`, a loopback address, or otherwise meaningful only to the deployment authority.
 
+Set `trusted_control` to the JSON boolean `true` only for a managed host that may issue restricted `llmops host` operations to peers. The shared catalog records this grant without distributing SSH private keys or secret values. Authentication continues to use the operator-provisioned SSH configuration, while peer execution uses the target host's configured absolute `llmops` path.
+
 ## Components
 
 ```json

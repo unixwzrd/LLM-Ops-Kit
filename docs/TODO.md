@@ -27,7 +27,7 @@ Back: [Documentation index](./INDEX.md)
   - [ ] Remote discovery, older-peer bootstrap, coordinated host selection, and remote rollback reporting.
 - [ ] Add one application-owned Python runtime environment with a checksum-verified uv or `venv` bootstrap, offline/error handling, dependency locking, repair, upgrade, rollback, and purge semantics. Python-backed launchd services should use its explicit interpreter path without sourcing interactive shell profiles.
 - [x] Add portable read-only observer snapshots so any trusted configured host can run global `llmops status` without receiving mutation authority or secret material.
-- [ ] Add explicit trusted-control snapshots and `llmops host` operations for approved operator hosts. Remote execution must use the configured absolute `llmops` path over SSH and must not depend on login-shell startup files.
+- [x] Add explicit trusted-control snapshots and `llmops host` operations for approved operator hosts. Remote execution uses the configured absolute `llmops` path over SSH, permits only restricted LLM-Ops-Kit command families, and does not depend on login-shell startup files.
 - [x] Distribute a complete sanitized topology catalog to managed hosts while retaining role-filtered runtime profiles. Synchronization is one-way from the desired-state authority, checksummed, and atomic.
 - [ ] Validate identical catalog hashes and global status from both live hosts after the soak and release-candidate deployment.
 - [ ] Make configuration and toolkit-version drift visible from every trusted control host. Refuse automatic merging of independently edited host configuration and provide an explicit reconciliation workflow.

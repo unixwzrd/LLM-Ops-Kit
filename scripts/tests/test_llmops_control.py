@@ -35,6 +35,8 @@ CONTROL_GLOBALS = runpy.run_path(str(CONTROL_SCRIPT), run_name="llmops_control_t
 status_components = CONTROL_GLOBALS["_status_components"]
 status_state = CONTROL_GLOBALS["_status_state"]
 remote_status = CONTROL_GLOBALS["_remote_status"]
+host_command = CONTROL_GLOBALS["_host_command"]
+validate_host_operation = CONTROL_GLOBALS["_validate_host_operation"]
 stack_operations = CONTROL_GLOBALS["stack_operations"]
 
 
@@ -100,8 +102,8 @@ class ControlFixture(unittest.TestCase):
                     "transport": "local",
                 },
                 "hosts": [
-                    {"name": "model-host", "role": "llm", "host": "localhost", "control_host": "model.local"},
-                    {"name": "agent-host", "role": "agent", "host": "localhost", "control_host": "agent.local"},
+                    {"name": "model-host", "role": "llm", "host": "localhost", "control_host": "model.local", "trusted_control": True},
+                    {"name": "agent-host", "role": "agent", "host": "localhost", "control_host": "agent.local", "trusted_control": True},
                 ],
             },
         )
@@ -202,6 +204,13 @@ class InventoryTests(ControlFixture):
         raw["hosts"].append(dict(raw["hosts"][0]))
         self.write_json(self.paths.inventory_file, raw)
         with self.assertRaisesRegex(InventoryError, "duplicate host"):
+            load_inventory(self.paths.inventory_file)
+
+    def test_inventory_rejects_non_boolean_trusted_control(self) -> None:
+        raw = json.loads(self.paths.inventory_file.read_text(encoding="utf-8"))
+        raw["hosts"][0]["trusted_control"] = "yes"
+        self.write_json(self.paths.inventory_file, raw)
+        with self.assertRaisesRegex(InventoryError, "trusted_control must be a boolean"):
             load_inventory(self.paths.inventory_file)
 
 
@@ -340,6 +349,28 @@ class TopologyTests(ControlFixture):
             {"agent-host": "agent.local", "model-host": "model.local"},
         )
         self.assertNotIn("ssh_key", (model / "catalog.json").read_text(encoding="utf-8"))
+        self.assertEqual(catalog["trusted_control_hosts"], ["agent-host", "model-host"])
+
+    def test_host_operation_uses_absolute_peer_command(self) -> None:
+        validate_host_operation(["component", "restart", "chat"])
+        command = host_command(
+            {
+                "host": "model.local",
+                "user": "operator",
+                "port": 22,
+                "public_bin_dir": "~/.local/bin",
+            },
+            ["component", "restart", "chat"],
+            json_output=False,
+        )
+        self.assertEqual(command[-2], "operator@model.local")
+        self.assertEqual(command[-1], '"$HOME"/.local/bin/llmops component restart chat')
+
+    def test_host_operation_rejects_arbitrary_commands_and_config_overrides(self) -> None:
+        with self.assertRaisesRegex(TopologyError, "not allowed"):
+            validate_host_operation(["sh", "-c", "true"])
+        with self.assertRaisesRegex(TopologyError, "cannot override"):
+            validate_host_operation(["status", "--config-home", "/tmp/other"])
 
     def test_remote_status_uses_absolute_command_and_local_mode(self) -> None:
         args = type(

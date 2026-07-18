@@ -34,6 +34,7 @@ class HostRecord:
     tags: tuple[str, ...]
     transport: str = "ssh"
     control_host: str = ""
+    trusted_control: bool = False
 
     @property
     def destination(self) -> str:
@@ -129,6 +130,9 @@ def load_inventory(path: Path) -> dict[str, HostRecord]:
             tags = [tags]
         if not isinstance(tags, list) or any(not isinstance(tag, str) for tag in tags):
             raise InventoryError(f"host {name} tags must be strings")
+        trusted_control = merged.get("trusted_control", False)
+        if not isinstance(trusted_control, bool):
+            raise InventoryError(f"host {name} trusted_control must be a boolean")
         try:
             port = int(merged.get("port", 22))
         except (TypeError, ValueError) as exc:
@@ -147,6 +151,7 @@ def load_inventory(path: Path) -> dict[str, HostRecord]:
             tags=tuple(tags),
             transport=transport,
             control_host=str(merged.get("control_host", merged["host"])),
+            trusted_control=trusted_control,
         )
     return hosts
 
