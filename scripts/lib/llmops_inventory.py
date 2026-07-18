@@ -35,6 +35,7 @@ class HostRecord:
     transport: str = "ssh"
     control_host: str = ""
     trusted_control: bool = False
+    peer_observable: bool = True
 
     @property
     def destination(self) -> str:
@@ -133,6 +134,9 @@ def load_inventory(path: Path) -> dict[str, HostRecord]:
         trusted_control = merged.get("trusted_control", False)
         if not isinstance(trusted_control, bool):
             raise InventoryError(f"host {name} trusted_control must be a boolean")
+        peer_observable = merged.get("peer_observable", True)
+        if not isinstance(peer_observable, bool):
+            raise InventoryError(f"host {name} peer_observable must be a boolean")
         try:
             port = int(merged.get("port", 22))
         except (TypeError, ValueError) as exc:
@@ -152,6 +156,7 @@ def load_inventory(path: Path) -> dict[str, HostRecord]:
             transport=transport,
             control_host=str(merged.get("control_host", merged["host"])),
             trusted_control=trusted_control,
+            peer_observable=peer_observable,
         )
     return hosts
 

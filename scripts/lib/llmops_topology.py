@@ -488,6 +488,7 @@ def write_topology_catalog(topology: Topology, destination: Path) -> Path:
                 "port": host.port,
                 "public_bin_dir": host.public_bin_dir,
                 "tags": list(host.tags),
+                "peer_observable": host.peer_observable,
             }
             for host in sorted(topology.hosts.values(), key=lambda item: item.name)
         ],
@@ -577,6 +578,7 @@ def write_host_snapshot(topology: Topology, *, host_name: str, destination: Path
                 "transport": "local",
                 "control_host": host.control_host or host.host,
                 "trusted_control": host.trusted_control,
+                "peer_observable": host.peer_observable,
             }
         ],
     }

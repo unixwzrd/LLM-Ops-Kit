@@ -49,6 +49,8 @@ Supported roles are `admin`, `llm`, `agent`, and `hybrid`. Supported transports 
 
 Set `trusted_control` to the JSON boolean `true` only for a managed host that may issue restricted `llmops host` operations to peers. The shared catalog records this grant without distributing SSH private keys or secret values. Authentication continues to use the operator-provisioned SSH configuration, while peer execution uses the target host's configured absolute `llmops` path.
 
+Set `peer_observable` to `false` when components run in a local desktop login domain that managed peers intentionally cannot authenticate into. Peer status then reports those components as `authority-only` instead of incorrectly reporting them as unreachable. The authoritative desktop account continues to inspect and manage them through its full configuration.
+
 ## Components
 
 ```json

@@ -213,6 +213,13 @@ class InventoryTests(ControlFixture):
         with self.assertRaisesRegex(InventoryError, "trusted_control must be a boolean"):
             load_inventory(self.paths.inventory_file)
 
+    def test_inventory_rejects_non_boolean_peer_observable(self) -> None:
+        raw = json.loads(self.paths.inventory_file.read_text(encoding="utf-8"))
+        raw["hosts"][0]["peer_observable"] = "no"
+        self.write_json(self.paths.inventory_file, raw)
+        with self.assertRaisesRegex(InventoryError, "peer_observable must be a boolean"):
+            load_inventory(self.paths.inventory_file)
+
 
 class TopologyTests(ControlFixture):
     def test_stack_loads_and_validates(self) -> None:
@@ -350,6 +357,7 @@ class TopologyTests(ControlFixture):
         )
         self.assertNotIn("ssh_key", (model / "catalog.json").read_text(encoding="utf-8"))
         self.assertEqual(catalog["trusted_control_hosts"], ["agent-host", "model-host"])
+        self.assertTrue(all(item["peer_observable"] for item in catalog["hosts"]))
 
     def test_host_operation_uses_absolute_peer_command(self) -> None:
         validate_host_operation(["component", "restart", "chat"])

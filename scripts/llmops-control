@@ -621,6 +621,8 @@ def _catalog_status(args: argparse.Namespace, catalog: dict[str, Any]) -> list[d
         host = hosts.get(host_name)
         if host is None:
             return host_name, [], f"observer catalog has no host record for {host_name}"
+        if host.get("peer_observable", True) is False:
+            return host_name, [], "authority-only"
         payload, error = _remote_status(host, args.selector, args)
         return host_name, payload, error
 
@@ -633,6 +635,19 @@ def _catalog_status(args: argparse.Namespace, catalog: dict[str, Any]) -> list[d
             payload.extend(items)
             continue
         for component in by_host[host_name]:
+            if error == "authority-only":
+                payload.append(
+                    {
+                        "status": "authority-only",
+                        "component": component.get("id", ""),
+                        "host": host_name,
+                        "driver": component.get("driver", ""),
+                        "profile": component.get("profile", ""),
+                        "tags": component.get("tags", []),
+                        "returncode": None,
+                    }
+                )
+                continue
             payload.append(
                 {
                     "status": "unreachable",
@@ -663,7 +678,7 @@ def cmd_status(args: argparse.Namespace) -> int:
             detail = payload[0].get("stdout", "") or payload[0].get("stderr", "")
             if detail:
                 print(f"\n{detail}")
-    return 0 if all(item["status"] in {"running", "disabled"} for item in payload) else 1
+    return 0 if all(item["status"] in {"running", "disabled", "authority-only"} for item in payload) else 1
 
 
 def cmd_component_mutate(args: argparse.Namespace) -> int:
