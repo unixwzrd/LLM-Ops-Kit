@@ -2,7 +2,7 @@
 
 Back: [Documentation index](./INDEX.md)
 
-The model proxy records request and response metadata, token usage, timings, raw framed traffic, and optional rendered prompts while forwarding OpenAI-compatible requests unchanged by default.
+The model proxy records request and response metadata, token usage, timings, raw framed traffic, and optional rendered prompts while forwarding OpenAI-compatible request bodies unchanged.
 
 ## Operate the Component
 
@@ -29,9 +29,9 @@ This internal driver command writes the same raw and rendered diagnostic artifac
 
 ## Traffic Behavior
 
-- The original request body is forwarded unchanged by default.
+- The original request body is always forwarded byte-for-byte unchanged.
 - A chat template creates derived logging artifacts; it does not rewrite upstream traffic.
-- Request rewriting occurs only when an explicit rewriting option is enabled.
+- The proxy has no request-rewriting mode. Context optimization belongs in the model's selected chat template.
 - Logs may contain prompts and responses and must be protected as operational data.
 
 ## Logs

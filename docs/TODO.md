@@ -14,6 +14,7 @@ Back: [Documentation index](./INDEX.md)
 - [x] Pass component restart, dependency enforcement, cascade behavior, and complete cold stop/start.
 - [ ] Complete a 48-hour soak spanning two consecutive scheduled daily operational reports while retaining the prior runtime and backups.
   - Soak restarted at 2026-07-17 15:51 CDT after the Qwen3TTS process crashed. The bridge remained available and correctly reported upstream failure; the TTS model was restored and end-to-end generation passed.
+  - Soak restarted again at 2026-07-17 20:15 CDT after deploying the latest-image Qwen template and strictly passive model proxy. The prior Qwen3TTS failure was traced to an uncaught Metal `kIOGPUCommandBufferCallbackErrorImpactingInteractivity` error.
 - [ ] Obtain a green macOS CI run after the release candidate is pushed for review.
 
 ## General-User Distribution Gate
