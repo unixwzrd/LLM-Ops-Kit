@@ -32,7 +32,7 @@ Back: [Documentation index](./INDEX.md)
 - [x] Distribute a complete sanitized topology catalog to managed hosts while retaining role-filtered runtime profiles. Synchronization is one-way from the desired-state authority, checksummed, and atomic.
 - [ ] Validate identical catalog hashes and global status from both live hosts after the soak and release-candidate deployment.
   - Current pre-soak evidence: both hosts have catalog SHA-256 `fea1c33572fb3a39bc056d50c1bb25cbd34fae8d5278fe39e8b44fc5e9dd2bec` and return identical status for all model-host and agent-host components.
-  - The `xanax-control` Desktop tunnel remains unobservable from peers because it runs in the `mps` launchd domain and `miafour` has no SSH authorization to the `mps` account. Do not expand primary-account access implicitly; either keep this component authority-only or approve a separate least-privilege observer mechanism.
+  - The Desktop tunnel remains unobservable from managed peers because it runs in the desktop user's launchd domain and the service account has no SSH authorization to that account. Do not expand primary-account access implicitly; either keep this component authority-only or approve a separate least-privilege observer mechanism.
 - [ ] Make configuration and toolkit-version drift visible from every trusted control host. Refuse automatic merging of independently edited host configuration and provide an explicit reconciliation workflow.
 - [ ] Package an agent-neutral LLM-Ops-Kit skill that uses `doctor`, `plan`, `status`, and JSON output for setup and operations while requiring explicit approval for mutations and SSH provisioning.
 

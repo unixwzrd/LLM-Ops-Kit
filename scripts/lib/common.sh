@@ -192,6 +192,14 @@ file_size_bytes() {
   wc -c < "$path" | tr -d '[:space:]'
 }
 
+archive_and_truncate_log() {
+  local log_file="$1"
+  local archive_file="$2"
+  [[ -f "$log_file" ]] || return 0
+  cp -p "$log_file" "$archive_file"
+  : > "$log_file"
+}
+
 rotate_log_if_needed() {
   local log_file="$1"
   local max_bytes size stamp rotated
@@ -207,7 +215,7 @@ rotate_log_if_needed() {
 
   stamp="$(date +%Y%m%d-%H%M%S)"
   rotated="${log_file}.${stamp}"
-  mv "$log_file" "$rotated"
+  archive_and_truncate_log "$log_file" "$rotated"
 }
 
 prune_rotated_logs() {
@@ -264,7 +272,7 @@ archive_log_for_restart() {
   if [[ -e "$rotated" ]]; then
     rotated="${rotated}.$$"
   fi
-  mv "$log_file" "$rotated"
+  archive_and_truncate_log "$log_file" "$rotated"
   prune_rotated_logs "$log_file"
 }
 

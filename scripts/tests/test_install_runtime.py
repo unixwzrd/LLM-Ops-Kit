@@ -157,6 +157,7 @@ class InstallerTests(unittest.TestCase):
             log = root / "state" / "logs" / "tts-server-test.log"
             log.parent.mkdir(parents=True)
             log.write_text("prior crash evidence\n", encoding="utf-8")
+            original_inode = log.stat().st_ino
             env = {
                 **os.environ,
                 "HOME": str(root),
@@ -177,6 +178,36 @@ class InstallerTests(unittest.TestCase):
             self.assertEqual(len(archived), 1)
             self.assertEqual(archived[0].read_text(encoding="utf-8"), "prior crash evidence\n")
             self.assertEqual(log.read_text(encoding="utf-8"), "")
+            self.assertEqual(log.stat().st_ino, original_inode)
+
+    def test_size_rotation_preserves_active_log_inode(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            log = root / "state" / "logs" / "model.log"
+            log.parent.mkdir(parents=True)
+            log.write_text("oversized log\n", encoding="utf-8")
+            original_inode = log.stat().st_ino
+            env = {
+                **os.environ,
+                "HOME": str(root),
+                "LLMOPS_STATE_HOME": str(root / "state"),
+            }
+            self.run_command(
+                [
+                    "/usr/local/bin/bash",
+                    "-c",
+                    '. "$1"; rotate_log_if_needed "$2" 1',
+                    "_",
+                    str(REPO_ROOT / "scripts" / "lib" / "common.sh"),
+                    str(log),
+                ],
+                env,
+            )
+            archived = list(log.parent.glob("model.log.*"))
+            self.assertEqual(len(archived), 1)
+            self.assertEqual(archived[0].read_text(encoding="utf-8"), "oversized log\n")
+            self.assertEqual(log.read_text(encoding="utf-8"), "")
+            self.assertEqual(log.stat().st_ino, original_inode)
 
 
 if __name__ == "__main__":
