@@ -184,15 +184,13 @@ class ModelProxyStatsTests(unittest.TestCase):
                 {"role": "user", "content": "make an image"},
                 {
                     "role": "assistant",
-                    "content": "saving the prior image",
+                    "content": "old image generation call",
                     "tool_calls": [
                         {
                             "type": "function",
                             "function": {
                                 "name": "terminal",
-                                "arguments": json.dumps(
-                                    {"command": f"decode {old_image}"}
-                                ),
+                                "arguments": json.dumps({"command": "generate old image"}),
                             },
                         }
                     ],
@@ -201,6 +199,20 @@ class ModelProxyStatsTests(unittest.TestCase):
                     "role": "tool",
                     "content": json.dumps({"images": [old_image]}),
                 },
+                {
+                    "role": "assistant",
+                    "content": "old image decode call",
+                    "tool_calls": [
+                        {
+                            "type": "function",
+                            "function": {
+                                "name": "terminal",
+                                "arguments": json.dumps({"command": f"decode {old_image}"}),
+                            },
+                        }
+                    ],
+                },
+                {"role": "tool", "content": "old image decode result"},
                 {
                     "role": "assistant",
                     "content": "generating a newer image",
@@ -235,8 +247,12 @@ class ModelProxyStatsTests(unittest.TestCase):
         self.assertIsNone(render_error)
         self.assertNotIn("OLDPAYLOAD", rendered)
         self.assertIn("LATESTPAYLOAD", rendered)
-        self.assertIn("[Earlier image payload omitted]", rendered)
-        self.assertIn("[Embedded image payload omitted from tool call]", rendered)
+        self.assertNotIn("old image generation call", rendered)
+        self.assertNotIn("generate old image", rendered)
+        self.assertNotIn("old image decode call", rendered)
+        self.assertNotIn("old image decode result", rendered)
+        self.assertIn("generating a newer image", rendered)
+        self.assertIn("generate again", rendered)
 
     @unittest.skipIf(model_proxy_tap.jinja2 is None, "Jinja is not installed")
     def test_latest_image_template_keeps_only_final_structured_image(self) -> None:

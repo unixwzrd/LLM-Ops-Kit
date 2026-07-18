@@ -3,7 +3,7 @@
 {%- macro render_content(content, do_vision_count, is_system_content=false, message_index=-1) %}
     {%- if content is string %}
         {%- if message_index >= 0 and message_index != media_state.last_image_message_index and content|length > 4096 and ('iVBORw0KGgo' in content or '/9j/' in content or 'data:image/' in content) %}
-            {{- '[Earlier image payload omitted]' }}
+            {{- '' }}
         {%- else %}
             {{- content }}
         {%- endif %}
@@ -65,6 +65,53 @@
         {%- endfor %}
     {%- endif %}
 {%- endfor %}
+{%- set skip_state = namespace(indices=[]) %}
+{%- for message in messages %}
+    {%- set message_index = loop.index0 %}
+    {%- set content_state = namespace(has_image=false) %}
+    {%- if message.content is string %}
+        {%- if message.content|length > 4096 and ('iVBORw0KGgo' in message.content or '/9j/' in message.content or 'data:image/' in message.content) %}
+            {%- set content_state.has_image = true %}
+        {%- endif %}
+    {%- endif %}
+    {%- if content_state.has_image and message_index != media_state.last_image_message_index %}
+        {%- set _ = skip_state.indices.append(message_index) %}
+        {%- if message_index > 0 and messages[message_index - 1].role == 'assistant' %}
+            {%- set _ = skip_state.indices.append(message_index - 1) %}
+        {%- endif %}
+    {%- endif %}
+    {%- if message.role == 'assistant' and message.tool_calls and message.tool_calls is iterable and message.tool_calls is not mapping %}
+        {%- set tool_state = namespace(has_image=false) %}
+        {%- for original_tool_call in message.tool_calls %}
+            {%- set tool_call = original_tool_call.function if original_tool_call.function is defined else original_tool_call %}
+            {%- if tool_call.arguments is string %}
+                {%- if 'iVBORw0KGgo' in tool_call.arguments or '/9j/' in tool_call.arguments or 'data:image/' in tool_call.arguments %}
+                    {%- set tool_state.has_image = true %}
+                {%- endif %}
+            {%- elif tool_call.arguments is mapping %}
+                {%- for args_name, args_value in tool_call.arguments|items %}
+                    {%- set args_text = args_value | tojson | safe if args_value is mapping or (args_value is sequence and args_value is not string) else args_value | string %}
+                    {%- if 'iVBORw0KGgo' in args_text or '/9j/' in args_text or 'data:image/' in args_text %}
+                        {%- set tool_state.has_image = true %}
+                    {%- endif %}
+                {%- endfor %}
+            {%- endif %}
+        {%- endfor %}
+        {%- if tool_state.has_image %}
+            {%- set _ = skip_state.indices.append(message_index) %}
+        {%- endif %}
+    {%- endif %}
+{%- endfor %}
+{%- set following_state = namespace(skip_tools=false) %}
+{%- for message in messages %}
+    {%- if message.role == 'assistant' %}
+        {%- set following_state.skip_tools = loop.index0 in skip_state.indices %}
+    {%- elif message.role == 'tool' and following_state.skip_tools %}
+        {%- set _ = skip_state.indices.append(loop.index0) %}
+    {%- else %}
+        {%- set following_state.skip_tools = false %}
+    {%- endif %}
+{%- endfor %}
 {%- if tools and tools is iterable and tools is not mapping %}
     {{- '<|im_start|>system\n' }}
     {{- "# Tools\n\nYou have access to the following functions:\n\n<tools>" }}
@@ -102,14 +149,15 @@
     {{- raise_exception('No user query found in messages.') }}
 {%- endif %}
 {%- for message in messages %}
-    {%- set content = render_content(message.content, true, false, loop.index0)|trim %}
-    {%- if message.role == "system" %}
+    {%- if loop.index0 not in skip_state.indices %}
+        {%- set content = render_content(message.content, true, false, loop.index0)|trim %}
+        {%- if message.role == "system" %}
         {%- if not loop.first %}
             {{- raise_exception('System message must be at the beginning.') }}
         {%- endif %}
-    {%- elif message.role == "user" %}
+        {%- elif message.role == "user" %}
         {{- '<|im_start|>' + message.role + '\n' + content + '<|im_end|>' + '\n' }}
-    {%- elif message.role == "assistant" %}
+        {%- elif message.role == "assistant" %}
         {%- set reasoning_content = '' %}
         {%- if message.reasoning_content is string %}
             {%- set reasoning_content = message.reasoning_content %}
@@ -155,7 +203,7 @@
             {%- endfor %}
         {%- endif %}
         {{- '<|im_end|>\n' }}
-    {%- elif message.role == "tool" %}
+        {%- elif message.role == "tool" %}
         {%- if loop.previtem and loop.previtem.role != "tool" %}
             {{- '<|im_start|>user' }}
         {%- endif %}
@@ -167,8 +215,9 @@
         {%- elif loop.last %}
             {{- '<|im_end|>\n' }}
         {%- endif %}
-    {%- else %}
+        {%- else %}
         {{- raise_exception('Unexpected message role.') }}
+        {%- endif %}
     {%- endif %}
 {%- endfor %}
 {%- if add_generation_prompt %}
