@@ -291,6 +291,96 @@ class ModelProxyStatsTests(unittest.TestCase):
         self.assertEqual(rendered.count("<|image_pad|>"), 1)
         self.assertIn("[Earlier image omitted]", rendered)
 
+    @unittest.skipIf(model_proxy_tap.jinja2 is None, "Jinja is not installed")
+    def test_latest_image_template_keeps_only_latest_audio_and_video_payloads(self) -> None:
+        template_path = SCRIPTS_DIR / "templates" / "Qwen-3_5-latest-image-template.jinja"
+        loaded_path, renderer, load_error = model_proxy_tap.load_chat_template_renderer(
+            str(template_path)
+        )
+        old_audio = "UklGROLDV0FWRQ" + ("A" * 5000)
+        latest_audio = "UklGRLATESTV0FWRQ" + ("B" * 5000)
+        old_video = "AAAAIGZ0eXBOLDVIDEO" + ("C" * 5000)
+        latest_video = "AAAAIGZ0eXBLATESTVIDEO" + ("D" * 5000)
+        messages = [{"role": "user", "content": "make media"}]
+        for label, payload in (
+            ("old audio", old_audio),
+            ("latest audio", latest_audio),
+            ("old video", old_video),
+            ("latest video", latest_video),
+        ):
+            messages.extend(
+                [
+                    {
+                        "role": "assistant",
+                        "content": f"{label} generation call",
+                        "tool_calls": [
+                            {
+                                "type": "function",
+                                "function": {
+                                    "name": "terminal",
+                                    "arguments": json.dumps({"command": f"generate {label}"}),
+                                },
+                            }
+                        ],
+                    },
+                    {"role": "tool", "content": json.dumps({"media": payload})},
+                ]
+            )
+        messages.append({"role": "user", "content": "continue"})
+        rendered, render_error = model_proxy_tap.render_prompt_from_payload(
+            {"messages": messages, "tools": [], "add_generation_prompt": True},
+            chat_template_renderer=renderer,
+            chat_template_path=loaded_path,
+            chat_template_error=load_error,
+            chat_template_max_chars=0,
+        )
+
+        self.assertIsNone(render_error)
+        self.assertNotIn("OLDV0FWRQ", rendered)
+        self.assertIn("LATESTV0FWRQ", rendered)
+        self.assertNotIn("OLDVIDEO", rendered)
+        self.assertIn("LATESTVIDEO", rendered)
+        self.assertNotIn("old audio generation call", rendered)
+        self.assertNotIn("old video generation call", rendered)
+        self.assertIn("latest audio generation call", rendered)
+        self.assertIn("latest video generation call", rendered)
+
+    @unittest.skipIf(model_proxy_tap.jinja2 is None, "Jinja is not installed")
+    def test_latest_image_template_keeps_only_latest_structured_video(self) -> None:
+        template_path = SCRIPTS_DIR / "templates" / "Qwen-3_5-latest-image-template.jinja"
+        loaded_path, renderer, load_error = model_proxy_tap.load_chat_template_renderer(
+            str(template_path)
+        )
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "first video"},
+                    {"type": "video", "video": "old-video.mp4"},
+                ],
+            },
+            {"role": "assistant", "content": "first response"},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "latest video"},
+                    {"type": "video", "video": "latest-video.mp4"},
+                ],
+            },
+        ]
+        rendered, render_error = model_proxy_tap.render_prompt_from_payload(
+            {"messages": messages, "tools": [], "add_generation_prompt": True},
+            chat_template_renderer=renderer,
+            chat_template_path=loaded_path,
+            chat_template_error=load_error,
+            chat_template_max_chars=0,
+        )
+
+        self.assertIsNone(render_error)
+        self.assertEqual(rendered.count("<|video_pad|>"), 1)
+        self.assertIn("first video", rendered)
+        self.assertIn("latest video", rendered)
+
 class _CaptureHandler(BaseHTTPRequestHandler):
     received_bodies: list[bytes] = []
     response_body: bytes = json.dumps({"ok": True}).encode("utf-8")

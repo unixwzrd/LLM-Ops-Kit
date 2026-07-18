@@ -2,7 +2,20 @@
 {%- set video_count = namespace(value=0) %}
 {%- macro render_content(content, do_vision_count, is_system_content=false, message_index=-1) %}
     {%- if content is string %}
-        {%- if message_index >= 0 and message_index != media_state.last_image_message_index and content|length > 4096 and ('iVBORw0KGgo' in content or '/9j/' in content or 'data:image/' in content) %}
+        {%- set content_media = namespace(has_media=false, keep_media=false) %}
+        {%- if content|length > 4096 and ('iVBORw0KGgo' in content or '/9j/' in content or 'data:image/' in content) %}
+            {%- set content_media.has_media = true %}
+            {%- set content_media.keep_media = message_index == media_state.last_image_message_index %}
+        {%- endif %}
+        {%- if content|length > 4096 and ('data:audio/' in content or 'UklGR' in content and 'V0FWRQ' in content or 'SUQz' in content or 'T2dnUw' in content) %}
+            {%- set content_media.has_media = true %}
+            {%- if message_index == media_state.last_audio_message_index %}{%- set content_media.keep_media = true %}{%- endif %}
+        {%- endif %}
+        {%- if content|length > 4096 and ('data:video/' in content or 'AAAAIGZ0eXB' in content or 'AAAAGGZ0eXB' in content or 'GkXfo' in content) %}
+            {%- set content_media.has_media = true %}
+            {%- if message_index == media_state.last_video_message_index %}{%- set content_media.keep_media = true %}{%- endif %}
+        {%- endif %}
+        {%- if message_index >= 0 and content_media.has_media and not content_media.keep_media %}
             {{- '' }}
         {%- else %}
             {{- content }}
@@ -28,13 +41,15 @@
                 {%- if is_system_content %}
                     {{- raise_exception('System message cannot contain videos.') }}
                 {%- endif %}
-                {%- if do_vision_count %}
-                    {%- set video_count.value = video_count.value + 1 %}
+                {%- if message_index < 0 or message_index == media_state.last_video_message_index %}
+                    {%- if do_vision_count %}
+                        {%- set video_count.value = video_count.value + 1 %}
+                    {%- endif %}
+                    {%- if add_vision_id %}
+                        {{- 'Video ' ~ video_count.value ~ ': ' }}
+                    {%- endif %}
+                    {{- '<|vision_start|><|video_pad|><|vision_end|>' }}
                 {%- endif %}
-                {%- if add_vision_id %}
-                    {{- 'Video ' ~ video_count.value ~ ': ' }}
-                {%- endif %}
-                {{- '<|vision_start|><|video_pad|><|vision_end|>' }}
             {%- elif 'text' in item %}
                 {{- item.text }}
             {%- else %}
@@ -50,17 +65,26 @@
 {%- if not messages %}
     {{- raise_exception('No messages provided.') }}
 {%- endif %}
-{%- set media_state = namespace(last_image_message_index=-1) %}
+{%- set media_state = namespace(last_image_message_index=-1, last_audio_message_index=-1, last_video_message_index=-1) %}
 {%- for message in messages %}
     {%- set message_index = loop.index0 %}
     {%- if message.content is string %}
         {%- if message.content|length > 4096 and ('iVBORw0KGgo' in message.content or '/9j/' in message.content or 'data:image/' in message.content) %}
             {%- set media_state.last_image_message_index = loop.index0 %}
         {%- endif %}
+        {%- if message.content|length > 4096 and ('data:audio/' in message.content or 'UklGR' in message.content and 'V0FWRQ' in message.content or 'SUQz' in message.content or 'T2dnUw' in message.content) %}
+            {%- set media_state.last_audio_message_index = loop.index0 %}
+        {%- endif %}
+        {%- if message.content|length > 4096 and ('data:video/' in message.content or 'AAAAIGZ0eXB' in message.content or 'AAAAGGZ0eXB' in message.content or 'GkXfo' in message.content) %}
+            {%- set media_state.last_video_message_index = loop.index0 %}
+        {%- endif %}
     {%- elif message.content is iterable and message.content is not mapping %}
         {%- for item in message.content %}
             {%- if item is mapping and ('image' in item or 'image_url' in item or item.type == 'image') %}
                 {%- set media_state.last_image_message_index = message_index %}
+            {%- endif %}
+            {%- if item is mapping and ('video' in item or item.type == 'video') %}
+                {%- set media_state.last_video_message_index = message_index %}
             {%- endif %}
         {%- endfor %}
     {%- endif %}
@@ -68,36 +92,45 @@
 {%- set skip_state = namespace(indices=[]) %}
 {%- for message in messages %}
     {%- set message_index = loop.index0 %}
-    {%- set content_state = namespace(has_image=false) %}
+    {%- set content_state = namespace(has_media=false, keep_media=false) %}
     {%- if message.content is string %}
         {%- if message.content|length > 4096 and ('iVBORw0KGgo' in message.content or '/9j/' in message.content or 'data:image/' in message.content) %}
-            {%- set content_state.has_image = true %}
+            {%- set content_state.has_media = true %}
+            {%- set content_state.keep_media = message_index == media_state.last_image_message_index %}
+        {%- endif %}
+        {%- if message.content|length > 4096 and ('data:audio/' in message.content or 'UklGR' in message.content and 'V0FWRQ' in message.content or 'SUQz' in message.content or 'T2dnUw' in message.content) %}
+            {%- set content_state.has_media = true %}
+            {%- if message_index == media_state.last_audio_message_index %}{%- set content_state.keep_media = true %}{%- endif %}
+        {%- endif %}
+        {%- if message.content|length > 4096 and ('data:video/' in message.content or 'AAAAIGZ0eXB' in message.content or 'AAAAGGZ0eXB' in message.content or 'GkXfo' in message.content) %}
+            {%- set content_state.has_media = true %}
+            {%- if message_index == media_state.last_video_message_index %}{%- set content_state.keep_media = true %}{%- endif %}
         {%- endif %}
     {%- endif %}
-    {%- if content_state.has_image and message_index != media_state.last_image_message_index %}
+    {%- if content_state.has_media and not content_state.keep_media %}
         {%- set _ = skip_state.indices.append(message_index) %}
         {%- if message_index > 0 and messages[message_index - 1].role == 'assistant' %}
             {%- set _ = skip_state.indices.append(message_index - 1) %}
         {%- endif %}
     {%- endif %}
     {%- if message.role == 'assistant' and message.tool_calls and message.tool_calls is iterable and message.tool_calls is not mapping %}
-        {%- set tool_state = namespace(has_image=false) %}
+        {%- set tool_state = namespace(has_media=false) %}
         {%- for original_tool_call in message.tool_calls %}
             {%- set tool_call = original_tool_call.function if original_tool_call.function is defined else original_tool_call %}
             {%- if tool_call.arguments is string %}
-                {%- if 'iVBORw0KGgo' in tool_call.arguments or '/9j/' in tool_call.arguments or 'data:image/' in tool_call.arguments %}
-                    {%- set tool_state.has_image = true %}
+                {%- if 'iVBORw0KGgo' in tool_call.arguments or '/9j/' in tool_call.arguments or 'data:image/' in tool_call.arguments or 'data:audio/' in tool_call.arguments or 'UklGR' in tool_call.arguments and 'V0FWRQ' in tool_call.arguments or 'SUQz' in tool_call.arguments or 'T2dnUw' in tool_call.arguments or 'data:video/' in tool_call.arguments or 'AAAAIGZ0eXB' in tool_call.arguments or 'AAAAGGZ0eXB' in tool_call.arguments or 'GkXfo' in tool_call.arguments %}
+                    {%- set tool_state.has_media = true %}
                 {%- endif %}
             {%- elif tool_call.arguments is mapping %}
                 {%- for args_name, args_value in tool_call.arguments|items %}
                     {%- set args_text = args_value | tojson | safe if args_value is mapping or (args_value is sequence and args_value is not string) else args_value | string %}
-                    {%- if 'iVBORw0KGgo' in args_text or '/9j/' in args_text or 'data:image/' in args_text %}
-                        {%- set tool_state.has_image = true %}
+                    {%- if 'iVBORw0KGgo' in args_text or '/9j/' in args_text or 'data:image/' in args_text or 'data:audio/' in args_text or 'UklGR' in args_text and 'V0FWRQ' in args_text or 'SUQz' in args_text or 'T2dnUw' in args_text or 'data:video/' in args_text or 'AAAAIGZ0eXB' in args_text or 'AAAAGGZ0eXB' in args_text or 'GkXfo' in args_text %}
+                        {%- set tool_state.has_media = true %}
                     {%- endif %}
                 {%- endfor %}
             {%- endif %}
         {%- endfor %}
-        {%- if tool_state.has_image %}
+        {%- if tool_state.has_media %}
             {%- set _ = skip_state.indices.append(message_index) %}
         {%- endif %}
     {%- endif %}
@@ -191,8 +224,8 @@
                     {%- for args_name, args_value in tool_call.arguments|items %}
                         {{- '<parameter=' + args_name + '>\n' }}
                         {%- set args_value = args_value | tojson | safe if args_value is mapping or (args_value is sequence and args_value is not string) else args_value | string %}
-                        {%- if args_value|length > 4096 and ('iVBORw0KGgo' in args_value or '/9j/' in args_value or 'data:image/' in args_value) %}
-                            {{- '[Embedded image payload omitted from tool call]' }}
+                        {%- if args_value|length > 4096 and ('iVBORw0KGgo' in args_value or '/9j/' in args_value or 'data:image/' in args_value or 'data:audio/' in args_value or 'UklGR' in args_value and 'V0FWRQ' in args_value or 'SUQz' in args_value or 'T2dnUw' in args_value or 'data:video/' in args_value or 'AAAAIGZ0eXB' in args_value or 'AAAAGGZ0eXB' in args_value or 'GkXfo' in args_value) %}
+                            {{- '[Embedded media payload omitted from tool call]' }}
                         {%- else %}
                             {{- args_value }}
                         {%- endif %}

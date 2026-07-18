@@ -41,7 +41,7 @@ Models are canonical JSON documents under `~/.config/llm-ops/models/`. `modelctl
 
 Embedding and TTS profiles use `type: embedding` or `type: tts`. Temporary emergency overrides may be exported into the process environment. Persisted behavior belongs in JSON.
 
-`Qwen-3_5-stock-template.jinja` is retained as the unchanged upstream baseline. `Qwen-3_5-latest-image-template.jinja` is derived from that baseline and keeps only the final structured image or oversized base64 image-bearing message. Earlier image-producing tool calls and responses are omitted as complete message pairs, as are later tool calls that duplicate embedded image bytes. The model profile and model-proxy diagnostic renderer should reference the same selected template so rendered logs match the prompt produced by llama.cpp.
+`Qwen-3_5-stock-template.jinja` is retained as the unchanged upstream baseline. `Qwen-3_5-latest-image-template.jinja` is derived from that baseline and keeps only the final image, audio, and video payload of each type. Earlier media-producing tool calls and responses are omitted as complete message pairs, as are later tool calls that duplicate embedded media bytes. The model profile and model-proxy diagnostic renderer should reference the same selected template so rendered logs match the prompt produced by llama.cpp.
 
 ```bash
 llmops component plan restart <stack>:<model-component>
