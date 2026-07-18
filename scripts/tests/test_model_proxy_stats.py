@@ -171,6 +171,110 @@ class ModelProxyStatsTests(unittest.TestCase):
         self.assertIsNone(rendered)
         self.assertEqual(render_error, "TemplateRenderError: No messages provided.")
 
+    @unittest.skipIf(model_proxy_tap.jinja2 is None, "Jinja is not installed")
+    def test_latest_image_template_omits_prior_base64_and_embedded_tool_payloads(self) -> None:
+        template_path = SCRIPTS_DIR / "templates" / "Qwen-3_5-latest-image-template.jinja"
+        loaded_path, renderer, load_error = model_proxy_tap.load_chat_template_renderer(
+            str(template_path)
+        )
+        old_image = "iVBORw0KGgoOLDPAYLOAD" + ("A" * 5000)
+        latest_image = "iVBORw0KGgoLATESTPAYLOAD" + ("B" * 5000)
+        payload = {
+            "messages": [
+                {"role": "user", "content": "make an image"},
+                {
+                    "role": "assistant",
+                    "content": "saving the prior image",
+                    "tool_calls": [
+                        {
+                            "type": "function",
+                            "function": {
+                                "name": "terminal",
+                                "arguments": json.dumps(
+                                    {"command": f"decode {old_image}"}
+                                ),
+                            },
+                        }
+                    ],
+                },
+                {
+                    "role": "tool",
+                    "content": json.dumps({"images": [old_image]}),
+                },
+                {
+                    "role": "assistant",
+                    "content": "generating a newer image",
+                    "tool_calls": [
+                        {
+                            "type": "function",
+                            "function": {
+                                "name": "terminal",
+                                "arguments": json.dumps({"command": "generate again"}),
+                            },
+                        }
+                    ],
+                },
+                {
+                    "role": "tool",
+                    "content": json.dumps({"images": [latest_image]}),
+                },
+                {"role": "user", "content": "continue"},
+            ],
+            "tools": [],
+            "add_generation_prompt": True,
+        }
+
+        rendered, render_error = model_proxy_tap.render_prompt_from_payload(
+            payload,
+            chat_template_renderer=renderer,
+            chat_template_path=loaded_path,
+            chat_template_error=load_error,
+            chat_template_max_chars=0,
+        )
+
+        self.assertIsNone(render_error)
+        self.assertNotIn("OLDPAYLOAD", rendered)
+        self.assertIn("LATESTPAYLOAD", rendered)
+        self.assertIn("[Earlier image payload omitted]", rendered)
+        self.assertIn("[Embedded image payload omitted from tool call]", rendered)
+
+    @unittest.skipIf(model_proxy_tap.jinja2 is None, "Jinja is not installed")
+    def test_latest_image_template_keeps_only_final_structured_image(self) -> None:
+        template_path = SCRIPTS_DIR / "templates" / "Qwen-3_5-latest-image-template.jinja"
+        loaded_path, renderer, load_error = model_proxy_tap.load_chat_template_renderer(
+            str(template_path)
+        )
+        rendered, render_error = model_proxy_tap.render_prompt_from_payload(
+            {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": "first"},
+                            {"type": "image_url", "image_url": {"url": "one"}},
+                        ],
+                    },
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": "second"},
+                            {"type": "image_url", "image_url": {"url": "two"}},
+                        ],
+                    },
+                ],
+                "tools": [],
+                "add_generation_prompt": True,
+            },
+            chat_template_renderer=renderer,
+            chat_template_path=loaded_path,
+            chat_template_error=load_error,
+            chat_template_max_chars=10000,
+        )
+
+        self.assertIsNone(render_error)
+        self.assertEqual(rendered.count("<|image_pad|>"), 1)
+        self.assertIn("[Earlier image omitted]", rendered)
+
     def test_prune_older_image_parts_does_not_mutate_original_payload(self) -> None:
         payload = {
             "messages": [
