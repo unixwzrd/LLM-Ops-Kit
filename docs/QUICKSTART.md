@@ -83,6 +83,8 @@ Use `<stack>:<component>` when a short ID is ambiguous. Generated components rem
 
 Immutable releases retain role-filtered runtime profiles for local execution and include the same secret-free observer catalog on every managed host. `llmops status` uses that catalog to query each owning host over SSH; `llmops status --json` returns one combined topology view. Peer checks use the configured absolute public command path and do not depend on shell startup files. A host with `host: localhost` in the deployment inventory must define a routable `control_host` for peer status.
 
+An `authority-only` result means peer observation is intentionally disabled for that component's host or login domain. It is not a failure or evidence that the component stopped. Inspect that component from its authoritative local account. By contrast, `unreachable` means a peer probe was attempted and failed.
+
 ## Existing Proof-of-Concept Installation
 
 Follow [Migration](./MIGRATION.md) before enabling migrated components.

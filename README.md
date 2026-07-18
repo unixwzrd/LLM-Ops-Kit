@@ -68,6 +68,17 @@ llmops stack status <stack>
 
 `llmops status` checks every enabled component in the deployed observer catalog and identifies the owning host for each result. A selector can be a component ID, qualified component ID, profile, stack, driver, host, or component tag. A single-component selection includes the driver's detailed status output. Role-filtered profiles remain local to their owning hosts; only secret-free topology metadata is shared.
 
+Status values have explicit observation semantics:
+
+- `running`: the owning host confirmed the component is running.
+- `not-running`: the owning host was reached and confirmed the component is stopped.
+- `unreachable`: a peer probe was attempted but the owning host or its `llmops` command could not be reached.
+- `authority-only`: no peer probe was attempted because the component belongs to a local account or login domain that peers are intentionally not authorized to inspect. This does not mean the component is stopped; check it from its authoritative account.
+- `disabled`: the component is configured but disabled.
+- `error`: configuration or driver inspection failed before a reliable runtime state was obtained.
+
+`authority-only` and `disabled` are informational states and do not make an otherwise healthy aggregate status command fail.
+
 Hosts explicitly marked `trusted_control` may plan or run restricted LLM-Ops-Kit operations on peers. Peer commands use the configured absolute public command path and never depend on login-shell startup files:
 
 ```bash
