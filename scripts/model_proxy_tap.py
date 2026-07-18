@@ -273,57 +273,6 @@ def render_input_payloads(args: argparse.Namespace) -> int:
     return 0
 
 
-def prune_older_image_parts(payload: Any) -> tuple[bool, int, int | None]:
-    """Keep image_url parts only on the latest user message that has one.
-
-    Returns:
-      changed, removed_count, latest_user_index
-    """
-    if not isinstance(payload, dict):
-        return False, 0, None
-
-    messages = payload.get("messages")
-    if not isinstance(messages, list):
-        return False, 0, None
-
-    latest_idx: int | None = None
-    for i, msg in enumerate(messages):
-        if not isinstance(msg, dict) or msg.get("role") != "user":
-            continue
-        content = msg.get("content")
-        if not isinstance(content, list):
-            continue
-        if any(isinstance(part, dict) and part.get("type") == "image_url" for part in content):
-            latest_idx = i
-
-    if latest_idx is None:
-        return False, 0, None
-
-    changed = False
-    removed = 0
-    for i, msg in enumerate(messages):
-        if i >= latest_idx:
-            continue
-        if not isinstance(msg, dict):
-            continue
-        content = msg.get("content")
-        if not isinstance(content, list):
-            continue
-
-        new_content: list[Any] = []
-        for part in content:
-            if isinstance(part, dict) and part.get("type") == "image_url":
-                removed += 1
-                changed = True
-                continue
-            new_content.append(part)
-
-        if changed:
-            msg["content"] = new_content
-
-    return changed, removed, latest_idx
-
-
 def _text_preview(content: Any, max_chars: int = 220) -> str:
     if isinstance(content, str):
         text = content
@@ -462,7 +411,6 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
     upstream_base: str = ""
     log_path: Path
     timeout_sec: float = 120.0
-    latest_image_only: bool = False
     log_fsync: bool = True
     stream_chunk_size: int = 65536
     chat_template_path: str | None = None
@@ -533,25 +481,8 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
         started = time.time()
         request_id = f"{int(started * 1000)}-{os.getpid()}-{id(self)}"
 
-        request_body_original = self._read_body()
-        request_body = request_body_original
-        req_text, req_json = decode_body(request_body_original)
-
-        request_rewrite: dict[str, Any] | None = None
-        if self.latest_image_only and isinstance(req_json, dict):
-            rewritten_req_json = copy.deepcopy(req_json)
-            changed, removed_count, latest_idx = prune_older_image_parts(rewritten_req_json)
-            if changed:
-                request_body = json.dumps(
-                    rewritten_req_json, separators=(",", ":"), ensure_ascii=False
-                ).encode("utf-8")
-                req_text = request_body.decode("utf-8", errors="replace")
-                req_json = rewritten_req_json
-                request_rewrite = {
-                    "latest_image_only": True,
-                    "removed_image_parts": removed_count,
-                    "latest_user_image_message_index": latest_idx,
-                }
+        request_body = self._read_body()
+        req_text, req_json = decode_body(request_body)
 
         req_summary = summarize_request(req_json)
         upstream_url = urljoin(self.upstream_base.rstrip("/") + "/", self.path.lstrip("/"))
@@ -583,7 +514,6 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
                 "request_headers": redact_headers({k: v for k, v in self.headers.items()}),
                 "request_summary": req_summary,
                 "request_text": request_text_log,
-                "request_rewrite": request_rewrite,
             }
         )
 
@@ -744,7 +674,6 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
                 "path": self.path,
                 "upstream_url": upstream_url,
                 "request_summary": req_summary,
-                "request_rewrite": request_rewrite,
                 "response_status": status,
                 "response_headers": redact_headers(resp_headers),
                 "response_stats": response_stats,
@@ -836,18 +765,6 @@ def parse_args() -> argparse.Namespace:
     p.set_defaults(log_fsync=True)
     p.add_argument("--log-fsync", dest="log_fsync", action="store_true", help="Force fsync after each log line write (default: on)")
     p.add_argument("--no-log-fsync", dest="log_fsync", action="store_false", help="Disable fsync after each log line write")
-    p.add_argument(
-        "--latest-image-only",
-        action="store_true",
-        default=False,
-        help="Rewrite forwarded payloads to keep image_url parts only on the latest user message that contains one.",
-    )
-    p.add_argument(
-        "--no-latest-image-only",
-        dest="latest_image_only",
-        action="store_false",
-        help="Disable latest-image-only filtering.",
-    )
     return p.parse_args()
 
 
@@ -867,7 +784,6 @@ def main() -> int:
     ProxyTapHandler.upstream_base = upstream_base
     ProxyTapHandler.log_path = Path(os.path.expanduser(args.log))
     ProxyTapHandler.timeout_sec = float(args.timeout)
-    ProxyTapHandler.latest_image_only = bool(args.latest_image_only)
     ProxyTapHandler.log_fsync = bool(args.log_fsync)
     ProxyTapHandler.log_rotate_seconds = max(0, int(args.log_rotate_seconds))
     ProxyTapHandler.log_rotate_keep = max(0, int(args.log_rotate_keep))
@@ -908,7 +824,7 @@ def main() -> int:
     server = ThreadingHTTPServer((args.listen_host, listen_port), ProxyTapHandler)
     print(
         f"model-proxy-tap listening on http://{args.listen_host}:{listen_port} "
-        f"-> {upstream_base} (threading, log: {ProxyTapHandler.log_path}, raw_log={ProxyTapHandler.raw_request_log_path}, rendered_log={ProxyTapHandler.rendered_prompt_log_path}, raw_response_log={ProxyTapHandler.raw_response_log_path}, latest_image_only={ProxyTapHandler.latest_image_only}, log_fsync={ProxyTapHandler.log_fsync}, log_rotate_seconds={ProxyTapHandler.log_rotate_seconds}, log_rotate_keep={ProxyTapHandler.log_rotate_keep}, stream_chunk_size={ProxyTapHandler.stream_chunk_size}, chat_template={ProxyTapHandler.chat_template_path})",
+        f"-> {upstream_base} (threading, log: {ProxyTapHandler.log_path}, raw_log={ProxyTapHandler.raw_request_log_path}, rendered_log={ProxyTapHandler.rendered_prompt_log_path}, raw_response_log={ProxyTapHandler.raw_response_log_path}, log_fsync={ProxyTapHandler.log_fsync}, log_rotate_seconds={ProxyTapHandler.log_rotate_seconds}, log_rotate_keep={ProxyTapHandler.log_rotate_keep}, stream_chunk_size={ProxyTapHandler.stream_chunk_size}, chat_template={ProxyTapHandler.chat_template_path})",
         flush=True,
     )
 

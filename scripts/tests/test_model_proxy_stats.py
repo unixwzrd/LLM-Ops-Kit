@@ -275,36 +275,6 @@ class ModelProxyStatsTests(unittest.TestCase):
         self.assertEqual(rendered.count("<|image_pad|>"), 1)
         self.assertIn("[Earlier image omitted]", rendered)
 
-    def test_prune_older_image_parts_does_not_mutate_original_payload(self) -> None:
-        payload = {
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "first"},
-                        {"type": "image_url", "image_url": {"url": "one"}},
-                    ],
-                },
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "second"},
-                        {"type": "image_url", "image_url": {"url": "two"}},
-                    ],
-                },
-            ]
-        }
-
-        normalized = model_proxy_tap.normalize_payload_for_template(payload)
-        changed, removed_count, latest_idx = model_proxy_tap.prune_older_image_parts(normalized)
-
-        self.assertTrue(changed)
-        self.assertEqual(removed_count, 1)
-        self.assertEqual(latest_idx, 1)
-        self.assertEqual(len(payload["messages"][0]["content"]), 2)
-        self.assertEqual(payload["messages"][0]["content"][1]["type"], "image_url")
-
-
 class _CaptureHandler(BaseHTTPRequestHandler):
     received_bodies: list[bytes] = []
     response_body: bytes = json.dumps({"ok": True}).encode("utf-8")
@@ -338,7 +308,6 @@ class ProxyTapPassthroughTests(unittest.TestCase):
         Handler.upstream_base = upstream_url
         Handler.log_path = log_dir / "proxy.ndjson"
         Handler.timeout_sec = 5.0
-        Handler.latest_image_only = False
         Handler.log_fsync = False
         Handler.log_rotate_seconds = 0
         Handler.log_rotate_keep = 0
@@ -415,7 +384,7 @@ class ProxyTapPassthroughTests(unittest.TestCase):
             request_start = json.loads(ndjson[0])
             self.assertEqual(request_start["event"], "request_start")
             self.assertEqual(request_start["request_text"], request_body.decode("utf-8"))
-            self.assertIsNone(request_start["request_rewrite"])
+            self.assertNotIn("request_rewrite", request_start)
             self.assertNotIn("rendered_prompt", request_start)
             self.assertNotIn("rendered_prompt_error", request_start)
 
