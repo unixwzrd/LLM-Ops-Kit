@@ -17,6 +17,7 @@ Back: [Documentation index](./INDEX.md)
   - Soak restarted again at 2026-07-17 20:15 CDT after deploying the latest-image Qwen template and strictly passive model proxy. The prior Qwen3TTS failure was traced to an uncaught Metal `kIOGPUCommandBufferCallbackErrorImpactingInteractivity` error.
   - Soak restarted at 2026-07-17 20:45 CDT after refining the Jinja template to remove complete historical image tool exchanges while retaining only the final image. Both hosts deployed runtime `operator-v1-rc-e9c427f`, all configured components returned to running state, and deployment drift was zero.
   - Soak restarted at 2026-07-17 21:00 CDT after deploying trusted peer control and restarting Qwen3.6 from the agent host and model-proxy from the model host. Both components passed readiness checks and runtime `operator-v1-rc-3020dee` had zero deployment drift.
+  - Soak restarted at 2026-07-17 21:04 CDT after deploying centralized copy-and-truncate model log rotation. A live Qwen3.6 restart preserved active log inode `917783407`, archived the prior contents, and returned to API-ready state on runtime `operator-v1-rc-ba0da59`.
 - [ ] Obtain a green macOS CI run after the release candidate is pushed for review.
 
 ## General-User Distribution Gate
