@@ -16,6 +16,7 @@ Back: [Documentation index](./INDEX.md)
   - Soak restarted at 2026-07-17 15:51 CDT after the Qwen3TTS process crashed. The bridge remained available and correctly reported upstream failure; the TTS model was restored and end-to-end generation passed.
   - Soak restarted again at 2026-07-17 20:15 CDT after deploying the latest-image Qwen template and strictly passive model proxy. The prior Qwen3TTS failure was traced to an uncaught Metal `kIOGPUCommandBufferCallbackErrorImpactingInteractivity` error.
   - Soak restarted at 2026-07-17 20:45 CDT after refining the Jinja template to remove complete historical image tool exchanges while retaining only the final image. Both hosts deployed runtime `operator-v1-rc-e9c427f`, all configured components returned to running state, and deployment drift was zero.
+  - Soak restarted at 2026-07-17 21:00 CDT after deploying trusted peer control and restarting Qwen3.6 from the agent host and model-proxy from the model host. Both components passed readiness checks and runtime `operator-v1-rc-3020dee` had zero deployment drift.
 - [ ] Obtain a green macOS CI run after the release candidate is pushed for review.
 
 ## General-User Distribution Gate
@@ -30,6 +31,8 @@ Back: [Documentation index](./INDEX.md)
 - [x] Add explicit trusted-control snapshots and `llmops host` operations for approved operator hosts. Remote execution uses the configured absolute `llmops` path over SSH, permits only restricted LLM-Ops-Kit command families, and does not depend on login-shell startup files.
 - [x] Distribute a complete sanitized topology catalog to managed hosts while retaining role-filtered runtime profiles. Synchronization is one-way from the desired-state authority, checksummed, and atomic.
 - [ ] Validate identical catalog hashes and global status from both live hosts after the soak and release-candidate deployment.
+  - Current pre-soak evidence: both hosts have catalog SHA-256 `fea1c33572fb3a39bc056d50c1bb25cbd34fae8d5278fe39e8b44fc5e9dd2bec` and return identical status for all model-host and agent-host components.
+  - The `xanax-control` Desktop tunnel remains unobservable from peers because it runs in the `mps` launchd domain and `miafour` has no SSH authorization to the `mps` account. Do not expand primary-account access implicitly; either keep this component authority-only or approve a separate least-privilege observer mechanism.
 - [ ] Make configuration and toolkit-version drift visible from every trusted control host. Refuse automatic merging of independently edited host configuration and provide an explicit reconciliation workflow.
 - [ ] Package an agent-neutral LLM-Ops-Kit skill that uses `doctor`, `plan`, `status`, and JSON output for setup and operations while requiring explicit approval for mutations and SSH provisioning.
 
