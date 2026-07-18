@@ -23,6 +23,7 @@
 - Added `llmops update` check, plan, JSON, verified local apply, and offline artifact workflows.
 - Added clean-archive fresh-install, upgrade, repair, rollback, uninstall, purge, migration, privacy, documentation, and macOS release checks.
 - Excluded tests, migration fixtures, private topology, and maintainer-only release tooling from installed runtime payloads.
+- Made maintainer prechecks honor `PYTHON_BIN` so the complete suite can run against an explicitly selected Conda, venv, virtualenv, or uv interpreter instead of the host's incidental `python3`.
 
 ### Models, proxy, and logging
 

@@ -16,6 +16,7 @@ while [[ -h "$SOURCE" ]]; do
 done
 SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
 REPO_ROOT="$(cd -P "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)"
+PYTHON_BIN="${PYTHON_BIN:-python3}"
 
 cd "$REPO_ROOT"
 
@@ -60,10 +61,10 @@ echo "==> Shellcheck"
 shellcheck "${shell_targets[@]}"
 
 echo "==> Python compile checks"
-python3 -m py_compile "${python_targets[@]}"
+"$PYTHON_BIN" -m py_compile "${python_targets[@]}"
 
 echo "==> Python regression tests"
-python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+"$PYTHON_BIN" -m unittest discover -s scripts/tests -p 'test_*.py'
 
 if [[ "$RELEASE_CHECK" -eq 1 ]]; then
   echo "==> Release source hygiene"
