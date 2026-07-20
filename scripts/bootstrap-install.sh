@@ -9,6 +9,7 @@ INSTALL_BASE="${LLMOPS_INSTALL_BASE:-$HOME/.local/llm-ops}"
 PUBLIC_BIN_DIR="${LLMOPS_PUBLIC_BIN_DIR:-$HOME/.local/bin}"
 STATE_HOME="${LLMOPS_STATE_HOME:-${XDG_STATE_HOME:-$HOME/.local/state}/llm-ops}"
 KEEP_DOWNLOAD=0
+MINIMAL=0
 
 usage() {
   cat <<'USAGE'
@@ -26,6 +27,7 @@ Options:
   --public-bin-dir <path>     Public command directory
   --state-home <path>         State root
   --keep-download             Preserve the temporary download directory
+  --minimal                   Install CLI without the Textual console
   -h, --help                  Show this help
 USAGE
 }
@@ -40,6 +42,7 @@ while [[ $# -gt 0 ]]; do
     --public-bin-dir) PUBLIC_BIN_DIR="$2"; shift 2 ;;
     --state-home) STATE_HOME="$2"; shift 2 ;;
     --keep-download) KEEP_DOWNLOAD=1; shift ;;
+    --minimal) MINIMAL=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "bootstrap-install.sh: unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -98,9 +101,14 @@ source_root="$(cd "$(dirname "$installer")/.." && pwd)"
 release_id="$(basename "$ARCHIVE" .tar.xz)"
 release_id="${release_id#LLM-Ops-Kit-}"
 
-/usr/local/bin/bash "$installer" \
-  --source "$source_root" \
-  --prefix "$INSTALL_BASE" \
-  --public-bin-dir "$PUBLIC_BIN_DIR" \
-  --state-home "$STATE_HOME" \
+install_args=(
+  --source "$source_root"
+  --prefix "$INSTALL_BASE"
+  --public-bin-dir "$PUBLIC_BIN_DIR"
+  --state-home "$STATE_HOME"
   --release-id "$release_id"
+)
+[[ "$MINIMAL" -eq 1 ]] && install_args+=(--minimal)
+
+/usr/local/bin/bash "$installer" \
+  "${install_args[@]}"

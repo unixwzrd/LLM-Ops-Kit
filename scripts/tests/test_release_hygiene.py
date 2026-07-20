@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """Release-source documentation and privacy checks."""
 
 from __future__ import annotations

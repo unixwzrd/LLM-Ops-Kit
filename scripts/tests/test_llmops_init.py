@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """Tests for non-destructive LLM-Ops-Kit starter configuration."""
 
 from __future__ import annotations
@@ -8,11 +8,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.lib.llmops_config import load_config
-from scripts.lib.llmops_init import InitError, discover_model_profiles, initialize
-from scripts.lib.llmops_inventory import load_inventory
-from scripts.lib.llmops_paths import resolve_paths
-from scripts.lib.llmops_topology import Topology, load_stacks, validate_topology
+from llmops_kit.llmops_config import load_config
+from llmops_kit.llmops_init import InitError, discover_model_profiles, initialize
+from llmops_kit.llmops_inventory import load_inventory
+from llmops_kit.llmops_paths import resolve_paths
+from llmops_kit.llmops_topology import Topology, load_stacks, validate_topology
 
 
 class InitTests(unittest.TestCase):

@@ -1,19 +1,15 @@
 # Quickstart
 
 **Created**: 2026-07-16
-**Updated**: 2026-07-17
+**Updated**: 2026-07-20
 
 Back: [Documentation index](./INDEX.md)
 
-## Prerequisites
+## Install
 
-Confirm macOS, Apple Silicon, Python 3.9 or newer, GNU Bash at `/usr/local/bin/bash`, and SSH access to every configured remote host. LLM-Ops-Kit does not install engines, agents, or model weights.
-
-## Fresh Install
+Download the standalone installer and checksum from the selected GitHub release, verify it, and run it:
 
 ```bash
-mkdir -p /tmp/llmops-install
-cd /tmp/llmops-install
 curl -fLO https://github.com/unixwzrd/LLM-Ops-Kit/releases/download/<version>/install-llmops
 curl -fLO https://github.com/unixwzrd/LLM-Ops-Kit/releases/download/<version>/install-llmops.sha256
 shasum -a 256 -c install-llmops.sha256
@@ -21,79 +17,57 @@ chmod +x install-llmops
 ./install-llmops --version <version>
 ```
 
-The bootstrap downloads and verifies `LLM-Ops-Kit-<version>.tar.xz`, then invokes its bundled installer. A Git checkout is not required. The installer creates an immutable release under `~/.local/llm-ops/releases/`, updates `current`, retains the prior release as `previous`, creates internal driver links under `~/.local/llm-ops/bin`, and exposes only `~/.local/bin/llmops` publicly.
+The installer bootstraps a verified UV binary when necessary, installs a managed Python under `~/.local/llm-ops/python/`, installs the project and Textual from the archive's offline wheelhouse, and switches the immutable `current` release only after verification. It does not require a checkout or modify shell startup files.
 
-No release has been published yet; `<version>` remains a placeholder until operator-v1 acceptance is complete. The maintainer build command is:
+Use `--minimal` to omit Textual. Repair the active installation using its installed runtime resource:
 
 ```bash
-python3 scripts/build-release.py --output-dir dist --version <version>
+/usr/local/bin/bash ~/.local/llm-ops/current/scripts/install-runtime.sh --repair
 ```
 
-It emits the runtime archive, archive checksum, public manifest, standalone bootstrap, and bootstrap checksum. Release builds refuse dirty source trees.
-
-The installer reports when its public command directory is not on `PATH`; it does not silently edit shell startup files. Add that directory once or invoke `~/.local/bin/llmops` explicitly.
-
-## Guided Initialization
-
-Single host:
+## Initialize
 
 ```bash
 llmops init --preset single-host
-```
-
-Local LAN:
-
-```bash
 llmops init --preset local-lan --user <user> --model-host <model-host> --agent-host <agent-host>
 ```
 
-When another configuration root contains model profiles, initialization lists them and asks whether to select profiles, import all, or import none. Selected legacy `env` profiles become canonical `environment` profiles, literal secret fields become `env:<VARIABLE>` references, and selected chat, embedding, and TTS defaults are bound to disabled components.
+Interactive initialization can import selected model profiles from another configuration root and bind chat, embedding, and TTS defaults. Generated components remain disabled until reviewed.
 
-For automation, use `--model-defaults-from`, repeat `--import-model`, and provide `--default-chat`, `--default-embedding`, or `--default-tts`. Use `--import-all-models` to import every valid profile or `--no-model-import` to suppress discovery. Non-interactive and `--json` execution never prompt.
-
-## Validate
+For automation:
 
 ```bash
-llmops doctor
-llmops doctor --probe
-llmops config show --json
-llmops plan --action start --json
+llmops init --preset local-lan --model-defaults-from ~/.config/llm-ops --import-model ChatModel --import-model EmbeddingModel --default-chat ChatModel --default-embedding EmbeddingModel
 ```
 
-`doctor` performs static validation. `doctor --probe` also checks SSH connectivity, Python, GNU Bash, launchd, model and interpreter paths, architecture, and memory without changing services.
+Non-interactive and JSON execution never prompt.
 
-## Operate
+## Validate And Operate
 
 ```bash
+llmops doctor --probe
+llmops adapter doctor
 llmops status
-llmops status model
-llmops status <profile-name>
-llmops stack status
 llmops component list
 llmops component plan start <component>
 llmops component start <component>
 llmops component restart <component>
-llmops component status <component>
-llmops component stop <component>
+llmops component logs <component>
+llmops stack status
+llmops tui
 ```
 
-Use `<stack>:<component>` when a short ID is ambiguous. Generated components remain disabled until their profiles are reviewed and the operator explicitly enables them.
+Use `<stack>:<component>` when a short ID is ambiguous. `llmops stack status` may omit the stack when exactly one stack exists; mutating stack commands require an explicit stack.
 
-`llmops stack status` may omit the stack name when exactly one stack is configured. Mutating stack commands always require an explicit stack name.
+## Synchronize A LAN
 
-Immutable releases retain role-filtered runtime profiles for local execution and include the same secret-free observer catalog on every managed host. `llmops status` uses that catalog to query each owning host over SSH; `llmops status --json` returns one combined topology view. Peer checks use the configured absolute public command path and do not depend on shell startup files. A host with `host: localhost` in the deployment inventory must define a routable `control_host` for peer status.
-
-An `authority-only` result means peer observation is intentionally disabled for that component's host or login domain. It is not a failure or evidence that the component stopped. Inspect that component from its authoritative local account. By contrast, `unreachable` means a peer probe was attempted and failed.
-
-## Existing Proof-of-Concept Installation
-
-Follow [Migration](./MIGRATION.md) before enabling migrated components.
-
-## Repair or Remove
+From the desired-state authority:
 
 ```bash
-/usr/local/bin/bash scripts/install-runtime.sh --repair
-/usr/local/bin/bash scripts/uninstall-runtime.sh
+llmops config reconcile --all-hosts --plan --json
+llmops config reconcile --all-hosts --apply --yes
+llmops update --all-hosts --plan --version <version>
+llmops update --all-hosts --apply --version <version>
 ```
 
-Use `scripts/uninstall-runtime.sh --purge` only when configuration, data, state, and cache should also be removed. Model weights, agent state, and unrelated logs are never owned by the installer.
+The configuration operation sends role-filtered snapshots. The update operation sends the same verified release to every observable managed host. Neither command depends on remote login-shell initialization.

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 from __future__ import annotations
 
 import struct
@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.lib.gguf_metadata import (
+from llmops_kit.gguf_metadata import (
     TYPE_STRING,
     TYPE_UINT32,
     read_gguf_metadata,

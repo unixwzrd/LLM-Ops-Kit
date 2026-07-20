@@ -1,22 +1,19 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """Tests for canonical profile resolution and one-way migration."""
 
 from __future__ import annotations
 
 import json
 import shutil
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-LIB = Path(__file__).resolve().parents[1] / "lib"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
-sys.path.insert(0, str(LIB))
 
-from llmops_migration import MigrationError, migrate
-from llmops_paths import resolve_paths
-from llmops_profiles import ProfileError, load_profile, model_values, resolve_references, service_values
+from llmops_kit.llmops_migration import MigrationError, migrate
+from llmops_kit.llmops_paths import resolve_paths
+from llmops_kit.llmops_profiles import ProfileError, load_profile, model_values, resolve_references, service_values
 
 
 class ProfileTests(unittest.TestCase):

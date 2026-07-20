@@ -2,48 +2,75 @@
 
 Back: [Documentation index](./INDEX.md)
 
-## Source and Backups
+Record artifact version, SHA-256, host, architecture, timestamp, result, and evidence path for every section. Do not carry proof-of-concept or earlier release-candidate checks forward without rerunning them against the final artifact.
 
-- [x] Create checksummed runtime and configuration backups on both hosts.
-- [x] Commit the release candidate locally and confirm a clean source tree.
-- [x] Confirm `scripts/precheck --release` passes.
-- [x] Build and distribute test source exclusively from `git archive HEAD`.
+## Preserve
 
-## Fresh Installation
+- [x] Preserve checksummed live runtime and configuration backups on both managed hosts.
+- [x] Retain the operator-v1 `current` and `previous` runtime evidence during beta work.
+- [ ] Record final backup hashes and verify one archive listing before live upgrade.
 
-- [x] Install into isolated install, config, data, state, cache, and public command roots on both hosts.
-- [x] Exercise interactive model discovery and selective import against saved profiles.
-- [x] Exercise deterministic non-interactive import and compare output.
-- [x] Confirm legacy `env` normalization and secret-reference conversion.
-- [x] Bind selected chat, embedding, and TTS defaults while leaving every generated component disabled.
-- [x] Run static doctor, active probe, configuration display, and non-mutating plans.
-- [x] Run repair twice, upgrade the isolated runtime, and exchange current and previous through rollback.
-- [x] Verify default uninstall preserves configuration and purge removes only selected toolkit roots.
+## Source And Artifact
 
-## Migration
+- [ ] Create the local release commit and confirm clean Git status.
+- [ ] Run `uv sync --locked --extra tui` and `uv run --locked --extra tui ./scripts/precheck`.
+- [ ] Build exclusively from `git archive HEAD` and verify the release archive checksum and per-file manifest.
+- [ ] Confirm the archive contains both native macOS `MarkupSafe` wheels and no source checkout, tests, fixtures, secrets, private paths, or ignored residue.
 
-- [x] Preview real proof-of-concept fixtures and inspect every mapping, warning, and skip.
-- [x] Confirm unknown inputs block normal migration and `--allow-partial` migrates only classified inputs.
-- [x] Confirm repeat migration is an unchanged no-op and changed sources require reviewed force.
-- [x] Confirm runtime behavior never changes when legacy files are edited after migration.
+## Fresh Normal Install
 
-## Live Upgrade and Runtime
+- [ ] Install the same final artifact under the isolated Apple Silicon and Intel macOS users with Git, Python, Conda, UV, and user-local tools removed from `PATH`.
+- [ ] Confirm checksum-verified UV bootstrap, managed CPython, immutable release, `current`, public `llmops`, and Textual installation.
+- [ ] Run `adapter doctor` before initialization.
+- [ ] Exercise interactive saved-model discovery and selective import.
+- [ ] Repeat initialization non-interactively with explicit flags and compare canonical output.
+- [ ] Confirm imported secret literals become references and source defaults remain unchanged.
+- [ ] Run `doctor --probe`, `status --all --json`, component/stack plans, and TUI startup.
 
-- [x] Upgrade both live hosts without changing canonical configuration hashes.
-- [x] Confirm current and previous release targets and zero drift.
-- [x] Restart one model component without restarting dependents.
-- [x] Confirm stop refuses active dependents without force or cascade.
-- [x] Confirm cascade order is dependency-safe and failed starts preserve pre-existing components.
-- [x] Run one dependency-ordered cold stop/start.
-- [x] Pass model, embedding, proxy, TTS, bridge, agent, dashboard, tunnel, and reconnection protocol checks.
-- [x] Confirm `llmops status`, component/profile drill-down, tag filtering, and `--json` output from the administrator configuration.
-- [x] Roll back to the prior runtime, validate, and return to the release candidate.
+## Minimal Install
 
-## Observation
+- [ ] Install with `--minimal` into a separate root.
+- [ ] Confirm CLI commands work and Textual is not installed.
+- [ ] Confirm `llmops tui` returns a concise dependency instruction without a traceback.
 
-- [x] Restart the soak clock after restoring the crashed Qwen3TTS component and passing an end-to-end voice-clone request through `tts-bridge`.
-- [ ] Run the complete managed environment for a 48-hour soak period.
-- [ ] Capture `llmops status --json` at the start and after each of two consecutive scheduled daily operational reports.
-- [ ] Confirm both reports complete without unexplained component restarts, failed health checks, drift, protocol failures, or missing metrics.
-- [ ] Retain backups and prior runtimes through the completed soak period.
-- [ ] Record final evidence and mark the release audit only from current results.
+## Lifecycle And Removal
+
+- [ ] Run repair twice without changing configuration.
+- [ ] Upgrade to a second test artifact and verify `current`, `previous`, version, and configuration identity.
+- [ ] Roll back and return to the candidate.
+- [ ] Normal uninstall and confirm configuration/state preservation.
+- [ ] Reinstall, purge, and confirm only explicitly owned toolkit roots are removed.
+- [ ] Confirm models, agent data, logs outside toolkit roots, and source defaults remain untouched.
+
+## Textual Console
+
+- [ ] Verify global component and stack views, selection details, refresh, logs, and update check.
+- [ ] Verify lifecycle and configuration mutations show the exact CLI command and operation plan.
+- [ ] Verify cancel makes no change and confirm produces the same result as the displayed CLI command.
+- [ ] Verify invalid configuration is refused transactionally and the prior configuration remains active.
+
+## Remote Update And Reconciliation
+
+- [ ] Plan a two-host update from each trusted control host.
+- [ ] Verify unreachable preflight and interrupted transfer change no host.
+- [ ] Bootstrap an older or missing peer from the staged installer and configured absolute paths.
+- [ ] Inject a later-host apply failure and confirm already-updated hosts roll back.
+- [ ] Confirm successful apply reports version, catalog hash, and configuration hash for each host.
+- [ ] Plan and apply role-filtered configuration reconciliation, then rerun it as an idempotent no-op.
+- [ ] Independently edit a target revision and confirm conflict refusal with no automatic merge.
+
+## Live Acceptance
+
+- [ ] Upgrade both live hosts without restarting unaffected components.
+- [ ] Confirm matching global topology/catalog identity and expected role-filtered configuration identity.
+- [ ] Restart individual model, proxy, bridge, and agent components from either trusted host.
+- [ ] Verify dependency refusal, cascade order, partial-start rollback, and one complete cold stop/start.
+- [ ] Pass chat, embedding, TTS, proxy rendering, bridge, gateway, dashboard, tunnel, Desktop reconnection, and Telegram fallback checks.
+- [ ] Roll back to operator v1, validate status, and return to the beta candidate.
+
+## Release Evidence
+
+- [x] Regenerate two standardized dated operational reports from archived raw evidence and retain the raw logs as authority.
+- [ ] Retain backups and prior runtimes through the beta observation period.
+- [ ] Obtain explicit user approval, push the candidate branch, and require green macOS CI.
+- [ ] Publish the prerelease assets only after every required release-audit item is checked.

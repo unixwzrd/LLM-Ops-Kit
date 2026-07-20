@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """Write the installer state document without embedding Python in shell code."""
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """Transactional guided initialization for LLM-Ops-Kit."""
 
 from __future__ import annotations
@@ -193,6 +193,8 @@ def initialize(
     default_chat: Optional[str] = None,
     default_embedding: Optional[str] = None,
     default_tts: Optional[str] = None,
+    install_root: str = "~/.local/llm-ops",
+    public_bin_dir: str = "~/.local/bin",
 ) -> InitResult:
     """Write a disabled starter topology and selected normalized model profiles."""
 
@@ -215,8 +217,8 @@ def initialize(
     common = {
         "user": user,
         "port": 22,
-        "install_root": "~/.local/llm-ops",
-        "public_bin_dir": "~/.local/bin",
+        "install_root": install_root,
+        "public_bin_dir": public_bin_dir,
         "config_profile": "default",
     }
     if preset == "single-host":

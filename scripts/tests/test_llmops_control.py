@@ -1,26 +1,27 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """Tests for canonical LLM-Ops-Kit component orchestration."""
 
 from __future__ import annotations
 
 import json
-import runpy
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 from typing import Optional
 from unittest import mock
 
-LIB = Path(__file__).resolve().parents[1] / "lib"
-sys.path.insert(0, str(LIB))
-
-from llmops_config import load_config
-from llmops_drivers import CommandResult, DriverError, _launchd_command
-from llmops_executor import Executor, ExecutionError, Operation, component_plan, stack_plan
-from llmops_inventory import InventoryError, load_inventory
-from llmops_paths import resolve_paths
-from llmops_topology import (
+from llmops_kit.llmops_cli import _host_command as host_command
+from llmops_kit.llmops_cli import _remote_status as remote_status
+from llmops_kit.llmops_cli import _status_components as status_components
+from llmops_kit.llmops_cli import _status_state as status_state
+from llmops_kit.llmops_cli import _validate_host_operation as validate_host_operation
+from llmops_kit.llmops_cli import stack_operations
+from llmops_kit.llmops_config import load_config
+from llmops_kit.llmops_drivers import CommandResult, DriverError, _launchd_command
+from llmops_kit.llmops_executor import Executor, ExecutionError, Operation, component_plan, stack_plan
+from llmops_kit.llmops_inventory import InventoryError, load_inventory
+from llmops_kit.llmops_paths import resolve_paths
+from llmops_kit.llmops_topology import (
     Topology,
     TopologyError,
     dependency_closure,
@@ -29,15 +30,6 @@ from llmops_topology import (
     validate_topology,
     write_host_snapshot,
 )
-
-CONTROL_SCRIPT = Path(__file__).resolve().parents[1] / "llmops-control"
-CONTROL_GLOBALS = runpy.run_path(str(CONTROL_SCRIPT), run_name="llmops_control_test")
-status_components = CONTROL_GLOBALS["_status_components"]
-status_state = CONTROL_GLOBALS["_status_state"]
-remote_status = CONTROL_GLOBALS["_remote_status"]
-host_command = CONTROL_GLOBALS["_host_command"]
-validate_host_operation = CONTROL_GLOBALS["_validate_host_operation"]
-stack_operations = CONTROL_GLOBALS["stack_operations"]
 
 
 class FakeRunner:

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """Structured file operations used by host_install_acceptance.sh."""
 
 from __future__ import annotations

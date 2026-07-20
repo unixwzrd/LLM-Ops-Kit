@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """Tests for repository-free release artifacts and bootstrap installation."""
 
 from __future__ import annotations
@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tarfile
 import tempfile
 import unittest
@@ -45,7 +46,7 @@ class ReleaseDistributionTests(unittest.TestCase):
         with archive.open("wb") as stream:
             subprocess.run(["git", "-C", str(REPO_ROOT), "archive", "HEAD"], stdout=stream, check=True)
         with tarfile.open(archive) as bundle:
-            bundle.extractall(source)
+            bundle.extractall(source, filter="data")
         changed = subprocess.run(
             ["git", "-C", str(REPO_ROOT), "ls-files", "-z", "--modified", "--others", "--exclude-standard"],
             capture_output=True,
@@ -53,6 +54,8 @@ class ReleaseDistributionTests(unittest.TestCase):
         )
         current_files = [REPO_ROOT / item.decode() for item in changed.stdout.split(b"\0") if item]
         for path in current_files:
+            if not path.is_file():
+                continue
             relative = path.relative_to(REPO_ROOT)
             destination = source / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
@@ -86,7 +89,7 @@ class ReleaseDistributionTests(unittest.TestCase):
             env = {**os.environ, "HOME": str(root / "home")}
             self.run_command(
                 [
-                    "python3",
+                    sys.executable,
                     str(source / "scripts" / "build-release.py"),
                     "--source",
                     str(source),
@@ -111,6 +114,9 @@ class ReleaseDistributionTests(unittest.TestCase):
             self.assertNotIn("LLM-Ops-Kit-test-v1/scripts/precheck", names)
             self.assertFalse(any("tests" in Path(name).parts for name in names))
             self.assertFalse(any(name.endswith((".env", ".pyc", ".DS_Store")) for name in names))
+            self.assertFalse(any(Path(name).name == ".gitignore" for name in names))
+            self.assertTrue(any("markupsafe" in name.lower() and "arm64" in name for name in names))
+            self.assertTrue(any("markupsafe" in name.lower() and "x86_64" in name for name in names))
             self.assertTrue((output / "install-llmops").is_file())
             self.assertTrue((output / "install-llmops.sha256").is_file())
 
@@ -141,13 +147,13 @@ class ReleaseDistributionTests(unittest.TestCase):
             self.assertFalse((install / "current" / "scripts" / "precheck").exists())
             self.assertFalse((install / "current" / "scripts" / "build-release.py").exists())
             help_result = self.run_command([str(public_bin / "llmops"), "--help"], env=env)
-            self.assertIn("Show aggregate component status", help_result.stdout)
-            self.assertIn("apply a verified published runtime release", help_result.stdout)
+            self.assertIn("Show aggregate local and remote component status", help_result.stdout)
+            self.assertIn("Check, plan, or apply verified local and remote releases", help_result.stdout)
 
             update_output = root / "update-output"
             self.run_command(
                 [
-                    "python3",
+                    sys.executable,
                     str(source / "scripts" / "build-release.py"),
                     "--source",
                     str(source),
@@ -212,7 +218,7 @@ class ReleaseDistributionTests(unittest.TestCase):
             env = {**os.environ, "HOME": str(root / "home")}
             self.run_command(
                 [
-                    "python3",
+                    sys.executable,
                     str(source / "scripts" / "build-release.py"),
                     "--source",
                     str(source),

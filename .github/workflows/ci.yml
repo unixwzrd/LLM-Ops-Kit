@@ -7,9 +7,6 @@ on:
 jobs:
   test:
     runs-on: macos-14
-    strategy:
-      matrix:
-        python-version: ["3.9", "3.11", "3.13"]
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -17,7 +14,13 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.12"
+
+      - name: Set up UV
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.19"
+          enable-cache: true
 
       - name: Install shellcheck
         shell: bash
@@ -31,6 +34,9 @@ jobs:
           tar -xJf "$RUNNER_TEMP/shellcheck.tar.xz" -C "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/shellcheck-stable" >> "$GITHUB_PATH"
 
-      - name: Run local precheck
+      - name: Install locked development environment
+        run: uv sync --locked --extra tui
+
+      - name: Run release precheck
         run: |
-          scripts/precheck --release
+          uv run --locked --extra tui ./scripts/precheck --release

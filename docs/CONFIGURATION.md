@@ -1,12 +1,15 @@
 # Configuration
 
+**Created**: 2026-07-16
+**Updated**: 2026-07-20
+
 Back: [Documentation index](./INDEX.md)
 
 ## Authority and Precedence
 
 Configuration precedence is shipped runtime defaults, global JSON, referenced profile JSON, host snapshot values, then temporary CLI overrides. Process environment may provide secrets and documented emergency overrides, but no shell configuration file is read implicitly.
 
-`LLMOPS_CONFIG_HOME`, `LLMOPS_DATA_HOME`, `LLMOPS_STATE_HOME`, and `LLMOPS_CACHE_HOME` select alternate roots. Installed immutable releases use their bundled `current/config` snapshot unless `LLMOPS_CONFIG_HOME` is explicitly set.
+`LLMOPS_CONFIG_HOME`, `LLMOPS_DATA_HOME`, `LLMOPS_STATE_HOME`, and `LLMOPS_CACHE_HOME` select alternate roots. Installed immutable releases use the role-filtered revision selected by `~/.local/llm-ops/current-config`, then fall back to the release's migration snapshot when no managed revision exists.
 
 Canonical configuration contains:
 
@@ -90,7 +93,20 @@ llmops init --preset local-lan \
 
 Legacy `env` objects are normalized to `environment`. Structured profiles remain structured. Imported model names must be unique, model paths must be absolute, home-relative, or provider references, and model types must be `llm`, `embedding`, or `tts`. Source files are never modified.
 
-Python-backed components select an interpreter explicitly through fields such as `TTS_PYTHON_BIN` or structured `runtime.python_bin`. The value may be an absolute or home-relative interpreter path from Conda, `python -m venv`, virtualenv, or uv, or a simple executable name resolved through the service PATH. An explicit interpreter path is recommended for launchd because it uses the environment's installed packages without sourcing interactive shell profiles. Shell activation is neither required nor performed implicitly.
+LLM-Ops-Kit's own Python commands always use the application-owned interpreter under the active immutable release. launchd and SSH never source interactive shell profiles.
+
+External Python-backed components may select their own interpreter through fields such as `TTS_PYTHON_BIN` or structured `runtime.python_bin`. The value may reference Conda, `python -m venv`, virtualenv, uv, or another product-owned runtime. LLM-Ops-Kit passes the explicit path to that component and does not activate its environment.
+
+## Reconciliation
+
+Canonical desired state remains under `~/.config/llm-ops/` on the authority. Managed targets receive role-filtered revisions through `llmops config reconcile`; they do not receive secret values or unrelated profiles.
+
+```bash
+llmops config reconcile --all-hosts --plan --json
+llmops config reconcile --all-hosts --apply --yes
+```
+
+Each deployed revision contains `resolved.json` with per-file hashes. Manual changes that invalidate those hashes are conflicts and block replacement. Accepted revisions live under `~/.local/llm-ops/config-revisions/`, and `current-config` selects the active revision atomically.
 
 ## Secrets
 

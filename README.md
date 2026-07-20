@@ -1,20 +1,19 @@
 # LLM-Ops-Kit
 
-LLM-Ops-Kit is a macOS-first local-LAN control layer for models, agents, proxies, bridges, tunnels, dashboards, and supporting services. It coordinates existing processes without containers, model downloads, or agent-specific runtime code.
+LLM-Ops-Kit is a macOS-first control plane for models, agents, proxies, bridges, tunnels, and supporting AI services across one computer or a trusted LAN. It coordinates native processes and service managers without replacing them with containers or a cluster scheduler.
 
-`llmops` is the only public control command. Components are independently manageable; stacks are named dependency graphs for coordinated operation.
+`llmops` is the only public command. Components are independently manageable; stacks are dependency groups for coordinated operation. The CLI and Textual console use the same planner, executor, adapters, and configuration model.
 
-## Supported Platform
+## Supported Beta Platform
 
-- macOS on Apple Silicon
-- Python 3.9 or newer
+- macOS 15 or newer on Apple Silicon or Intel
 - GNU Bash at `/usr/local/bin/bash`
 - SSH for remote hosts
 - launchd for supervised services
 
-Linux is not a supported release target.
+The installer owns its UV-managed Python runtime. It does not require Git, system Python, Conda, or an operator-managed virtual environment. Linux and systemd are experimental and are not supported by this beta.
 
-## Install and Initialize
+## Install
 
 ```bash
 curl -fLO https://github.com/unixwzrd/LLM-Ops-Kit/releases/download/<version>/install-llmops
@@ -26,108 +25,52 @@ chmod +x install-llmops
 ~/.local/bin/llmops doctor --probe
 ```
 
-Installation downloads a checksum-verified runtime artifact and does not require a Git checkout. No release has been published yet; `<version>` remains a placeholder until operator-v1 acceptance is complete.
+The verified release archive contains the application wheel, locked offline dependency wheelhouse, runtime resources, manifest, and checksums. The installer creates an immutable release under `~/.local/llm-ops/releases/`, maintains `current` and `previous`, and exposes `~/.local/bin/llmops`. Use `--minimal` for a CLI-only installation.
 
-Use `--preset local-lan` for separate model and agent hosts. Interactive initialization can discover existing model profiles, normalize selected profiles, and bind chosen chat, embedding, and TTS defaults into disabled starter components. Initialization never starts services.
-
-For deterministic automation:
-
-```bash
-llmops init --preset local-lan \
-  --model-host model-host.local \
-  --agent-host agent-host.local \
-  --model-defaults-from ~/.config/llm-ops \
-  --import-model ChatModel \
-  --import-model EmbeddingModel \
-  --default-chat ChatModel \
-  --default-embedding EmbeddingModel
-```
+No beta has been published yet; `<version>` remains a placeholder until release acceptance is complete.
 
 ## Operate
 
 ```bash
 llmops status
 llmops status <component-or-tag>
-llmops status <profile-name> --json
-
-llmops component list
 llmops component plan restart <component>
-llmops component start <component>
 llmops component restart <component>
-llmops component stop <component> [--force|--cascade]
-llmops component status <component>
-llmops component logs <component>
-
-llmops stack list
-llmops stack plan start <stack>
-llmops stack start <stack>
-llmops stack stop <stack>
-llmops stack restart <stack>
-llmops stack status <stack>
-```
-
-`llmops status` checks every enabled component in the deployed observer catalog and identifies the owning host for each result. A selector can be a component ID, qualified component ID, profile, stack, driver, host, or component tag. A single-component selection includes the driver's detailed status output. Role-filtered profiles remain local to their owning hosts; only secret-free topology metadata is shared.
-
-Status values have explicit observation semantics:
-
-- `running`: the owning host confirmed the component is running.
-- `not-running`: the owning host was reached and confirmed the component is stopped.
-- `unreachable`: a peer probe was attempted but the owning host or its `llmops` command could not be reached.
-- `authority-only`: no peer probe was attempted because the component belongs to a local account or login domain that peers are intentionally not authorized to inspect. This does not mean the component is stopped; check it from its authoritative account.
-- `disabled`: the component is configured but disabled.
-- `error`: configuration or driver inspection failed before a reliable runtime state was obtained.
-
-`authority-only` and `disabled` are informational states and do not make an otherwise healthy aggregate status command fail.
-
-Hosts explicitly marked `trusted_control` may plan or run restricted LLM-Ops-Kit operations on peers. Peer commands use the configured absolute public command path and never depend on login-shell startup files:
-
-```bash
+llmops stack status
 llmops host list
-llmops host plan xanax-model component restart chat
-llmops host run xanax-model component restart chat
+llmops tui
 ```
-
-Host operations accept only status, doctor, component, and stack command families. They reject alternate configuration roots and arbitrary shell commands.
 
 Starting a component starts missing dependencies. Restarting affects only the requested component unless `--cascade` is supplied. Stopping a component with active dependents requires `--force` or `--cascade`.
 
-## Configuration and Migration
+Status includes the owning host, runtime version, catalog and configuration identity, authority, drift, and last synchronization where available. `authority-only` means the catalog knows the component but the current account has no authorized observation route; it does not mean the component is stopped.
 
-Canonical JSON lives under `~/.config/llm-ops/`. Runtime releases consume their bundled role-filtered configuration snapshot unless `LLMOPS_CONFIG_HOME` explicitly selects another root.
+## Configure And Update
 
-The runtime never reads proof-of-concept shell configuration. Use a reviewed one-way migration:
-
-```bash
-llmops migrate-config --legacy-home ~/.llm-ops --dry-run --json
-llmops migrate-config --legacy-home ~/.llm-ops
-llmops doctor --probe
-```
-
-Environment variables are limited to path selection, explicit secret injection, and documented emergency overrides. `LLMOPS_ENV_FILE` is an explicit secret-injection boundary, not a configuration source.
-
-## Deployment
-
-The administrator checkout is the one-way desired-state authority. Deployment packages tracked runtime code and one role-filtered JSON snapshot into an immutable release per host.
+Canonical desired state lives under `~/.config/llm-ops/`. Managed hosts consume role-filtered, secret-free revisions selected through an atomic `current-config` link.
 
 ```bash
-llmops deploy --bundle-id <release> --dry-run
-llmops deploy --bundle-id <release>
-llmops drift --stage ~/.local/share/llm-ops/stage/<release>
+llmops component configure <component> --profile <profile> --plan
+llmops config reconcile --all-hosts --plan --json
+llmops config reconcile --all-hosts --apply --yes
+llmops update --all-hosts --plan --version <version>
+llmops update --all-hosts --apply --version <version>
 llmops rollback
 ```
 
-Dirty deployment sources are refused unless `--allow-dirty` is explicitly supplied and recorded.
+Independent remote edits are reported as drift and are never merged automatically. Runtime updates stage and verify the same artifact on every selected host and roll back hosts changed by the invocation if a later host fails.
 
 ## Documentation
 
 - [Quickstart](docs/QUICKSTART.md)
+- [Operator checklist](docs/OPERATOR_CHECKLIST.md)
+- [Textual console](docs/TUI.md)
+- [Adapters](docs/ADAPTERS.md)
 - [Configuration](docs/CONFIGURATION.md)
 - [Migration](docs/MIGRATION.md)
-- [Architecture](docs/ARCHITECTURE.md)
-- [Deployment](docs/DEPLOYMENT_OVERVIEW.md)
+- [Remote operation](docs/DEPLOYMENT_OVERVIEW.md)
 - [Upgrade and rollback](docs/UPGRADE_AND_ROLLBACK.md)
-- [Model profiles](docs/MODELCTL_GUIDE.md)
-- [Model proxy](docs/PROXY_TAP_RUNBOOK.md)
+- [Architecture](docs/ARCHITECTURE.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
 
 ## License

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 from __future__ import annotations
 
 import json
@@ -6,8 +6,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.lib.llmops_config import ConfigError, load_config
-from scripts.lib.llmops_paths import resolve_paths
+from llmops_kit.llmops_config import ConfigError, load_config
+from llmops_kit.llmops_paths import resolve_paths
 
 
 class LlmOpsConfigTests(unittest.TestCase):

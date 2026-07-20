@@ -1,10 +1,11 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """Read-only host and runtime probes for guided operation."""
 
 from __future__ import annotations
 
 import shlex
 import subprocess
+from pathlib import Path
 from typing import Any
 
 try:
@@ -69,12 +70,17 @@ def probe_topology(topology: Topology) -> dict[str, Any]:
 
     checks: list[dict[str, str]] = []
     for host_name in sorted(topology.hosts):
+        install_root = topology.hosts[host_name].install_root
+        if install_root.startswith("~/"):
+            app_python = '"$HOME"/' + shlex.quote(install_root[2:] + "/current/app/bin/python")
+        else:
+            app_python = shlex.quote(str(Path(install_root) / "current" / "app" / "bin" / "python"))
         baseline = _run(
             topology,
             host_name,
-            "printf 'arch='; uname -m; printf 'python='; command -v python3 || true; "
-            "printf 'python_version='; python3 -c 'import sys; print(\".\".join(map(str, sys.version_info[:3])))' 2>/dev/null || true; "
-            "printf 'bash='; test -x /usr/local/bin/bash && echo /usr/local/bin/bash || true; "
+            "printf 'arch='; uname -m; "
+            f"printf 'app_python='; test -x {app_python} && {app_python} --version 2>&1 || true; "
+            "printf '\\nbash='; test -x /usr/local/bin/bash && echo /usr/local/bin/bash || true; "
             "printf 'launchctl='; command -v launchctl || true; "
             "printf 'memory='; sysctl -n hw.memsize 2>/dev/null || true",
         )
@@ -84,11 +90,12 @@ def probe_topology(topology: Topology) -> dict[str, Any]:
         values = dict(line.split("=", 1) for line in baseline.stdout.splitlines() if "=" in line)
         checks.append(_item(host_name, "connectivity", "ok", "reachable"))
         arch = values.get("arch", "unknown")
-        checks.append(_item(host_name, "architecture", "ok" if arch == "arm64" else "warning", arch, "use Apple Silicon for the supported production target" if arch != "arm64" else ""))
-        python = values.get("python", "")
-        version = values.get("python_version", "")
-        supported_python = bool(python and tuple(int(part) for part in version.split(".")[:2]) >= (3, 9))
-        checks.append(_item(host_name, "python3", "ok" if supported_python else "error", version or python or "not found", "install or select Python 3.9 or newer" if not supported_python else ""))
+        supported_arch = arch in {"arm64", "x86_64"}
+        checks.append(_item(host_name, "architecture", "ok" if supported_arch else "error", arch, "use a supported macOS arm64 or x86_64 host" if not supported_arch else ""))
+        app_python_version = values.get("app_python", "")
+        has_enabled = any(component.host == host_name and component.enabled for component in topology.all_components())
+        python_status = "ok" if app_python_version.startswith("Python 3.") else "error" if has_enabled else "warning"
+        checks.append(_item(host_name, "application-python", python_status, app_python_version or "not found", "repair or reinstall the LLM-Ops-Kit application runtime" if not app_python_version else ""))
         bash = values.get("bash", "")
         checks.append(_item(host_name, "gnu-bash", "ok" if bash else "error", bash or "not found", "install GNU Bash at /usr/local/bin/bash" if not bash else ""))
         needs_launchd = any(component.host == host_name and component.driver in {"launchd", "ssh-tunnel"} for component in topology.all_components())

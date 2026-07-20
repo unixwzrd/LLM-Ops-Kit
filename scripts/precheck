@@ -52,19 +52,24 @@ shell_targets=(
 python_targets=(
   "scripts/llmops-control"
   "scripts/build-release.py"
-  "scripts/lib/llmops_config.py"
-  "scripts/lib/llmops_deployment.py"
-  "scripts/lib/llmops_drivers.py"
-  "scripts/lib/llmops_executor.py"
-  "scripts/lib/llmops_inventory.py"
-  "scripts/lib/llmops_init.py"
-  "scripts/lib/llmops_install_state.py"
-  "scripts/lib/llmops_migration.py"
-  "scripts/lib/llmops_paths.py"
-  "scripts/lib/llmops_probe.py"
-  "scripts/lib/llmops_profiles.py"
-  "scripts/lib/llmops_topology.py"
-  "scripts/lib/llmops_update.py"
+  "src/llmops_kit/llmops_config.py"
+  "src/llmops_kit/llmops_config_sync.py"
+  "src/llmops_kit/llmops_drivers.py"
+  "src/llmops_kit/llmops_executor.py"
+  "src/llmops_kit/llmops_inventory.py"
+  "src/llmops_kit/llmops_init.py"
+  "src/llmops_kit/llmops_install_state.py"
+  "src/llmops_kit/llmops_migration.py"
+  "src/llmops_kit/llmops_paths.py"
+  "src/llmops_kit/llmops_probe.py"
+  "src/llmops_kit/llmops_profiles.py"
+  "src/llmops_kit/llmops_topology.py"
+  "src/llmops_kit/llmops_update.py"
+  "src/llmops_kit/llmops_adapters.py"
+  "src/llmops_kit/llmops_cli.py"
+  "src/llmops_kit/llmops_tui.py"
+  "src/llmops_kit/entrypoint.py"
+  "src/llmops_kit/__init__.py"
 )
 
 echo "==> Shell syntax checks"
@@ -90,6 +95,13 @@ if [[ "$RELEASE_CHECK" -eq 1 ]]; then
   for path in bin stage tmp docs/internal docs/reports docs/scripts grammars scripts/agents scripts/config scripts/models; do
     [[ ! -e "$path" ]] || { echo "precheck: obsolete or generated path remains: $path" >&2; exit 2; }
   done
+  [[ -f pyproject.toml && -f uv.lock ]] || { echo "precheck: package metadata or lockfile is missing" >&2; exit 2; }
+  embedded_pattern='python([0-9]+)?[[:space:]]*<'
+  embedded_pattern+='<'
+  if rg -n "$embedded_pattern" scripts --glob '*.sh' >/dev/null; then
+    echo "precheck: embedded Python heredoc found in shell source" >&2
+    exit 2
+  fi
 fi
 
 echo "precheck: OK"

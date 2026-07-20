@@ -1,5 +1,40 @@
 # Changelog
 
+## Unreleased
+
+### Beta release readiness
+
+- Packaged the control library in a conventional `src/llmops_kit` layout with one authoritative version, console entry point, locked dependencies, built-in resources, and optional Textual dependency metadata.
+- Added a checksummed release wheelhouse containing the project, Jinja2, Textual, and transitive dependencies for offline installation.
+- Reworked installation around one UV-managed Python runtime and one application environment per immutable release; installed commands no longer depend on system Python, Conda activation, virtual environments, or shell startup files.
+- Added normal and `--minimal` installation, repair, local and coordinated host update, installer-level rollback, default uninstall, and purge behavior.
+- Added a versioned adapter registry, built-in adapter manifests, adapter discovery through Python entry points, `llmops adapter` commands, and conformance tests.
+- Added the on-demand `llmops tui` operations console with status, lifecycle plans, logs, deterministic validation, guided existing-component configuration, explicit confirmation, and equivalent CLI commands.
+- Added runtime version, catalog/configuration hashes, authority, drift, and synchronization metadata to status records.
+- Added transactionally verified role-filtered configuration revisions, `llmops config hash`, and `llmops config reconcile`; manual target drift blocks replacement and is never merged automatically.
+- Added coordinated remote update preflight, artifact staging, older-peer use, missing-peer bootstrap, sequential apply, post-update version/configuration verification, and rollback of hosts changed by a failed invocation.
+- Added dual-architecture macOS wheelhouses for Apple Silicon and Intel, plus custom-prefix install metadata so guided initialization and probes use the actual application layout.
+- Added an explicit macOS platform gate so experimental Linux runs stop before selecting or downloading an incompatible Apple runtime.
+- Restricted release extraction to data-safe tar members for repository-free distribution and remote updates.
+- Removed UV's generated wheelhouse ignore file from runtime archives.
+- Made the installed launcher select the active immutable configuration revision by default while preserving an explicit configuration override.
+- Added a bounded first-beta rollback path that restores a prior immutable script runtime and can return to the application-owned beta release.
+- Made configuration reconciliation preserve drift details returned with nonzero status, refuse unreachable/error targets, retain immutable revisions, and record the previous configuration link before atomic replacement.
+- Retired the proof-of-concept source-checkout deployment and stage/drift implementation in favor of repository-free updates and independent desired-state reconciliation.
+- Added operator, TUI, adapter, remote-operation, installation, upgrade, rollback, and recovery documentation.
+
+### Product direction
+
+- Defined LLM-Ops-Kit as an extensible, lightweight AI subsystem control plane rather than a container scheduler, model engine, or agent.
+- Specified clean module boundaries for configuration, schemas, topology, planning, execution, adapters, transports, deployment, observability, and operator interfaces.
+- Defined a versioned adapter manifest and capability model so launchd, systemd, standalone processes, SSH, model engines, agents, memory systems, optimization tools, and observability providers can be added without modifying the control core.
+- Established `llmops` as the canonical public command representation while requiring CLI, Textual TUI, optional WebUI, and future agent skills to consume the same operation model and display equivalent commands.
+- Added a one-week beta roadmap centered on a UV-owned runtime, Textual control panel, existing llama.cpp stack, model-proxy observability, and two-user macOS acceptance.
+- Audited the existing Secrets-Kit bootstrap and release workflow for reuse. Adopted its UV discovery/bootstrap, versioned runtime, wheel, state, repair/upgrade, artifact, and multi-host acceptance patterns while explicitly excluding product-specific initialization and embedded Python shell blocks.
+- Defined staged reuse of MLXForge's static FastAPI WebUI patterns and visual/widget contracts without introducing a repository dependency or prematurely extracting a shared package.
+- Recorded completion of the 48-hour runtime soak and regenerated two source-date operational reports from 48 hourly archived records without hiding the migration and cold-cycle exceptions.
+- Kept systemd/Linux, MLXForge, Mnemosyne, RTK, Headroom, optional WebUI, and external TTS providers behind explicit staged acceptance gates.
+
 ## Operator V1 Release Candidate
 
 ### Configuration and migration
@@ -12,7 +47,7 @@
 ### Lifecycle and multi-host operation
 
 - Added independent component lifecycle operations and dependency-aware stack composition with non-mutating plans, readiness checks, idempotence, cascade behavior, and partial-start rollback.
-- Added immutable multi-host deployment, role-filtered runtime configuration, complete sanitized topology catalogs, drift detection, and atomic rollback.
+- Added the proof-of-concept immutable multi-host deployment that established the role-filtered configuration and topology contracts later replaced by beta update and reconciliation commands.
 - Added aggregate `llmops status`, trusted peer host operations over SSH, absolute remote command paths, and explicit `authority-only` status for components intentionally observable only from the desired-state authority.
 - Added component help descriptions and agent-neutral profiles without privileged Hermes or OpenClaw behavior.
 

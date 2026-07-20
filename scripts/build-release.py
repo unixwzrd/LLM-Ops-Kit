@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """Build a deterministic runtime-only LLM-Ops-Kit release archive."""
 
 from __future__ import annotations
@@ -31,6 +31,80 @@ MAINTAINER_FILES = {
 }
 
 
+def build_wheelhouse(source: Path, destination: Path) -> list[dict[str, object]]:
+    """Build the project wheel and download locked dependencies for offline install."""
+
+    uv = shutil.which("uv")
+    if uv is None:
+        raise ReleaseBuildError("uv is required to build release artifacts")
+    destination.mkdir(parents=True, exist_ok=True)
+    commands = [
+        [uv, "build", "--wheel", "--out-dir", str(destination), str(source)],
+        [
+            uv,
+            "export",
+            "--project",
+            str(source),
+            "--locked",
+            "--extra",
+            "tui",
+            "--no-emit-project",
+            "--format",
+            "requirements.txt",
+            "--output-file",
+            str(destination / "requirements-tui.txt"),
+        ],
+    ]
+    for command in commands:
+        completed = subprocess.run(command, capture_output=True, text=True, check=False)
+        if completed.returncode != 0:
+            raise ReleaseBuildError(completed.stderr.strip() or "wheelhouse build failed")
+    (destination / ".gitignore").unlink(missing_ok=True)
+    for platform_tag in ("macosx_11_0_arm64", "macosx_10_13_x86_64"):
+        download = subprocess.run(
+            [
+                uv,
+                "run",
+                "--isolated",
+                "--no-project",
+                "--with",
+                "pip",
+                "pip",
+                "download",
+                "--require-hashes",
+                "--only-binary=:all:",
+                "--platform",
+                platform_tag,
+                "--python-version",
+                "312",
+                "--implementation",
+                "cp",
+                "--abi",
+                "cp312",
+                "--destination-directory",
+                str(destination),
+                "--requirement",
+                str(destination / "requirements-tui.txt"),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if download.returncode != 0:
+            raise ReleaseBuildError(download.stderr.strip() or f"dependency download failed for {platform_tag}")
+    records: list[dict[str, object]] = []
+    for path in sorted(destination.iterdir()):
+        if path.is_file():
+            records.append(
+                {
+                    "path": str(path.relative_to(destination.parent)),
+                    "sha256": sha256(path),
+                    "mode": path.stat().st_mode & 0o777,
+                }
+            )
+    return records
+
+
 def run_git(source: Path, *args: str) -> str:
     """Run Git in source and return stripped stdout."""
 
@@ -43,6 +117,19 @@ def run_git(source: Path, *args: str) -> str:
     if completed.returncode != 0:
         raise ReleaseBuildError(completed.stderr.strip() or "Git command failed")
     return completed.stdout.strip()
+
+
+def project_version(source: Path) -> str:
+    """Read the package version from the authoritative project metadata."""
+
+    try:
+        text = (source / "pyproject.toml").read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ReleaseBuildError("pyproject.toml is required for release builds") from exc
+    match = re.search(r'^version\s*=\s*"([^"]+)"\s*$', text, re.MULTILINE)
+    if match is None or not VERSION_RE.fullmatch(match.group(1)):
+        raise ReleaseBuildError("pyproject.toml contains no valid project version")
+    return match.group(1)
 
 
 def sha256(path: Path) -> str:
@@ -132,7 +219,7 @@ def build_release(
     if status and not allow_dirty:
         raise ReleaseBuildError("release build refuses a dirty source tree")
     commit = run_git(source, "rev-parse", "HEAD")
-    resolved_version = version or run_git(source, "describe", "--tags", "--always")
+    resolved_version = version or project_version(source)
     if not VERSION_RE.fullmatch(resolved_version):
         raise ReleaseBuildError(f"invalid release version: {resolved_version}")
     timestamp_text = run_git(source, "show", "-s", "--format=%ct", "HEAD")
@@ -153,6 +240,7 @@ def build_release(
         payload = Path(temporary) / f"{ARCHIVE_ROOT_PREFIX}-{resolved_version}"
         payload.mkdir()
         records = copy_payload(source, payload, files)
+        records.extend(build_wheelhouse(source, payload / "wheelhouse"))
         manifest = {
             "schema_version": 1,
             "name": "LLM-Ops-Kit",

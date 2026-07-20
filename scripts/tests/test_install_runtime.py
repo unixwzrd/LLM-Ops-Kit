@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """Isolated installer, upgrade, repair, and uninstall tests."""
 
 from __future__ import annotations
@@ -7,6 +7,7 @@ import os
 import json
 import shutil
 import subprocess
+import sys
 import tarfile
 import tempfile
 import unittest
@@ -15,6 +16,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 INSTALLER = REPO_ROOT / "scripts" / "install-runtime.sh"
 UNINSTALLER = REPO_ROOT / "scripts" / "uninstall-runtime.sh"
+BUILDER = REPO_ROOT / "scripts" / "build-release.py"
 
 
 class InstallerTests(unittest.TestCase):
@@ -23,6 +25,28 @@ class InstallerTests(unittest.TestCase):
         if completed.returncode != 0:
             self.fail(f"command failed ({completed.returncode}): {' '.join(command)}\n{completed.stdout}\n{completed.stderr}")
         return completed
+
+    def release_source(self, root: Path, version: str) -> Path:
+        output = root / f"artifact-{version}"
+        subprocess.run(
+            [
+                sys.executable,
+                str(BUILDER),
+                "--output-dir",
+                str(output),
+                "--version",
+                version,
+                "--allow-dirty",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        extracted = root / f"source-{version}"
+        extracted.mkdir()
+        with tarfile.open(output / f"LLM-Ops-Kit-{version}.tar.xz", "r:xz") as bundle:
+            bundle.extractall(extracted, filter="data")
+        return extracted / f"LLM-Ops-Kit-{version}"
 
     def test_fresh_upgrade_repair_uninstall_and_purge(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -42,12 +66,14 @@ class InstallerTests(unittest.TestCase):
                 "LLMOPS_DATA_HOME": str(data),
                 "LLMOPS_STATE_HOME": str(state),
                 "LLMOPS_CACHE_HOME": str(cache),
+                "LLMOPS_UV_BIN": shutil.which("uv") or "uv",
             }
+            source = self.release_source(home, "installer-test")
             common = [
                 "/usr/local/bin/bash",
                 str(INSTALLER),
                 "--source",
-                str(REPO_ROOT),
+                str(source),
                 "--prefix",
                 str(install),
                 "--public-bin-dir",
@@ -60,14 +86,35 @@ class InstallerTests(unittest.TestCase):
             self.assertFalse((install / "previous").exists())
             self.assertTrue((public_bin / "llmops").is_symlink())
             help_result = self.run_command([str(public_bin / "llmops"), "--help"], env)
-            self.assertIn("status          Show aggregate component status", help_result.stdout)
-            self.assertIn("deploy          Build and atomically deploy", help_result.stdout)
+            self.assertIn("Show aggregate local and remote component status", help_result.stdout)
+            self.assertIn("Show or reconcile canonical configuration", help_result.stdout)
             self.run_command([str(public_bin / "llmops"), "init", "--preset", "single-host"], env)
+            inventory = json.loads((config / "inventory.json").read_text(encoding="utf-8"))
+            self.assertEqual(inventory["hosts"][0]["install_root"], str(install))
+            self.assertEqual(inventory["hosts"][0]["public_bin_dir"], str(public_bin))
             self.run_command([str(public_bin / "llmops"), "doctor"], env)
 
+            shutil.copytree(config, install / "current" / "config")
             self.run_command(common + ["--release-id", "release-2"], env)
             self.assertEqual((install / "current").resolve(), (install / "releases" / "release-2").resolve())
             self.assertEqual((install / "previous").resolve(), (install / "releases" / "release-1").resolve())
+            self.assertTrue((install / "current-config").is_symlink())
+            default_env = {key: value for key, value in env.items() if key != "LLMOPS_CONFIG_HOME"}
+            shown = self.run_command([str(public_bin / "llmops"), "config", "show", "--json"], default_env)
+            self.assertEqual(Path(json.loads(shown.stdout)["paths"]["config_home"]).resolve(), (install / "current-config").resolve())
+
+            prior = install / "releases" / "release-1"
+            (prior / "scripts").mkdir(exist_ok=True)
+            prior_llmops = prior / "scripts" / "llmops"
+            prior_llmops.write_text("#!/bin/sh\necho pre-beta\n", encoding="utf-8")
+            prior_llmops.chmod(0o755)
+            shutil.rmtree(prior / "app")
+            self.run_command(common + ["--rollback"], env)
+            self.assertEqual((install / "current").resolve(), prior.resolve())
+            self.assertEqual((public_bin / "llmops").resolve(), prior_llmops.resolve())
+            self.assertEqual(json.loads((install / "install.json").read_text(encoding="utf-8"))["active_release"], str(prior))
+            self.run_command(common + ["--rollback"], env)
+            self.assertEqual((install / "current").resolve(), (install / "releases" / "release-2").resolve())
             self.run_command(common + ["--repair"], env)
             self.run_command(common + ["--repair"], env)
 
@@ -96,33 +143,39 @@ class InstallerTests(unittest.TestCase):
             for path in (install, config, data, state, cache):
                 self.assertFalse(path.exists(), str(path))
 
-    def test_git_archive_is_installable_and_proxy_render_uses_python(self) -> None:
+    def test_unsupported_platform_fails_before_installation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            repository = root / "repository"
-            shutil.copytree(
-                REPO_ROOT / "scripts",
-                repository / "scripts",
-                ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
-            )
-            subprocess.run(["git", "init", "-q", str(repository)], check=True)
-            subprocess.run(["git", "-C", str(repository), "add", "scripts"], check=True)
-            subprocess.run(
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            uname = fake_bin / "uname"
+            uname.write_text("#!/bin/sh\necho Linux\n", encoding="utf-8")
+            uname.chmod(0o755)
+            install = root / "install"
+            completed = subprocess.run(
                 [
-                    "git", "-C", str(repository),
-                    "-c", "user.name=LLM Ops Test",
-                    "-c", "user.email=test@example.invalid",
-                    "commit", "-qm", "archive fixture",
+                    "/usr/local/bin/bash",
+                    str(INSTALLER),
+                    "--source",
+                    str(REPO_ROOT),
+                    "--prefix",
+                    str(install),
+                    "--release-id",
+                    "unsupported-test",
                 ],
-                check=True,
+                env={**os.environ, "PATH": f"{fake_bin}:{os.environ.get('PATH', '')}"},
+                capture_output=True,
+                text=True,
+                check=False,
             )
-            archive = root / "source.tar"
-            with archive.open("wb") as stream:
-                subprocess.run(["git", "-C", str(repository), "archive", "HEAD"], stdout=stream, check=True)
-            source = root / "source"
-            source.mkdir()
-            with tarfile.open(archive) as bundle:
-                bundle.extractall(source)
+            self.assertEqual(completed.returncode, 2)
+            self.assertIn("this beta supports macOS only", completed.stderr)
+            self.assertFalse(install.exists())
+
+    def test_release_archive_is_installable_and_proxy_render_uses_application_python(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = self.release_source(root, "archive-test")
             self.assertFalse((source / "bin").exists())
             env = {
                 **os.environ,
@@ -130,6 +183,7 @@ class InstallerTests(unittest.TestCase):
                 "LLMOPS_HOME": str(root / "install"),
                 "LLMOPS_CONFIG_HOME": str(root / "config"),
                 "LLMOPS_STATE_HOME": str(root / "state"),
+                "LLMOPS_UV_BIN": shutil.which("uv") or "uv",
             }
             install = [
                 "/usr/local/bin/bash",
@@ -141,6 +195,7 @@ class InstallerTests(unittest.TestCase):
                 "--release-id", "archive-test",
             ]
             self.run_command(install, env)
+            self.assertTrue((root / "install" / "current" / "app" / "bin" / "python").is_file())
             payload = root / "payload.json"
             payload.write_text(
                 json.dumps({"messages": [{"role": "user", "content": "test"}]}),
@@ -150,6 +205,50 @@ class InstallerTests(unittest.TestCase):
                 [str(root / "install" / "bin" / "model-proxy"), "render", "--input", str(payload)],
                 env,
             )
+
+            minimal = root / "minimal"
+            minimal_env = {
+                **env,
+                "LLMOPS_HOME": str(minimal / "install"),
+                "LLMOPS_CONFIG_HOME": str(minimal / "config"),
+                "LLMOPS_STATE_HOME": str(minimal / "state"),
+            }
+            self.run_command(
+                [
+                    "/usr/local/bin/bash",
+                    str(source / "scripts" / "install-runtime.sh"),
+                    "--source",
+                    str(source),
+                    "--prefix",
+                    str(minimal / "install"),
+                    "--public-bin-dir",
+                    str(minimal / "bin"),
+                    "--state-home",
+                    str(minimal / "state"),
+                    "--release-id",
+                    "minimal-test",
+                    "--minimal",
+                ],
+                minimal_env,
+            )
+            self.run_command([str(minimal / "bin" / "llmops"), "adapter", "doctor"], minimal_env)
+            textual = subprocess.run(
+                [str(minimal / "install" / "current" / "app" / "bin" / "python"), "-c", "import importlib.util; raise SystemExit(importlib.util.find_spec('textual') is not None)"],
+                env=minimal_env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(textual.returncode, 0)
+            tui = subprocess.run(
+                [str(minimal / "bin" / "llmops"), "tui"],
+                env=minimal_env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(tui.returncode, 2)
+            self.assertIn("Textual is not installed", tui.stdout)
 
     def test_model_restart_archives_existing_log(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """Dependency-aware component planning and lifecycle execution."""
 
 from __future__ import annotations

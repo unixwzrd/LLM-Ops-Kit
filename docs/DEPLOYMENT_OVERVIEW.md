@@ -1,29 +1,29 @@
-# Deployment
+# Remote Operation And Desired State
 
 **Created**: 2026-07-16
-**Updated**: 2026-07-16
+**Updated**: 2026-07-20
 
 Back: [Documentation index](./INDEX.md)
 
-The administrator checkout is the one-way desired-state authority. Managed hosts do not need source checkouts.
+The proof-of-concept source-checkout deployment command has been retired. Runtime distribution and desired-state synchronization are separate, repository-free operations.
+
+## Runtime Distribution
 
 ```bash
-llmops deploy --config-home ~/.config/llm-ops --source /path/to/LLM-Ops-Kit --bundle-id <release> --dry-run --json
-llmops deploy --config-home ~/.config/llm-ops --source /path/to/LLM-Ops-Kit --bundle-id <release>
+llmops update --host <inventory-name> --plan --version <version>
+llmops update --host <inventory-name> --apply --version <version>
+llmops update --all-hosts --apply --version <version>
 ```
 
-Deployment validates topology, refuses dirty source unless `--allow-dirty` is supplied, builds a checksummed runtime package, builds one role-filtered configuration archive per host, pushes with bounded retry, applies an immutable release, updates `current` and `previous`, and verifies drift.
+`--host` is repeatable. `--all-hosts` selects peer-observable managed hosts and excludes authority-only desktop accounts unless explicitly selected.
 
-Set `deployment.source_root` in the administrator `config.json` to avoid repeating `--source`.
-
-Only code, manifest metadata, and canonical JSON snapshots are synchronized. Model weights, logs, databases, agent state, `.env` files, and secret values are excluded.
-
-Select hosts with `--host-name`, `--role`, or `--tag`. Use `--inventory` to select a deliberate alternate inventory.
+## Configuration Reconciliation
 
 ```bash
-llmops drift --stage ~/.local/share/llm-ops/stage/<release> --json
-llmops rollback --dry-run --json
-llmops rollback
+llmops config reconcile --host <inventory-name> --plan --json
+llmops config reconcile --all-hosts --apply --yes
 ```
 
-Deployment does not restart running components. After changing an engine or profile, canary with `llmops component restart <component>` and broaden to `--cascade` only when required.
+The authority generates a complete secret-free catalog and a role-filtered configuration revision for each host. Each target verifies its current manifest before replacement. A changed file that no longer matches its manifest is reported as a conflict and is not overwritten or merged.
+
+Applied revisions live under `~/.local/llm-ops/config-revisions/`; `current-config` selects the active revision atomically. Runtime releases and configuration revisions therefore remain independently recoverable while retaining explicit hashes in status output.

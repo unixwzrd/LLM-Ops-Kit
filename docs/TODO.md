@@ -1,48 +1,60 @@
 # Maintainer TODO
 
+**Created**: 2026-07-16
+**Updated**: 2026-07-20
+
 Back: [Documentation index](./INDEX.md)
 
-## Operator V1 Release Gate
+## Completed Beta Implementation
 
-- [x] Pass release precheck from a clean committed source tree.
-- [x] Pass installation from `git archive HEAD` on both supported hosts.
-- [x] Pass guided and non-interactive model-profile import using real saved profiles.
-- [x] Pass classified migration using real model, service, agent, inventory, and unknown-input fixtures.
-- [x] Pass isolated fresh install, upgrade, repair, rollback, default uninstall, and purge uninstall on both hosts.
-- [x] Upgrade the live two-host runtime without changing canonical configuration hashes.
-- [x] Confirm zero deployment drift and protocol health for model, embedding, proxy, TTS, bridge, agent, dashboard, and tunnel components.
-- [x] Pass component restart, dependency enforcement, cascade behavior, and complete cold stop/start.
-- [ ] Complete a 48-hour soak spanning two consecutive scheduled daily operational reports while retaining the prior runtime and backups.
-  - Soak restarted at 2026-07-17 15:51 CDT after the Qwen3TTS process crashed. The bridge remained available and correctly reported upstream failure; the TTS model was restored and end-to-end generation passed.
-  - Soak restarted again at 2026-07-17 20:15 CDT after deploying the latest-image Qwen template and strictly passive model proxy. The prior Qwen3TTS failure was traced to an uncaught Metal `kIOGPUCommandBufferCallbackErrorImpactingInteractivity` error.
-  - Soak restarted at 2026-07-17 20:45 CDT after refining the Jinja template to remove complete historical image tool exchanges while retaining only the final image. Both hosts deployed runtime `operator-v1-rc-e9c427f`, all configured components returned to running state, and deployment drift was zero.
-  - Soak restarted at 2026-07-17 21:00 CDT after deploying trusted peer control and restarting Qwen3.6 from the agent host and model-proxy from the model host. Both components passed readiness checks and runtime `operator-v1-rc-3020dee` had zero deployment drift.
-  - Soak restarted at 2026-07-17 21:04 CDT after deploying centralized copy-and-truncate model log rotation. A live Qwen3.6 restart preserved active log inode `917783407`, archived the prior contents, and returned to API-ready state on runtime `operator-v1-rc-ba0da59`.
-- [ ] Obtain a green macOS CI run after the release candidate is pushed for review.
+- [x] Package the control library in a conventional `src/llmops_kit` layout with a locked UV project, console entry point, package resources, and one authoritative version.
+- [x] Build a checksummed release archive with an offline Apple Silicon and Intel macOS wheelhouse.
+- [x] Bootstrap checksum-verified UV and managed Python without Git, system Python, Conda, a source checkout, or shell-profile activation.
+- [x] Support normal Textual and `--minimal` CLI installations, repair, immutable current/previous releases, local update, rollback, normal uninstall, and purge.
+- [x] Preserve configuration and operational state outside immutable releases and record the actual custom install layout for initialization and probes.
+- [x] Register built-in lifecycle adapters through a versioned entry-point registry and provide `adapter list`, `adapter show`, `adapter doctor`, and conformance fixtures.
+- [x] Add global and per-component status with host, toolkit version, catalog/configuration hashes, authority, drift, reachability, and last synchronization.
+- [x] Add coordinated remote update selection, preflight, staging, old-peer use, missing-peer bootstrap, sequential apply, post-apply identity verification, and rollback reporting.
+- [x] Add one-way role-filtered configuration reconciliation with conflict refusal, immutable revisions, previous/current links, and no automatic merge.
+- [x] Add the on-demand Textual dashboard over the shared planner/executor with component and stack views, logs, plans, lifecycle actions, existing-component editing, update actions, confirmation, and equivalent CLI commands.
+- [x] Remove proof-of-concept repository synchronization, source-checkout deployment, runtime legacy reads, embedded Python shell blocks, and privileged Hermes/OpenClaw behavior.
+- [x] Preserve test-only legacy migration fixtures; they are not installed in release artifacts.
+- [x] Complete the prior operator-v1 48-hour live soak while retaining prior runtimes and checksummed backups.
 
-## General-User Distribution Gate
+## Beta Release Gates
 
-- [x] Produce a versioned, checksum-verified release artifact containing only installed runtime files. Installation and upgrade do not require a Git checkout or depend on the checkout location.
-- [x] Add a repository-free bootstrap installer that downloads a selected GitHub release, verifies it, installs only the required components, and reports exact recovery steps without piping an unverified response directly into a privileged shell.
-- [ ] Add `llmops update` with local and remote version discovery, release selection, plan and JSON output, atomic apply, rollback, and handling for an older control command on either side of an SSH connection.
-  - [x] Local check, plan, JSON output, verified apply, immutable previous-release retention, and offline artifact operation.
-  - [ ] Remote discovery, older-peer bootstrap, coordinated host selection, and remote rollback reporting.
-- [ ] Add one application-owned Python runtime environment with a checksum-verified uv or `venv` bootstrap, offline/error handling, dependency locking, repair, upgrade, rollback, and purge semantics. Python-backed launchd services should use its explicit interpreter path without sourcing interactive shell profiles.
-- [x] Add portable read-only observer snapshots so any trusted configured host can run global `llmops status` without receiving mutation authority or secret material.
-- [x] Add explicit trusted-control snapshots and `llmops host` operations for approved operator hosts. Remote execution uses the configured absolute `llmops` path over SSH, permits only restricted LLM-Ops-Kit command families, and does not depend on login-shell startup files.
-- [x] Distribute a complete sanitized topology catalog to managed hosts while retaining role-filtered runtime profiles. Synchronization is one-way from the desired-state authority, checksummed, and atomic.
-- [ ] Validate identical catalog hashes and global status from both live hosts after the soak and release-candidate deployment.
-  - Current pre-soak evidence: both hosts run `operator-v1-rc-0460901`, have catalog SHA-256 `fed095bcd929dc0558ea57fa4b303edfe6d526cef26894f90efcaeeaa8a53eb0`, and return identical status for all model-host and agent-host components.
-  - The Desktop tunnel remains unobservable from managed peers because it runs in the desktop user's launchd domain and the service account has no SSH authorization to that account. Do not expand primary-account access implicitly; either keep this component authority-only or approve a separate least-privilege observer mechanism.
-- [ ] Make configuration and toolkit-version drift visible from every trusted control host. Refuse automatic merging of independently edited host configuration and provide an explicit reconciliation workflow.
-- [ ] Package an agent-neutral LLM-Ops-Kit skill that uses `doctor`, `plan`, `status`, and JSON output for setup and operations while requiring explicit approval for mutations and SSH provisioning.
+- [x] Pass the dependency-complete Python suite and local precheck in the packaged UV environment. Current evidence: 115 tests pass on 2026-07-20.
+- [x] Pass normal clean installation from a verified archive on isolated Apple Silicon and Intel macOS users.
+- [ ] Repeat normal installation from the final committed release artifact on both macOS users after documentation and acceptance fixes stop changing the package.
+- [x] Pass `--minimal` installation on isolated Apple Silicon and Intel macOS users and confirm the CLI works while `llmops tui` reports the omitted optional dependency cleanly.
+- [x] Pass guided interactive model-profile reuse and deterministic non-interactive import against each test user's existing model profiles.
+- [ ] Pass final-artifact repair, upgrade, rollback, normal uninstall, and purge on both macOS users.
+- [ ] Pass Textual interaction tests for status, component/stack views, logs, lifecycle confirmation/cancellation, configuration validation, update check, and update cancellation.
+- [ ] Pass coordinated two-host update tests for unreachable preflight, interrupted transfer, old-peer bootstrap, apply failure, automatic rollback, and mixed-version refusal.
+- [ ] Pass live configuration reconciliation plan/apply/idempotence and independently edited target conflict refusal.
+- [ ] Confirm identical topology/catalog hashes and global status from both trusted live hosts.
+- [ ] Upgrade both live hosts from the preserved operator-v1 runtime to the final beta candidate, validate services, roll back once, and return to the candidate.
+- [ ] Re-run model, embedding, TTS, model-proxy, tts-bridge, gateway, dashboard, tunnel, dependency, cascade, individual restart, and cold-start acceptance.
+- [ ] Produce a clean local release commit and build exclusively from `git archive HEAD`; require clean status, documentation links, secret scan, private-path scan, archive audit, and ignored-file audit.
+- [x] Regenerate the two missing standardized operational reports from 48 hourly archived source records. The reports preserve transient migration and cold-cycle exceptions rather than describing the cycles as uninterrupted steady state.
+- [x] Run non-blocking installer experiments on Debian and Rocky. Both stop before mutation with the documented macOS-only beta error; Linux support is not claimed.
+- [ ] Obtain explicit user approval before push or tag, then require green macOS CI and publish a GitHub prerelease with checksums, manifest, changelog, upgrade, and rollback instructions.
 
-## Post-V1
+## Deferred From Beta
 
-- [ ] Add a typed MLXForge engine driver so model lifecycle and health checks can migrate from llama.cpp without changing stack or component interfaces.
-- [ ] Evaluate an optional Textual TUI or loopback-only static web console for guided inventory, profile, dependency, and status management. It must consume the existing control/JSON interfaces rather than implement another orchestration path.
-- [ ] Integrate Secrets-Kit only through explicit provider references after its release contract stabilizes.
-- [ ] Remove plaintext `.env` secret injection after the external provider path is validated.
-- [ ] Add signed release manifests if distribution expands beyond a trusted LAN.
-- [ ] Consider guided model downloads only as a separately approved feature.
-- [ ] Add an explicit per-component restart policy and supervisor integration. Keep automatic restart disabled by default for high-memory model processes.
+- [ ] Add adapter-specific and arbitrary-profile schema forms after the schema contract stabilizes. Unknown fields remain canonical JSON in beta.
+- [ ] Add deterministic corrective suggestions from active probes to the TUI. The beta TUI shows configuration validation only.
+- [ ] Add a correlated model-proxy diagnostic exchange browser. The beta exposes component logs without modifying proxy traffic.
+- [ ] Package an agent-neutral operational skill using `doctor`, `plan`, `status`, and JSON output with explicit approval for mutations and SSH provisioning.
+- [ ] Add a per-component supervisor/restart policy with desired-running state, bounded retry, restart count, and last-exit status. Keep automatic restart disabled by default.
+- [ ] Add the loopback static WebUI over the same control library after the TUI stabilizes.
+
+## Integration Roadmap
+
+- [ ] Add an early-alpha MLXForge engine adapter after inference and lifecycle contracts stabilize.
+- [ ] Add systemd and complete Debian/Rocky acceptance before declaring Linux support.
+- [ ] Add optional recipes for Hermes, OpenClaw, Mnemosyne, RTK, and Headroom without making them core dependencies.
+- [ ] Add a TTS Bridge provider contract for operator-supplied local or remote OpenAI-compatible speech endpoints; never ship voices or credentials.
+- [ ] Integrate Secrets-Kit through explicit provider references after its release contract stabilizes, then retire plaintext `.env` injection.
+- [ ] Publish an adapter SDK with a template, manifest schema, compatibility policy, conformance suite, test doubles, and uninstall contract.
+- [ ] Add authenticated adapter catalog metadata before third-party installation is supported.

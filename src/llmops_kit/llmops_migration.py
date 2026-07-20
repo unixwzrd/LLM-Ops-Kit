@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """One-way classified migration from proof-of-concept configuration."""
 
 from __future__ import annotations

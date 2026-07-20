@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """Path resolution helpers for LLM-Ops-Kit.
 
 This module defines the platform-neutral filesystem layout used by new

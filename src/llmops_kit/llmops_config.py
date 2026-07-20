@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """JSON configuration loading for LLM-Ops-Kit."""
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from typing import Any
 
 try:
     from llmops_paths import LlmOpsPaths, resolve_paths
-except ModuleNotFoundError:  # pragma: no cover - used when imported as scripts.lib.*
+except ModuleNotFoundError:  # pragma: no cover - direct source execution
     from .llmops_paths import LlmOpsPaths, resolve_paths
 
 

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """Canonical JSON profile loading and runtime value resolution."""
 
 from __future__ import annotations

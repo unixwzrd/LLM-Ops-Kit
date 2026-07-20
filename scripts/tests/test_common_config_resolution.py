@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """Tests for shell runtime path resolution."""
 
 from __future__ import annotations

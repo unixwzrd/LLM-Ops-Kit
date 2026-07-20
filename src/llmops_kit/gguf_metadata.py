@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """Minimal GGUF metadata reader.
 
 The reader parses only the GGUF header and metadata key/value table. It does

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """Focused tests for the local MLX TTS bridge."""
 
 from __future__ import annotations

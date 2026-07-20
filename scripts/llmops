@@ -1,60 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-LLMOPS_HOME="${LLMOPS_HOME:-$HOME/.local/llm-ops}"
-LLMOPS_BIN_DIR="${LLMOPS_BIN_DIR:-$LLMOPS_HOME/bin}"
-if [[ -z "${LLMOPS_CONFIG_HOME:-}" && -f "$LLMOPS_HOME/current/config/config.json" ]]; then
-  export LLMOPS_CONFIG_HOME="$LLMOPS_HOME/current/config"
-fi
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PYTHON_BIN="${LLMOPS_PYTHON_BIN:-python}"
 
-usage() {
-  cat <<'USAGE'
-Usage: llmops <command> [args...]
-
-Commands:
-  status          Show aggregate component status; optionally filter or drill down
-  host            List hosts or plan/run restricted llmops operations on a peer
-  component       List, inspect, plan, start, stop, restart, or read one component
-  stack           List, inspect, plan, start, stop, or restart a component stack
-  plan            Preview dependency-ordered operations without changing anything
-  doctor          Validate configuration and optionally probe hosts and dependencies
-  config          Display resolved configuration and runtime paths
-  init            Create guided single-host or local-LAN configuration
-  migrate-config  Preview or import supported proof-of-concept configuration
-  deploy          Build and atomically deploy code plus configuration snapshots
-  drift           Compare deployed runtime and configuration hashes with a bundle
-  rollback        Exchange current and previous immutable runtime releases
-  update          Check, plan, or apply a verified published runtime release
-
-Read-only commands: status, plan, doctor, config, component status, stack status, drift.
-Mutating commands provide plans or dry runs where applicable.
-
-Run `llmops <command> --help` for command-specific options and examples.
-USAGE
+command -v "$PYTHON_BIN" >/dev/null 2>&1 || {
+  echo "llmops: application Python is unavailable; run the installer repair command" >&2
+  exit 2
 }
 
-cmd="${1:-}"
-case "$cmd" in
-  ""|-h|--help|help)
-    usage
-    exit 0
-    ;;
-esac
-
-case "$cmd" in
-  component|config|doctor|host|init|migrate-config|plan|stack|status)
-    shift
-    exec "$LLMOPS_BIN_DIR/llmops-control" "$cmd" "$@"
-    ;;
-  deploy|drift|rollback)
-    shift
-    exec "${LLMOPS_PYTHON_BIN:-python3}" "$LLMOPS_HOME/current/scripts/lib/llmops_deployment.py" "$cmd" "$@"
-    ;;
-  update)
-    shift
-    exec "${LLMOPS_PYTHON_BIN:-python3}" "$LLMOPS_HOME/current/scripts/lib/llmops_update.py" "$@"
-    ;;
-esac
-echo "llmops: unknown command: $cmd" >&2
-echo "Run 'llmops --help' for available commands." >&2
-exit 2
+export PYTHONPATH="$SCRIPT_DIR/../src${PYTHONPATH:+:$PYTHONPATH}"
+exec "$PYTHON_BIN" -m llmops_kit.entrypoint "$@"

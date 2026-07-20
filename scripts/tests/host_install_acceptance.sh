@@ -55,7 +55,7 @@ assert_link_target "$INSTALL/current" "$INSTALL/releases/acceptance-1"
 [[ ! -e "$INSTALL/previous" ]]
 "$PUBLIC_BIN/llmops" init --preset single-host
 
-python3 "$SOURCE_DIR/scripts/tests/host_acceptance_helper.py" \
+"$INSTALL/current/app/bin/python" "$SOURCE_DIR/scripts/tests/host_acceptance_helper.py" \
   configure-inventory "$CONFIG/inventory.json" "$INSTALL" "$PUBLIC_BIN"
 
 "$PUBLIC_BIN/llmops" doctor --json > "$EVIDENCE/doctor.json"
@@ -95,14 +95,14 @@ printf 'MODEL_NAME=test-model\nMODEL_PATH=/tmp/test-model.gguf\n' > "$LEGACY/con
 LLMOPS_CONFIG_HOME="$MIGRATED_CONFIG" "$PUBLIC_BIN/llmops" migrate-config --legacy-home "$LEGACY" --dry-run --json > "$EVIDENCE/migration-dry-run.json"
 LLMOPS_CONFIG_HOME="$MIGRATED_CONFIG" "$PUBLIC_BIN/llmops" migrate-config --legacy-home "$LEGACY" --json > "$EVIDENCE/migration.json"
 LLMOPS_CONFIG_HOME="$MIGRATED_CONFIG" "$PUBLIC_BIN/llmops" migrate-config --legacy-home "$LEGACY" --json > "$EVIDENCE/migration-noop.json"
-python3 "$SOURCE_DIR/scripts/tests/host_acceptance_helper.py" \
+"$INSTALL/current/app/bin/python" "$SOURCE_DIR/scripts/tests/host_acceptance_helper.py" \
   tree-digest "$MIGRATED_CONFIG" "$EVIDENCE/migrated-before.sha256"
 printf 'CHANGED_AFTER_MIGRATION=yes\n' >> "$LEGACY/config.env"
 if LLMOPS_CONFIG_HOME="$MIGRATED_CONFIG" "$PUBLIC_BIN/llmops" migrate-config --legacy-home "$LEGACY" --json > "$EVIDENCE/migration-refusal.json" 2>&1; then
   echo "changed migration source was not refused" >&2
   exit 1
 fi
-python3 "$SOURCE_DIR/scripts/tests/host_acceptance_helper.py" \
+"$INSTALL/current/app/bin/python" "$SOURCE_DIR/scripts/tests/host_acceptance_helper.py" \
   tree-digest "$MIGRATED_CONFIG" "$EVIDENCE/migrated-after.sha256"
 cmp "$EVIDENCE/migrated-before.sha256" "$EVIDENCE/migrated-after.sha256"
 

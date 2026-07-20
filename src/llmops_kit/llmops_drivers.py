@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """Typed component commands and host transport for LLM-Ops-Kit."""
 
 from __future__ import annotations
