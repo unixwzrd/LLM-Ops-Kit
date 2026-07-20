@@ -30,6 +30,7 @@
 - Made configuration reconciliation preserve drift details returned with nonzero status, refuse unreachable/error targets, retain immutable revisions, and record the previous configuration link before atomic replacement.
 - Retired the proof-of-concept source-checkout deployment and stage/drift implementation in favor of repository-free updates and independent desired-state reconciliation.
 - Added operator, TUI, adapter, remote-operation, installation, upgrade, rollback, and recovery documentation.
+- Added a publication-ready engineering evidence report with architecture invariants, acceptance evidence, and Mermaid diagrams for topology, coordinated updates, immutable rollback, reverse dependency shutdown, and configuration reconciliation.
 
 ### Product direction
 
