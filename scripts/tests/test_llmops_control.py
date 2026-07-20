@@ -538,6 +538,12 @@ class PlannerTests(ControlFixture):
         self.assertLess(actions.index(("agent", "stop")), actions.index(("proxy", "stop")))
         self.assertLess(actions.index(("proxy", "stop")), actions.index(("chat", "stop")))
 
+    def test_stack_stop_is_exact_reverse_of_start(self) -> None:
+        stack = self.topology.stacks["sample"]
+        started = [item.component.qualified_id for item in stack_plan(stack, "start")]
+        stopped = [item.component.qualified_id for item in stack_plan(stack, "stop")]
+        self.assertEqual(stopped, list(reversed(started)))
+
     def test_disabled_component_cannot_be_operated_directly(self) -> None:
         stack = json.loads((self.paths.stacks_dir / "sample.json").read_text(encoding="utf-8"))
         stack["components"][0]["enabled"] = False

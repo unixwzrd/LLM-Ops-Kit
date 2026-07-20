@@ -23,7 +23,7 @@ Back: [Documentation index](./INDEX.md)
 
 ## Beta Release Gates
 
-- [x] Pass the dependency-complete Python suite and local precheck in the packaged UV environment. Current evidence: 118 tests pass on 2026-07-20.
+- [x] Pass the dependency-complete Python suite and local precheck in the packaged UV environment. Current evidence: 121 tests pass on 2026-07-20, including exact reverse start/stop ordering and shared CLI/TUI status semantics.
 - [x] Pass normal clean installation from a verified archive on isolated Apple Silicon and Intel macOS users.
 - [ ] Repeat normal installation from the final committed release artifact on both macOS users after documentation and acceptance fixes stop changing the package.
 - [x] Pass `--minimal` installation on isolated Apple Silicon and Intel macOS users and confirm the CLI works while `llmops tui` reports the omitted optional dependency cleanly.
@@ -31,10 +31,10 @@ Back: [Documentation index](./INDEX.md)
 - [ ] Pass final-artifact repair, upgrade, rollback, normal uninstall, and purge on both macOS users.
 - [ ] Pass Textual interaction tests for status, component/stack views, logs, lifecycle confirmation/cancellation, configuration validation, update check, and update cancellation.
 - [ ] Pass coordinated two-host update tests for unreachable preflight, interrupted transfer, old-peer bootstrap, apply failure, automatic rollback, and mixed-version refusal.
-- [ ] Pass live configuration reconciliation plan/apply/idempotence and independently edited target conflict refusal.
-- [ ] Confirm identical topology/catalog hashes and global status from both trusted live hosts.
+- [x] Pass live configuration reconciliation plan/apply/idempotence and independently edited target conflict refusal.
+- [x] Confirm identical topology/catalog hashes and global status from both trusted live hosts.
 - [ ] Upgrade both live hosts from the preserved operator-v1 runtime to the final beta candidate, validate services, roll back once, and return to the candidate.
-- [ ] Re-run model, embedding, TTS, model-proxy, tts-bridge, gateway, dashboard, tunnel, dependency, cascade, individual restart, and cold-start acceptance.
+- [ ] Re-run model, embedding, TTS, model-proxy, tts-bridge, gateway, dashboard, tunnel, dependency, cascade, individual restart, and cold-start acceptance against the final artifact. The `0.9.0b4` baseline passed; the documentation-and-test revision still requires final-artifact repetition.
 - [ ] Produce a clean local release commit and build exclusively from `git archive HEAD`; require clean status, documentation links, secret scan, private-path scan, archive audit, and ignored-file audit.
 - [x] Regenerate the two missing standardized operational reports from 48 hourly archived source records. The reports preserve transient migration and cold-cycle exceptions rather than describing the cycles as uninterrupted steady state.
 - [x] Run non-blocking installer experiments on Debian and Rocky. Both stop before mutation with the documented macOS-only beta error; Linux support is not claimed.

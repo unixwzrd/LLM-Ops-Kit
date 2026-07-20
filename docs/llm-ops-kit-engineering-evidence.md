@@ -1,9 +1,9 @@
 # LLM-Ops-Kit Engineering Evidence
 
-**Evidence date:** 2026-07-20  
-**Release candidate:** `0.9.0b5`  
-**Source commit:** `6989f97`  
-**Release archive SHA-256:** `8169e9c6f953a3036c1c5e30aa2868ac4e9ab704172c5074c184d71140076b8f`
+- **Evidence date:** 2026-07-20
+- **Release candidate:** `0.9.0b5`
+- **Runtime artifact source commit:** `6989f97`
+- **Release archive SHA-256:** `8169e9c6f953a3036c1c5e30aa2868ac4e9ab704172c5074c184d71140076b8f`
 
 ## Purpose
 
@@ -17,7 +17,7 @@ The central correctness argument is that LLM-Ops-Kit separates desired state, pl
 
 The full two-host and protocol acceptance baseline was collected against `0.9.0b4`. It included exact-artifact installation on Apple Silicon and Intel macOS, rollback and return, bidirectional remote lifecycle operations, a dependency-ordered cold stop/start, model-proxy chat, 1,024-dimensional embeddings, cloned-voice TTS, agent services, dashboards, optimization services, and the Desktop tunnel.
 
-Release candidate `0.9.0b5` adds one narrow operational correction: CLI and Textual TUI status now use the same catalog-aware collector. A regression proves that a deliberately peer-unobservable Desktop tunnel is reported as `authority-only`, not `unreachable`. The full precheck passed 120 tests, the exact checksummed artifact was installed on both live macOS hosts through coordinated update, the shared catalog and host-specific configuration hashes remained unchanged, and all observable services remained running.
+Release candidate `0.9.0b5` adds one narrow operational correction: CLI and Textual TUI status now use the same catalog-aware collector. A regression proves that a deliberately peer-unobservable Desktop tunnel is reported as `authority-only`, not `unreachable`. The runtime artifact precheck passed 120 tests. The current source suite passes 121 tests after adding an explicit exact-reversal assertion for full-stack start and stop plans. The exact checksummed artifact was installed on both live macOS hosts through coordinated update, the shared catalog and host-specific configuration hashes remained unchanged, and all observable services remained running.
 
 ## Topology And Trust Boundary
 
@@ -109,21 +109,34 @@ stateDiagram-v2
 
 Rollback is a pointer exchange between immutable releases, not reconstruction from a mutable working directory. This matters because the old executable, package environment, templates, and native resources remain a coherent unit. The configuration tree is separate durable state, so normal runtime rollback does not erase operator configuration or agent data.
 
-## Dependency Ordering And Failure Containment
+## Accepted Start And Stop Ordering
 
 ```mermaid
-flowchart LR
-    Chat["Chat model"] --> Proxy["Model proxy"]
-    Embedding["Embedding model"] --> Agent["Agent gateway"]
-    TTS["TTS model"] --> Bridge["TTS bridge"]
-    Proxy --> Agent
-    Bridge --> Agent
-    Agent --> Dashboard["Dashboard"]
-    Dashboard --> Tunnel["Desktop tunnel"]
+flowchart TB
+    subgraph Startup["Startup: dependency-first topological order"]
+        S1["1. Chat model"] -. "next plan step" .-> S2["2. Model proxy"]
+        S2 -.-> S3["3. Context optimizer"]
+        S3 -.-> S4["4. Embedding model"]
+        S4 -.-> S5["5. TTS model"]
+        S5 -.-> S6["6. TTS bridge"]
+        S6 -.-> S7["7. Agent gateway"]
+        S7 -.-> S8["8. Dashboard"]
+        S8 -.-> S9["9. Desktop tunnel"]
+    end
 
-    Start["Start order"] -. "left to right" .-> Tunnel
-    Stop["Stop order"] -. "right to left" .-> Chat
+    subgraph Shutdown["Shutdown: exact reverse of startup"]
+        X9["1. Desktop tunnel"] -. "next plan step" .-> X8["2. Dashboard"]
+        X8 -.-> X7["3. Agent gateway"]
+        X7 -.-> X6["4. TTS bridge"]
+        X6 -.-> X5["5. TTS model"]
+        X5 -.-> X4["6. Embedding model"]
+        X4 -.-> X3["7. Context optimizer"]
+        X3 -.-> X2["8. Model proxy"]
+        X2 -.-> X1["9. Chat model"]
+    end
 ```
+
+The dotted arrows show the accepted plan sequence, not additional dependency edges. Independent branches may have more than one valid topological ordering, but once the planner selects a deterministic startup order, full-stack shutdown reverses that exact list. The accepted nine-component stop plan was mechanically compared with the start plan and matched it in reverse.
 
 The planner treats components as a directed acyclic graph. Starting a target includes missing upstream dependencies. Stopping a component with active dependents requires confirmation, force, or cascade. Restart affects only the target by default, which allows a model engine to be replaced or bounced without restarting the agent and proxy layers.
 
@@ -167,7 +180,7 @@ This distinction prevents policy from being misreported as failure. In `0.9.0b5`
 
 | Evidence | Result |
 |---|---|
-| Source precheck | 120 tests passed using the release-candidate source tree explicitly |
+| Source precheck | Runtime artifact passed 120 tests; current source passes 121 after adding the exact reverse-order regression |
 | Clean distribution | Runtime-only archive built from clean commit `6989f97` |
 | Release identity | Version `0.9.0b5`; archive SHA-256 `8169e9c6f953a3036c1c5e30aa2868ac4e9ab704172c5074c184d71140076b8f` |
 | macOS packaging baseline | Exact-artifact normal and minimal installation previously passed on Apple Silicon and Intel isolated users |
