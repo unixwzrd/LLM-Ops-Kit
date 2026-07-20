@@ -15,7 +15,7 @@ Back: [Documentation index](./INDEX.md)
 - [x] Register built-in lifecycle adapters through a versioned entry-point registry and provide `adapter list`, `adapter show`, `adapter doctor`, and conformance fixtures.
 - [x] Add global and per-component status with host, toolkit version, catalog/configuration hashes, authority, drift, reachability, and last synchronization.
 - [x] Add coordinated remote update selection, preflight, staging, old-peer use, missing-peer bootstrap, sequential apply, post-apply identity verification, and rollback reporting.
-- [x] Add one-way role-filtered configuration reconciliation with conflict refusal, immutable revisions, previous/current links, and no automatic merge.
+- [x] Add one-way configuration reconciliation with complete trusted-controller snapshots, role-filtered component-host snapshots, conflict refusal, immutable revisions, previous/current links, and no automatic merge.
 - [x] Add the on-demand Textual dashboard over the shared planner/executor with component and stack views, logs, plans, lifecycle actions, existing-component editing, update actions, confirmation, and equivalent CLI commands.
 - [x] Remove proof-of-concept repository synchronization, source-checkout deployment, runtime legacy reads, embedded Python shell blocks, and privileged Hermes/OpenClaw behavior.
 - [x] Preserve test-only legacy migration fixtures; they are not installed in release artifacts.
@@ -23,7 +23,7 @@ Back: [Documentation index](./INDEX.md)
 
 ## Beta Release Gates
 
-- [x] Pass the dependency-complete Python suite and local precheck in the packaged UV environment. Current evidence: 115 tests pass on 2026-07-20.
+- [x] Pass the dependency-complete Python suite and local precheck in the packaged UV environment. Current evidence: 118 tests pass on 2026-07-20.
 - [x] Pass normal clean installation from a verified archive on isolated Apple Silicon and Intel macOS users.
 - [ ] Repeat normal installation from the final committed release artifact on both macOS users after documentation and acceptance fixes stop changing the package.
 - [x] Pass `--minimal` installation on isolated Apple Silicon and Intel macOS users and confirm the CLI works while `llmops tui` reports the omitted optional dependency cleanly.

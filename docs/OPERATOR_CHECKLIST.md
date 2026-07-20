@@ -25,7 +25,7 @@ Back: [Documentation index](./INDEX.md)
 
 - [ ] Run `llmops config reconcile --all-hosts --plan --json`.
 - [ ] Resolve any manual-drift conflict before applying.
-- [ ] Apply with `--yes` only after reviewing role-filtered targets.
+- [ ] Apply with `--yes` only after reviewing full trusted-controller and role-filtered component-host targets.
 - [ ] Confirm matching catalog/configuration hashes through `llmops status --json`.
 
 ## Upgrade

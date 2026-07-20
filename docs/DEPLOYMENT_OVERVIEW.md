@@ -24,6 +24,6 @@ llmops config reconcile --host <inventory-name> --plan --json
 llmops config reconcile --all-hosts --apply --yes
 ```
 
-The authority generates a complete secret-free catalog and a role-filtered configuration revision for each host. Each target verifies its current manifest before replacement. A changed file that no longer matches its manifest is reported as a conflict and is not overwritten or merged.
+The authority generates a complete secret-free catalog and a configuration revision for each host. Trusted control hosts receive complete topology and profiles; component-only hosts receive role-filtered profiles. Each target verifies its current manifest before replacement. A changed file that no longer matches its manifest is reported as a conflict and is not overwritten or merged.
 
 Applied revisions live under `~/.local/llm-ops/config-revisions/`; `current-config` selects the active revision atomically. Runtime releases and configuration revisions therefore remain independently recoverable while retaining explicit hashes in status output.

@@ -11,6 +11,12 @@
 - Added a versioned adapter registry, built-in adapter manifests, adapter discovery through Python entry points, `llmops adapter` commands, and conformance tests.
 - Added the on-demand `llmops tui` operations console with status, lifecycle plans, logs, deterministic validation, guided existing-component configuration, explicit confirmation, and equivalent CLI commands.
 - Added runtime version, catalog/configuration hashes, authority, drift, and synchronization metadata to status records.
+- Made trusted control-host snapshots carry the complete secret-free topology while component-only hosts remain role-filtered, allowing dependency-aware lifecycle operations from either trusted host.
+- Made aggregate peer status constrain each remote observation to that peer's owned components, preventing duplicate observations when trusted hosts share the complete topology.
+- Made model-proxy prefer the application-owned Python interpreter when no service-specific interpreter is configured, including clean-archive render operation.
+- Added `llmops --version` for direct installed-runtime verification.
+- Made every installed runtime wrapper select the same managed `current-config` revision as the public `llmops` command, including cross-host model lifecycle operations.
+- Made every SSH transport use the inventory `control_host` when present, preventing peer operations from resolving a remote host's local service address such as `localhost` on the wrong machine.
 - Added transactionally verified role-filtered configuration revisions, `llmops config hash`, and `llmops config reconcile`; manual target drift blocks replacement and is never merged automatically.
 - Added coordinated remote update preflight, artifact staging, older-peer use, missing-peer bootstrap, sequential apply, post-update version/configuration verification, and rollback of hosts changed by a failed invocation.
 - Added dual-architecture macOS wheelhouses for Apple Silicon and Intel, plus custom-prefix install metadata so guided initialization and probes use the actual application layout.

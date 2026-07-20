@@ -103,7 +103,7 @@ Model weights, agent databases, Vaults, conversation history, generated media, a
 
 ## Remote Operation and Synchronization
 
-The desired-state authority produces checksummed, role-filtered snapshots. Trusted control hosts receive the complete secret-free topology catalog so status and plans are consistent, while target hosts receive only the profiles required to operate their components.
+The desired-state authority produces checksummed configuration snapshots. Trusted control hosts receive the complete secret-free topology and referenced profiles so status, dependency plans, and authorized lifecycle operations are consistent from either controller. Component-only hosts receive only the profiles required to operate their components.
 
 Remote execution uses configured transports and absolute command paths. SSH is the initial transport. A target does not need a source checkout or an interactive shell. Independent edits are reported as drift and never merged automatically.
 

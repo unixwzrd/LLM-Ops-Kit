@@ -8,12 +8,16 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from . import llmops_cli, llmops_update
+from . import __version__, llmops_cli, llmops_update
 
 
 def main(argv: Optional[list[str]] = None) -> int:
     """Dispatch the public command surface without shell-profile dependencies."""
 
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    if arguments == ["--version"]:
+        print(__version__)
+        return 0
     release_root = Path(sys.executable).absolute().parents[2]
     install_base = release_root.parent.parent
     install_state = install_base / "install.json"
@@ -30,7 +34,6 @@ def main(argv: Optional[list[str]] = None) -> int:
     deployed_config = managed_config if managed_config.is_dir() else release_root / "config"
     if "LLMOPS_CONFIG_HOME" not in os.environ and (deployed_config / "config.json").is_file():
         os.environ["LLMOPS_CONFIG_HOME"] = str(deployed_config)
-    arguments = list(sys.argv[1:] if argv is None else argv)
     if not arguments or arguments[0] in {"-h", "--help", "help"}:
         llmops_cli.print_public_help()
         return 0

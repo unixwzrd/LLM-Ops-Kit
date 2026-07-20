@@ -104,6 +104,7 @@ link_runtime() {
     mkdir -p "$root/bin"
     printf '%s\n' '#!/usr/bin/env bash' 'set -euo pipefail' \
       "export LLMOPS_PYTHON_BIN=\"$root/app/bin/python\"" \
+      "if [[ -z \"\${LLMOPS_CONFIG_HOME:-}\" && -L \"$INSTALL_BASE/current-config\" ]]; then export LLMOPS_CONFIG_HOME=\"$INSTALL_BASE/current-config\"; fi" \
       "exec \"$root/scripts/$name\" \"\$@\"" > "$wrapper"
     chmod 755 "$wrapper"
     ln -sfn "$root/bin/$name" "$INSTALL_BASE/bin/$name"

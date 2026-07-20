@@ -20,7 +20,7 @@ Back: [Documentation index](./INDEX.md)
 - [ ] Pass final normal/minimal install, repair, upgrade, rollback, uninstall, purge, migration, TUI, remote update, reconciliation, and protocol acceptance.
 - [ ] Confirm all Markdown links, command examples, and public paths resolve.
 - [ ] Confirm no release file or archive member contains private paths, addresses, credentials, topology, model weights, voice samples, caches, or development history.
-- [ ] Confirm both trusted live hosts report the same catalog/topology identity and expected role-filtered configuration identity.
+- [ ] Confirm both trusted live hosts report the same catalog/topology identity and expected host-specific complete configuration identity.
 - [x] Produce the missing two dated operational reports from archived evidence, retaining the archived logs as authority and recording transient failures explicitly.
 - [ ] Obtain explicit user approval before push or tag.
 - [ ] Require green macOS CI after the candidate branch is pushed.

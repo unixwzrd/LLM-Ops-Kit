@@ -99,7 +99,7 @@ External Python-backed components may select their own interpreter through field
 
 ## Reconciliation
 
-Canonical desired state remains under `~/.config/llm-ops/` on the authority. Managed targets receive role-filtered revisions through `llmops config reconcile`; they do not receive secret values or unrelated profiles.
+Canonical desired state remains under `~/.config/llm-ops/` on the authority. Trusted control targets receive complete secret-free topology revisions through `llmops config reconcile`; component-only targets receive role-filtered revisions. Neither receives secret values.
 
 ```bash
 llmops config reconcile --all-hosts --plan --json

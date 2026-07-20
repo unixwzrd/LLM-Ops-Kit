@@ -196,6 +196,8 @@ class InstallerTests(unittest.TestCase):
             ]
             self.run_command(install, env)
             self.assertTrue((root / "install" / "current" / "app" / "bin" / "python").is_file())
+            runtime_wrapper = (root / "install" / "current" / "bin" / "modelctl").read_text(encoding="utf-8")
+            self.assertIn("current-config", runtime_wrapper)
             payload = root / "payload.json"
             payload.write_text(
                 json.dumps({"messages": [{"role": "user", "content": "test"}]}),

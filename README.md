@@ -47,7 +47,7 @@ Status includes the owning host, runtime version, catalog and configuration iden
 
 ## Configure And Update
 
-Canonical desired state lives under `~/.config/llm-ops/`. Managed hosts consume role-filtered, secret-free revisions selected through an atomic `current-config` link.
+Canonical desired state lives under `~/.config/llm-ops/`. Trusted control hosts consume complete secret-free topology revisions so they can plan and operate the full system; component-only hosts consume role-filtered revisions. Each host selects its revision through an atomic `current-config` link.
 
 ```bash
 llmops component configure <component> --profile <profile> --plan

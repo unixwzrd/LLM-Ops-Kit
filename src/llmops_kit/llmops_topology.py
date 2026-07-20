@@ -526,13 +526,18 @@ def write_host_snapshot(topology: Topology, *, host_name: str, destination: Path
     if destination.exists():
         shutil.rmtree(destination)
     destination.mkdir(parents=True)
-    hosted = [item for item in topology.all_components(enabled_only=True) if item.host == host_name]
-    if not hosted:
+    host = topology.hosts[host_name]
+    available = [
+        item
+        for item in topology.all_components(enabled_only=True)
+        if host.trusted_control or item.host == host_name
+    ]
+    if not available:
         raise TopologyError(f"host {host_name} has no enabled components")
 
     copied: list[dict[str, str]] = []
     seen: set[Path] = set()
-    for component in hosted:
+    for component in available:
         source = profile_path(topology.paths, component)
         if source in seen:
             continue
@@ -559,27 +564,28 @@ def write_host_snapshot(topology: Topology, *, host_name: str, destination: Path
     config_path.write_text(json.dumps(config_data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     copied.append({"path": "config.json", "sha256": _sha256(config_path)})
 
-    host = topology.hosts[host_name]
+    inventory_hosts = sorted(topology.hosts.values(), key=lambda item: item.name) if host.trusted_control else [host]
     inventory_data = {
         "schema_version": 1,
         "hosts": [
             {
-                "name": host.name,
-                "role": host.role,
-                "host": host.host,
-                "user": host.user,
-                "port": host.port,
-                "install_root": host.install_root,
-                "public_bin_dir": host.public_bin_dir,
-                "config_profile": host.config_profile,
-                "ssh_key": host.ssh_key,
-                "proxy_jump": host.proxy_jump,
-                "tags": list(host.tags),
-                "transport": "local",
-                "control_host": host.control_host or host.host,
-                "trusted_control": host.trusted_control,
-                "peer_observable": host.peer_observable,
+                "name": item.name,
+                "role": item.role,
+                "host": item.host,
+                "user": item.user,
+                "port": item.port,
+                "install_root": item.install_root,
+                "public_bin_dir": item.public_bin_dir,
+                "config_profile": item.config_profile,
+                "ssh_key": item.ssh_key,
+                "proxy_jump": item.proxy_jump,
+                "tags": list(item.tags),
+                "transport": "local" if item.name == host_name else "ssh",
+                "control_host": item.control_host or item.host,
+                "trusted_control": item.trusted_control,
+                "peer_observable": item.peer_observable,
             }
+            for item in inventory_hosts
         ],
     }
     inventory_path = destination / "inventory.json"
@@ -592,22 +598,22 @@ def write_host_snapshot(topology: Topology, *, host_name: str, destination: Path
     catalog_path = write_topology_catalog(topology, destination / "catalog.json")
     copied.append({"path": "catalog.json", "sha256": _sha256(catalog_path)})
 
-    hosted_ids = {item.qualified_id for item in hosted}
+    available_ids = {item.qualified_id for item in available}
     external_dependencies: dict[str, list[str]] = {}
     for stack_name in sorted(topology.stacks):
-        stack_components = [item for item in hosted if item.stack == stack_name]
+        stack_components = [item for item in available if item.stack == stack_name]
         if not stack_components:
             continue
         serialized: list[dict[str, Any]] = []
         for item in stack_components:
-            local_dependencies = [dependency for dependency in item.depends_on if dependency in hosted_ids]
-            remote_dependencies = [dependency for dependency in item.depends_on if dependency not in hosted_ids]
+            local_dependencies = [dependency for dependency in item.depends_on if dependency in available_ids]
+            remote_dependencies = [dependency for dependency in item.depends_on if dependency not in available_ids]
             if remote_dependencies:
                 external_dependencies[item.qualified_id] = remote_dependencies
             serialized.append(
                 {
                     "id": item.component_id,
-                    "host": host_name,
+                    "host": item.host,
                     "driver": item.driver,
                     "profile": item.profile,
                     "enabled": item.enabled,
@@ -646,7 +652,7 @@ def write_host_snapshot(topology: Topology, *, host_name: str, destination: Path
                 "ownership": item.ownership,
                 "tags": list(item.tags),
             }
-            for item in hosted
+            for item in available
         ],
         "external_dependencies": external_dependencies,
         "files": sorted(copied, key=lambda item: item["path"]),

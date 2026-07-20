@@ -49,6 +49,10 @@ class RemoteUpdateTests(unittest.TestCase):
         self.assertEqual(result["version"], "old")
         self.assertIn('"$HOME"/custom/llm-ops/current/RELEASE.json', run_remote.call_args.args[1])
 
+    def test_update_transport_prefers_control_host(self) -> None:
+        host = {**HOST, "control_host": "peer-control.example"}
+        self.assertEqual(llmops_update._ssh_base(host)[-1], "operator@peer-control.example")
+
     def test_remote_verify_reports_release_and_configuration_identity(self) -> None:
         output = "VERSION=beta-2\nCATALOG=abc123\n" + json.dumps(
             {"ok": True, "valid": True, "config_hash": "def456"}

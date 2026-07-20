@@ -209,7 +209,7 @@ def _ssh_base(host: dict[str, object]) -> list[str]:
         "BatchMode=yes",
         "-o",
         "StrictHostKeyChecking=accept-new",
-        f"{host['user']}@{host['host']}",
+        f"{host['user']}@{host.get('control_host') or host['host']}",
     ]
 
 

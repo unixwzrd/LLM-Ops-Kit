@@ -71,7 +71,8 @@ def print_public_help() -> None:
     width = max(map(len, PUBLIC_COMMANDS))
     for command, description in PUBLIC_COMMANDS.items():
         print(f"  {command.ljust(width)}  {description}")
-    print("\nRun `llmops <command> --help` for command-specific options.")
+    print("\nUse `llmops --version` to print the installed toolkit version.")
+    print("Run `llmops <command> --help` for command-specific options.")
 
 
 def build_topology(*, config_home: Optional[str], inventory: Optional[str]) -> Topology:
@@ -338,6 +339,29 @@ def cmd_plan(args: argparse.Namespace) -> int:
 
 
 def cmd_component_list(args: argparse.Namespace) -> int:
+    catalog = _load_observer_catalog()
+    current_host = _current_snapshot_host()
+    if catalog is not None and current_host in set(catalog.get("trusted_control_hosts", [])):
+        components = [item for item in catalog["components"] if isinstance(item, dict)]
+        if args.stack:
+            components = [item for item in components if item.get("stack") == args.stack]
+            if not components:
+                raise TopologyError(f"stack not found: {args.stack}")
+        emit(
+            [
+                {
+                    "component": item.get("id", ""),
+                    "host": item.get("host", ""),
+                    "driver": item.get("driver", ""),
+                    "profile": item.get("profile", ""),
+                    "enabled": item.get("enabled", False),
+                    "ownership": item.get("ownership", ""),
+                }
+                for item in components
+            ],
+            json_output=args.json,
+        )
+        return 0
     components = CURRENT_TOPOLOGY.all_components()
     if args.stack:
         if args.stack not in CURRENT_TOPOLOGY.stacks:
@@ -722,24 +746,30 @@ def cmd_host_operation(args: argparse.Namespace) -> int:
     if args.host_action == "plan":
         emit({"host": args.host, "command": " ".join(shlex.quote(item) for item in command)}, json_output=args.json)
         return 0
+    return _execute_host_operation(args.host, command, json_output=args.json, timeout=args.host_timeout)
+
+
+def _execute_host_operation(host_name: str, command: list[str], *, json_output: bool, timeout: int) -> int:
+    """Execute one allowlisted command on a trusted catalog host."""
+
     try:
         completed = subprocess.run(
             command,
             capture_output=True,
             text=True,
             check=False,
-            timeout=args.host_timeout,
+            timeout=timeout,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise TopologyError(f"host operation failed: {exc}") from exc
-    if args.json:
+    if json_output:
         try:
             remote_output: Any = json.loads(completed.stdout)
         except json.JSONDecodeError:
             remote_output = completed.stdout.strip()
         emit(
             {
-                "host": args.host,
+                "host": host_name,
                 "returncode": completed.returncode,
                 "output": remote_output,
                 "stderr": completed.stderr.strip(),
@@ -752,6 +782,56 @@ def cmd_host_operation(args: argparse.Namespace) -> int:
         if completed.stderr:
             print(completed.stderr, end="", file=sys.stderr)
     return completed.returncode
+
+
+def _catalog_component_exact(catalog: dict[str, Any], reference: str) -> dict[str, Any]:
+    """Resolve a qualified or unique short component ID from the observer catalog."""
+
+    folded = reference.replace("/", ":", 1).casefold()
+    matches = [
+        item
+        for item in catalog["components"]
+        if isinstance(item, dict)
+        and (
+            str(item.get("id", "")).casefold() == folded
+            or str(item.get("component_id", "")).casefold() == folded
+        )
+    ]
+    if not matches:
+        raise TopologyError(f"component not found: {reference}")
+    if len(matches) > 1:
+        choices = ", ".join(str(item["id"]) for item in matches)
+        raise TopologyError(f"ambiguous component '{reference}'; use one of: {choices}")
+    return matches[0]
+
+
+def cmd_remote_component(args: argparse.Namespace) -> int:
+    """Delegate a non-local component action to its authorized owning host."""
+
+    catalog = _load_observer_catalog()
+    if catalog is None:
+        raise TopologyError(f"component not found: {args.component}")
+    current_host = _current_snapshot_host()
+    if current_host not in set(catalog.get("trusted_control_hosts", [])):
+        raise TopologyError(f"host is not trusted for remote control: {current_host or 'unknown'}")
+    item = _catalog_component_exact(catalog, args.component)
+    target_name = str(item.get("host", ""))
+    target = _catalog_hosts(catalog).get(target_name)
+    if target is None:
+        raise TopologyError(f"catalog host not found: {target_name}")
+    component_id = str(item["id"])
+    if args.component_command == "plan":
+        operation = ["component", "plan", args.action, component_id]
+    else:
+        operation = ["component", args.component_command, component_id]
+    if getattr(args, "cascade", False):
+        operation.append("--cascade")
+    if getattr(args, "no_deps", False):
+        operation.append("--no-deps")
+    if getattr(args, "force", False):
+        operation.append("--force")
+    command = _host_command(target, operation, json_output=args.json)
+    return _execute_host_operation(target_name, command, json_output=args.json, timeout=900)
 
 
 def _catalog_components(
@@ -807,7 +887,7 @@ def _remote_llmops_path(public_bin_dir: str) -> str:
 
 
 def _remote_status(
-    host: dict[str, Any], selector: Optional[str], args: argparse.Namespace
+    host_name: str, host: dict[str, Any], selector: Optional[str], args: argparse.Namespace
 ) -> tuple[list[dict[str, Any]], str]:
     command = [
         "ssh",
@@ -822,7 +902,7 @@ def _remote_status(
     remote = [_remote_llmops_path(str(host.get("public_bin_dir", "~/.local/bin"))), "status"]
     if selector:
         remote.append(shlex.quote(selector))
-    remote.extend(("--local", "--json"))
+    remote.extend(("--host", shlex.quote(host_name), "--local", "--json"))
     if args.all:
         remote.append("--all")
     if args.verbose:
@@ -874,7 +954,7 @@ def _catalog_status(args: argparse.Namespace, catalog: dict[str, Any]) -> list[d
             return host_name, [], f"observer catalog has no host record for {host_name}"
         if host.get("peer_observable", True) is False:
             return host_name, [], "authority-only"
-        payload, error = _remote_status(host, args.selector, args)
+        payload, error = _remote_status(host_name, host, args.selector, args)
         return host_name, payload, error
 
     workers = min(max(1, args.workers), max(1, len(by_host)))
@@ -918,6 +998,8 @@ def cmd_status(args: argparse.Namespace) -> int:
     catalog = None if args.local else _load_observer_catalog()
     if catalog is None:
         components = _status_components(args.selector, include_disabled=args.all)
+        if getattr(args, "status_host", None):
+            components = [component for component in components if component.host == args.status_host]
         payload = _inspect_status(components, args)
     else:
         payload = _catalog_status(args, catalog)
@@ -1056,6 +1138,7 @@ def build_parser() -> argparse.ArgumentParser:
     status.add_argument("--verbose", action="store_true", help="include driver output for every match")
     status.add_argument("--workers", type=int, default=8)
     status.add_argument("--host-timeout", type=int, default=20)
+    status.add_argument("--host", dest="status_host", help=argparse.SUPPRESS)
     status.add_argument("--local", action="store_true", help=argparse.SUPPRESS)
     status.set_defaults(func=cmd_status)
 
@@ -1166,6 +1249,16 @@ def main(argv: Optional[list[str]] = None) -> int:
                 config_home=args.config_home,
                 inventory=args.inventory,
             )
+        if (
+            args.command == "component"
+            and getattr(args, "component_command", "") in {"plan", "start", "stop", "restart", "status", "logs"}
+        ):
+            try:
+                CURRENT_TOPOLOGY.resolve_component(args.component)
+            except TopologyError as exc:
+                if str(exc) != f"component not found: {args.component}":
+                    raise
+                return cmd_remote_component(args)
         return args.func(args)
     except (
         ConfigError,

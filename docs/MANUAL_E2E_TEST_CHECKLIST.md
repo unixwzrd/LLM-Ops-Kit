@@ -56,13 +56,13 @@ Record artifact version, SHA-256, host, architecture, timestamp, result, and evi
 - [ ] Bootstrap an older or missing peer from the staged installer and configured absolute paths.
 - [ ] Inject a later-host apply failure and confirm already-updated hosts roll back.
 - [ ] Confirm successful apply reports version, catalog hash, and configuration hash for each host.
-- [ ] Plan and apply role-filtered configuration reconciliation, then rerun it as an idempotent no-op.
+- [ ] Plan and apply configuration reconciliation with complete trusted-controller snapshots and role-filtered component-host snapshots, then rerun it as an idempotent no-op.
 - [ ] Independently edit a target revision and confirm conflict refusal with no automatic merge.
 
 ## Live Acceptance
 
 - [ ] Upgrade both live hosts without restarting unaffected components.
-- [ ] Confirm matching global topology/catalog identity and expected role-filtered configuration identity.
+- [ ] Confirm matching global topology/catalog identity and expected host-specific complete configuration identity.
 - [ ] Restart individual model, proxy, bridge, and agent components from either trusted host.
 - [ ] Verify dependency refusal, cascade order, partial-start rollback, and one complete cold stop/start.
 - [ ] Pass chat, embedding, TTS, proxy rendering, bridge, gateway, dashboard, tunnel, Desktop reconnection, and Telegram fallback checks.

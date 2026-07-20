@@ -41,7 +41,7 @@ class HostRecord:
     def destination(self) -> str:
         """Return the SSH destination for this host."""
 
-        return f"{self.user}@{self.host}"
+        return f"{self.user}@{self.control_host or self.host}"
 
     @property
     def ssh_key_path(self) -> Optional[Path]:

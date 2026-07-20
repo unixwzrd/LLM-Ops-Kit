@@ -4,12 +4,15 @@
 from __future__ import annotations
 
 import json
+import io
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from typing import Optional
 from unittest import mock
 
+from llmops_kit import __version__, entrypoint, llmops_cli
 from llmops_kit.llmops_cli import _host_command as host_command
 from llmops_kit.llmops_cli import _remote_status as remote_status
 from llmops_kit.llmops_cli import _status_components as status_components
@@ -185,11 +188,18 @@ class ControlFixture(unittest.TestCase):
 
 
 class InventoryTests(ControlFixture):
+    def test_public_entrypoint_reports_installed_version(self) -> None:
+        output = io.StringIO()
+        with redirect_stdout(output):
+            self.assertEqual(entrypoint.main(["--version"]), 0)
+        self.assertEqual(output.getvalue().strip(), __version__)
+
     def test_load_inventory_supports_local_and_ssh_hosts(self) -> None:
         hosts = load_inventory(self.paths.inventory_file)
         self.assertEqual(sorted(hosts), ["agent-host", "model-host"])
         self.assertEqual(hosts["model-host"].transport, "local")
         self.assertEqual(hosts["model-host"].control_host, "model.local")
+        self.assertEqual(hosts["model-host"].destination, "operator@model.local")
 
     def test_inventory_rejects_duplicate_hosts(self) -> None:
         raw = json.loads(self.paths.inventory_file.read_text(encoding="utf-8"))
@@ -221,6 +231,50 @@ class TopologyTests(ControlFixture):
     def test_short_component_resolution_requires_unique_id(self) -> None:
         self.assertEqual(self.topology.resolve_component("chat").qualified_id, "sample:chat")
         self.assertEqual(self.topology.resolve_component("sample:chat").profile, "chat")
+
+    def test_catalog_short_component_routes_to_owning_host(self) -> None:
+        catalog = {
+            "schema_version": 1,
+            "trusted_control_hosts": ["model-host"],
+            "hosts": [
+                {
+                    "name": "agent-host",
+                    "host": "agent.local",
+                    "user": "operator",
+                    "port": 22,
+                    "public_bin_dir": "~/.local/bin",
+                }
+            ],
+            "components": [
+                {
+                    "id": "sample:proxy",
+                    "component_id": "proxy",
+                    "host": "agent-host",
+                }
+            ],
+        }
+        args = type(
+            "Args",
+            (),
+            {
+                "component": "proxy",
+                "component_command": "restart",
+                "json": True,
+                "cascade": False,
+                "no_deps": False,
+                "force": False,
+            },
+        )()
+        with (
+            mock.patch.object(llmops_cli, "_load_observer_catalog", return_value=catalog),
+            mock.patch.object(llmops_cli, "_current_snapshot_host", return_value="model-host"),
+            mock.patch.object(llmops_cli, "_execute_host_operation", return_value=0) as execute,
+        ):
+            self.assertEqual(llmops_cli.cmd_remote_component(args), 0)
+        host_name, command = execute.call_args.args
+        self.assertEqual(host_name, "agent-host")
+        self.assertIn("operator@agent.local", command)
+        self.assertIn("component restart sample:proxy --json", command[-1])
 
     def test_component_tags_are_loaded(self) -> None:
         self.assertEqual(self.topology.resolve_component("chat").tags, ("model", "chat"))
@@ -313,14 +367,53 @@ class TopologyTests(ControlFixture):
         self.assertIn("if launchctl print", command)
         self.assertIn("launchctl bootout", command)
 
-    def test_host_snapshot_contains_only_profiles_used_on_host(self) -> None:
+    def test_trusted_host_snapshot_contains_complete_topology(self) -> None:
         destination = self.root / "snapshot"
         write_host_snapshot(self.topology, host_name="model-host", destination=destination)
         self.assertTrue((destination / "models/chat.json").is_file())
         self.assertTrue((destination / "models/embedding.json").is_file())
-        self.assertFalse((destination / "services/proxy.json").exists())
+        self.assertTrue((destination / "services/proxy.json").is_file())
+        self.assertTrue((destination / "agents/sample-agent.json").is_file())
         self.assertTrue((destination / "inventory.json").is_file())
         self.assertTrue((destination / "stacks/sample.json").is_file())
+        inventory = json.loads((destination / "inventory.json").read_text(encoding="utf-8"))
+        self.assertEqual(
+            {item["name"]: item["transport"] for item in inventory["hosts"]},
+            {"agent-host": "ssh", "model-host": "local"},
+        )
+        complete_stack = json.loads((destination / "stacks/sample.json").read_text(encoding="utf-8"))
+        self.assertEqual(
+            [item["id"] for item in complete_stack["components"]],
+            ["chat", "embedding", "proxy", "agent"],
+        )
+        self.assertEqual(
+            {item["id"]: item["host"] for item in complete_stack["components"]},
+            {"chat": "model-host", "embedding": "model-host", "proxy": "agent-host", "agent": "agent-host"},
+        )
+        resolved = json.loads((destination / "resolved.json").read_text(encoding="utf-8"))
+        self.assertEqual(
+            [item["id"] for item in resolved["components"]],
+            ["sample:chat", "sample:embedding", "sample:proxy", "sample:agent"],
+        )
+
+    def test_untrusted_host_snapshot_is_role_filtered(self) -> None:
+        inventory = json.loads(self.paths.inventory_file.read_text(encoding="utf-8"))
+        inventory["hosts"][0]["trusted_control"] = False
+        self.write_json(self.paths.inventory_file, inventory)
+        topology = Topology(
+            stacks=load_stacks(self.paths),
+            hosts=load_inventory(self.paths.inventory_file),
+            paths=self.paths,
+            config=load_config(paths=self.paths),
+        )
+        destination = self.root / "untrusted-snapshot"
+        write_host_snapshot(topology, host_name="model-host", destination=destination)
+        self.assertTrue((destination / "models/chat.json").is_file())
+        self.assertTrue((destination / "models/embedding.json").is_file())
+        self.assertFalse((destination / "services/proxy.json").exists())
+        self.assertFalse((destination / "agents/sample-agent.json").exists())
+        inventory_snapshot = json.loads((destination / "inventory.json").read_text(encoding="utf-8"))
+        self.assertEqual([item["name"] for item in inventory_snapshot["hosts"]], ["model-host"])
         local_stack = json.loads((destination / "stacks/sample.json").read_text(encoding="utf-8"))
         self.assertEqual([item["id"] for item in local_stack["components"]], ["chat", "embedding"])
         resolved = json.loads((destination / "resolved.json").read_text(encoding="utf-8"))
@@ -386,12 +479,12 @@ class TopologyTests(ControlFixture):
         }
         completed = mock.Mock(returncode=0, stdout="[]\n", stderr="")
         with mock.patch.object(remote_status.__globals__["subprocess"], "run", return_value=completed) as run:
-            payload, error = remote_status(host, None, args)
+            payload, error = remote_status("model-host", host, None, args)
         self.assertEqual(payload, [])
         self.assertEqual(error, "")
         command = run.call_args.args[0]
         self.assertIn("operator@model.local", command)
-        self.assertIn('"$HOME"/.local/bin/llmops status --local --json', command[-1])
+        self.assertIn('"$HOME"/.local/bin/llmops status --host model-host --local --json', command[-1])
 
     def test_host_snapshot_rejects_embedded_secret_values(self) -> None:
         profile = json.loads((self.paths.models_dir / "chat.json").read_text(encoding="utf-8"))

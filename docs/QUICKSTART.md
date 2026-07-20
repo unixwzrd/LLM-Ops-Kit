@@ -70,4 +70,4 @@ llmops update --all-hosts --plan --version <version>
 llmops update --all-hosts --apply --version <version>
 ```
 
-The configuration operation sends role-filtered snapshots. The update operation sends the same verified release to every observable managed host. Neither command depends on remote login-shell initialization.
+The configuration operation sends complete secret-free snapshots to trusted controllers and role-filtered snapshots to component-only hosts. The update operation sends the same verified release to every observable managed host. Neither command depends on remote login-shell initialization.
