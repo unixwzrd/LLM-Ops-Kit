@@ -11,6 +11,8 @@
 - Added a versioned adapter registry, built-in adapter manifests, adapter discovery through Python entry points, `llmops adapter` commands, and conformance tests.
 - Added the on-demand `llmops tui` operations console with status, lifecycle plans, logs, deterministic validation, guided existing-component configuration, explicit confirmation, and equivalent CLI commands.
 - Added runtime version, catalog/configuration hashes, authority, drift, and synchronization metadata to status records.
+- Made the CLI and Textual TUI use one catalog-aware status collector so intentionally peer-unobservable components consistently report `authority-only` rather than `unreachable`.
+- Made maintainer precheck load the release-candidate source tree explicitly, preventing an older installed package from satisfying or breaking source regressions.
 - Made trusted control-host snapshots carry the complete secret-free topology while component-only hosts remain role-filtered, allowing dependency-aware lifecycle operations from either trusted host.
 - Made aggregate peer status constrain each remote observation to that peer's owned components, preventing duplicate observations when trusted hosts share the complete topology.
 - Made model-proxy prefer the application-owned Python interpreter when no service-specific interpreter is configured, including clean-archive render operation.

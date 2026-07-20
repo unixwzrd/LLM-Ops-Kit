@@ -168,8 +168,16 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
             return self.rows[table.cursor_row]
 
         async def inspect(self) -> None:
-            args = argparse.Namespace(selector=None, all=False, verbose=False, workers=8)
-            payload = await asyncio.to_thread(llmops_cli._inspect_status, self.topology.all_components(), args)
+            args = argparse.Namespace(
+                selector=None,
+                all=True,
+                verbose=False,
+                workers=8,
+                host_timeout=20,
+                status_host=None,
+                local=False,
+            )
+            payload = await asyncio.to_thread(llmops_cli._collect_status, args)
             by_id = {item["component"]: item for item in payload}
             components = self.topology.all_components()
             self.rows = components if self.view == "components" else [self.topology.stacks[name] for name in sorted(self.topology.stacks)]

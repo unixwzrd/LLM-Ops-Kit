@@ -994,7 +994,9 @@ def _catalog_status(args: argparse.Namespace, catalog: dict[str, Any]) -> list[d
     return sorted(payload, key=lambda item: str(item.get("component", "")))
 
 
-def cmd_status(args: argparse.Namespace) -> int:
+def _collect_status(args: argparse.Namespace) -> list[dict[str, Any]]:
+    """Collect status using the same observer semantics for every interface."""
+
     catalog = None if args.local else _load_observer_catalog()
     if catalog is None:
         components = _status_components(args.selector, include_disabled=args.all)
@@ -1003,6 +1005,11 @@ def cmd_status(args: argparse.Namespace) -> int:
         payload = _inspect_status(components, args)
     else:
         payload = _catalog_status(args, catalog)
+    return payload
+
+
+def cmd_status(args: argparse.Namespace) -> int:
+    payload = _collect_status(args)
     if args.json:
         emit(payload, json_output=True)
     else:

@@ -87,7 +87,8 @@ echo "==> Python compile checks"
 "$PYTHON_BIN" -m py_compile "${python_targets[@]}"
 
 echo "==> Python regression tests"
-"$PYTHON_BIN" -m unittest discover -s scripts/tests -p 'test_*.py'
+PYTHONPATH="$REPO_ROOT/src${PYTHONPATH:+:$PYTHONPATH}" \
+  "$PYTHON_BIN" -m unittest discover -s scripts/tests -p 'test_*.py'
 
 if [[ "$RELEASE_CHECK" -eq 1 ]]; then
   echo "==> Release source hygiene"

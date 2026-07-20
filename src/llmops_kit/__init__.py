@@ -5,6 +5,6 @@ from importlib.metadata import PackageNotFoundError, version
 try:
     __version__ = version("llm-ops-kit")
 except PackageNotFoundError:  # Source checkout.
-    __version__ = "0.9.0b4"
+    __version__ = "0.9.0b5"
 
 __all__ = ["__version__"]
