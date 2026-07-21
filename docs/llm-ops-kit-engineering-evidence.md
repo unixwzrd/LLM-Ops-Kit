@@ -1,10 +1,10 @@
 # LLM-Ops-Kit Engineering Evidence
 
 - **Evidence updated:** 2026-07-21
-- **Accepted live candidate:** `0.9.0b11`
-- **Current source candidate:** `0.9.0b11`
-- **Candidate runtime artifact source commit:** `72e9a7f`
-- **Candidate release archive SHA-256:** `2e86f4db48800f7a077ecfc0a33680e5c83a431156067f76f05293ed6cacd3e6`
+- **Accepted live candidate:** `0.9.0b14`
+- **Current source candidate:** `0.9.0b14`
+- **Candidate runtime artifact source commit:** `e5c1343`
+- **Candidate release archive SHA-256:** `dd2e1eba9c8d939a37a0ba20d1bf673557aaa21b51a7768a16023a3cde52ad9c`
 
 ## Purpose
 
@@ -20,7 +20,7 @@ The full two-host and protocol acceptance baseline was collected against `0.9.0b
 
 Accepted runtime baseline `0.9.0b5` added a shared catalog-aware status collector and was installed on both live macOS hosts through coordinated update. Its shared catalog and host-specific configuration hashes remained unchanged, and all observable services remained running.
 
-Candidate `0.9.0b11` separates lifecycle, health, condition, and observability; separates toolkit, component, desired-runtime, and observed-runtime identities; reports the configured execution identity; centralizes dependent-impact enforcement across CLI and TUI; and adds the high-contrast, keyboard-accessible, configurable TUI and bounded topology projection. It also adds host-qualified log inspection, effective configuration inspection, configurable lifecycle timeouts, persistent detached operations, authority-backed reconciliation, structurally pruned historical media decode/save calls, and model start-runtime provenance. The exact candidate archive was installed on both live hosts, its model, proxy, and bridge components were restarted, and both trusted hosts returned the same global status view.
+Candidate `0.9.0b14` separates lifecycle, health, condition, and observability; separates toolkit, component, desired-runtime, and observed-runtime identities; reports the configured execution identity; centralizes dependent-impact enforcement across CLI and TUI; and adds the high-contrast, keyboard-accessible, configurable TUI and bounded topology projection. It also adds host-qualified log inspection, effective configuration inspection, configurable lifecycle timeouts, persistent detached operations, authority-backed reconciliation, structurally pruned historical media decode/save calls, and model start-runtime provenance. The exact candidate archive was installed on both live hosts, its model, proxy, and bridge components were restarted, and both trusted hosts returned the same global status view. Live rollback acceptance exposed three updater defects that narrower tests missed; each received a focused regression before the successful coordinated b14 to b13 to b14 cycle.
 
 ## Topology And Trust Boundary
 
@@ -188,8 +188,8 @@ This distinction prevents readiness and policy from being misreported as lifecyc
 
 | Evidence | Result |
 |---|---|
-| Candidate source regression | Commit `72e9a7f` passed 142 tests, shell syntax, ShellCheck, Python compilation, adapter checks, archive audits, and maintainer precheck |
-| Candidate clean distribution | Runtime-only `0.9.0b11` archive built from `git archive HEAD`; isolated minimal installation, version, adapter doctor, uninstall, and purge passed |
+| Candidate source regression | Commit `e5c1343` passed 146 tests, shell syntax, ShellCheck, Python compilation, adapter checks, archive audits, and maintainer precheck |
+| Candidate clean distribution | Runtime-only `0.9.0b14` archive built from `git archive HEAD`; isolated minimal installation, version, adapter doctor, uninstall, and purge passed |
 | Candidate installed-wheel tests | Six Textual tests and 42 control-plane tests passed with repository source removed from `PYTHONPATH` |
 | Clean distribution | Runtime-only archive built from clean commit `6989f97` |
 | Release identity | Version `0.9.0b5`; archive SHA-256 `8169e9c6f953a3036c1c5e30aa2868ac4e9ab704172c5074c184d71140076b8f` |
@@ -201,7 +201,7 @@ This distinction prevents readiness and policy from being misreported as lifecyc
 | Protocol baseline | Chat, 1,024-dimensional embeddings, WAV TTS, gateway, dashboard, optimization proxy, and tunnel checks passed |
 | Reconciliation | Apply, idempotent no-op, conflict refusal, backup restoration, and clean manifest verification passed |
 | Failure injection | Partial-start cleanup, second-host update failure rollback, tampered artifact rejection, unreachable host handling, and invalid configuration refusal passed |
-| Candidate live acceptance | Both hosts installed `0.9.0b11` with `0.9.0b10` retained as `previous`; chat, embedding, TTS, model-proxy, and tts-bridge restarted healthy and reported matching desired/observed b11 runtime. Both trusted hosts reported eight healthy observable components and one consistently unobserved authority-owned Desktop tunnel. The final rollback/return and complete cold-cycle remain open. |
+| Candidate live acceptance | Both hosts installed `0.9.0b14`; chat, embedding, TTS, model-proxy, and tts-bridge restarted healthy and reported matching desired/observed b14 runtime. Both trusted hosts reported eight healthy observable components and one consistently unobserved authority-owned Desktop tunnel. Coordinated rollback to b13 and version-pinned coordinated return to b14 passed. The complete cold-cycle remains open because the stack includes the separately owned Desktop tunnel. |
 | Candidate media replay | Authoritative raw request replay through the installed media-history template produced 260,840 rendered bytes, one image result, one PNG marker, zero assistant decode/copy calls, and one preserved truncation marker |
 
 ## Why The Evidence Is Sufficient
@@ -217,7 +217,7 @@ No single layer is treated as conclusive. The evidence chain is configuration id
 - `authority-only` does not prove that the component is running; it states that the current peer is not an authorized observer. The authority must inspect that component.
 - The current beta does not download models, install arbitrary engines, edit raw secrets, or autonomously remediate failures.
 - The Textual TUI is an on-demand client, not a daemon. A future WebUI must use the same control interfaces rather than create a second executor.
-- The `0.9.0b11` candidate remains local and unpublished. Publication is gated on prompt replay, clean-artifact acceptance, two-host live acceptance, explicit maintainer approval, and green macOS CI.
+- The `0.9.0b14` candidate remains local and unpublished. Publication is gated on the remaining release checklist, explicit maintainer approval, and green macOS CI.
 
 ## Reproduction Outline
 
