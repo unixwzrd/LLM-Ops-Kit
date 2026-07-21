@@ -29,7 +29,7 @@ Back: [Documentation index](./INDEX.md)
 - [x] Pass `--minimal` installation on isolated Apple Silicon and Intel macOS users and confirm the CLI works while `llmops tui` reports the omitted optional dependency cleanly.
 - [x] Pass guided interactive model-profile reuse and deterministic non-interactive import against each test user's existing model profiles.
 - [ ] Pass final-artifact repair, upgrade, rollback, normal uninstall, and purge on both macOS users.
-- [x] Pass final-artifact Textual interaction tests for status, arrow and mouse selection, selection persistence, automatic-refresh pause, help, settings, topology, lifecycle impact confirmation/cancellation, configuration validation, update check, and update cancellation. Six TUI and 42 control-plane tests passed against the installed `0.9.0b6` wheel with repository source removed from `PYTHONPATH`.
+- [x] Pass final-artifact Textual interaction tests for status, arrow and mouse selection, selection persistence, automatic-refresh pause, help, settings, topology, lifecycle impact confirmation/cancellation, configuration validation, update check, and update cancellation. Six TUI and 42 control-plane tests passed against the installed beta wheel with repository source removed from `PYTHONPATH`.
 - [ ] Pass coordinated two-host update tests for unreachable preflight, interrupted transfer, old-peer bootstrap, apply failure, automatic rollback, and mixed-version refusal.
 - [x] Pass live configuration reconciliation plan/apply/idempotence and independently edited target conflict refusal.
 - [x] Confirm identical topology/catalog hashes and global status from both trusted live hosts.
@@ -46,7 +46,8 @@ Back: [Documentation index](./INDEX.md)
 - [ ] Add deterministic corrective suggestions from active probes to the TUI. The beta TUI shows configuration validation only.
 - [ ] Add a correlated model-proxy diagnostic exchange browser. The beta exposes component logs without modifying proxy traffic.
 - [ ] Package an agent-neutral operational skill using `doctor`, `plan`, `status`, and JSON output with explicit approval for mutations and SSH provisioning.
-- [ ] Add a per-component supervisor/restart policy with desired-running state, bounded retry, restart count, and last-exit status. Keep automatic restart disabled by default.
+- [ ] Add adapter-owned recovery policies with desired-running state, bounded retry/backoff, network-availability gating, restart count, last-exit status, and last-successful-recovery evidence. Keep automatic restart disabled by default except for explicitly supervised transports such as SSH tunnels.
+- [ ] Add a network-outage acceptance fixture covering tunnel loss, launchd restart, endpoint recovery, status convergence, and client reconnection. Treat Desktop session reconnection as a client capability rather than proof that the tunnel failed.
 - [ ] Add the loopback static WebUI over the same control library after the TUI stabilizes.
 - [ ] Add stateless component relocation with adapter preflight, cutover, dependent endpoint update, and rollback. Do not treat a desired-state host edit as provisioning.
 - [ ] Add component-native update check/plan/apply commands after provider backup, rollback, and post-update health contracts pass acceptance.

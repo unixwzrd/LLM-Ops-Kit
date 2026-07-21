@@ -71,6 +71,7 @@ Record artifact version, SHA-256, host, architecture, timestamp, result, and evi
 - [ ] Restart individual model, proxy, bridge, and agent components from either trusted host.
 - [ ] Verify dependency refusal, cascade order, partial-start rollback, and one complete cold stop/start.
 - [ ] Pass chat, embedding, TTS, proxy rendering, bridge, gateway, dashboard, tunnel, Desktop reconnection, and Telegram fallback checks.
+- [ ] Interrupt LAN connectivity long enough to break the SSH tunnel; verify the supervisor retries with bounded cadence, the local listener and HTTP endpoint recover, and status distinguishes recovered transport from a client session that still requires reconnection.
 - [ ] Roll back to operator v1, validate status, and return to the beta candidate.
 
 ## Release Evidence
