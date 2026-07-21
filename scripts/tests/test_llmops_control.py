@@ -334,6 +334,22 @@ class TopologyTests(ControlFixture):
         observation = ComponentObservation("running", "healthy", "observed", lifecycle, lifecycle, runtime)
         self.assertEqual(llmops_cli._observed_runtime(observation), "0.9.0b6")
 
+    def test_model_start_runtime_precedes_current_wrapper_runtime(self) -> None:
+        component = self.topology.resolve_component("chat")
+        lifecycle = CommandResult(
+            component.qualified_id,
+            "status",
+            "modelctl status",
+            0,
+            (
+                "started_runtime_root=/opt/llm-ops/releases/0.9.0b9\n"
+                "RUNTIME_ROOT=/opt/llm-ops/releases/0.9.0b10"
+            ),
+            "",
+        )
+        observation = ComponentObservation("running", "healthy", "observed", lifecycle)
+        self.assertEqual(llmops_cli._observed_runtime(observation), "0.9.0b9")
+
     def test_component_tags_must_be_nonempty_strings(self) -> None:
         stack = json.loads((self.paths.stacks_dir / "sample.json").read_text(encoding="utf-8"))
         stack["components"][0]["tags"] = [""]

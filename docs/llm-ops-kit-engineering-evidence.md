@@ -2,7 +2,7 @@
 
 - **Evidence updated:** 2026-07-21
 - **Accepted runtime baseline:** `0.9.0b5`
-- **Current source candidate:** `0.9.0b10`
+- **Current source candidate:** `0.9.0b11`
 - **Baseline runtime artifact source commit:** `6989f97`
 - **Baseline release archive SHA-256:** `8169e9c6f953a3036c1c5e30aa2868ac4e9ab704172c5074c184d71140076b8f`
 
@@ -20,7 +20,7 @@ The full two-host and protocol acceptance baseline was collected against `0.9.0b
 
 Accepted runtime baseline `0.9.0b5` added a shared catalog-aware status collector and was installed on both live macOS hosts through coordinated update. Its shared catalog and host-specific configuration hashes remained unchanged, and all observable services remained running.
 
-Source candidate `0.9.0b10` separates lifecycle, health, condition, and observability; separates toolkit, component, desired-runtime, and observed-runtime identities; reports the configured execution identity; centralizes dependent-impact enforcement across CLI and TUI; and adds the high-contrast, keyboard-accessible, configurable TUI and bounded topology projection. It also adds host-qualified log inspection, effective configuration inspection, configurable lifecycle timeouts, persistent detached operations, authority-backed reconciliation, and structurally pruned historical media decode/save calls.
+Source candidate `0.9.0b11` separates lifecycle, health, condition, and observability; separates toolkit, component, desired-runtime, and observed-runtime identities; reports the configured execution identity; centralizes dependent-impact enforcement across CLI and TUI; and adds the high-contrast, keyboard-accessible, configurable TUI and bounded topology projection. It also adds host-qualified log inspection, effective configuration inspection, configurable lifecycle timeouts, persistent detached operations, authority-backed reconciliation, structurally pruned historical media decode/save calls, and model start-runtime provenance.
 
 ## Topology And Trust Boundary
 
@@ -188,8 +188,8 @@ This distinction prevents readiness and policy from being misreported as lifecyc
 
 | Evidence | Result |
 |---|---|
-| Candidate source regression | `0.9.0b10` source regression and precheck are rerun after each release fix; the final count and commit are recorded only after the local release commit |
-| Candidate clean distribution | Pending for `0.9.0b10`; the archive must be produced from the final local commit rather than the dirty working tree |
+| Candidate source regression | `0.9.0b11` source regression and precheck are rerun after each release fix; the final count and commit are recorded only after the local release commit |
+| Candidate clean distribution | Pending for `0.9.0b11`; the archive must be produced from the final local commit rather than the dirty working tree |
 | Candidate installed-wheel tests | Six Textual tests and 42 control-plane tests passed with repository source removed from `PYTHONPATH` |
 | Clean distribution | Runtime-only archive built from clean commit `6989f97` |
 | Release identity | Version `0.9.0b5`; archive SHA-256 `8169e9c6f953a3036c1c5e30aa2868ac4e9ab704172c5074c184d71140076b8f` |
@@ -201,7 +201,7 @@ This distinction prevents readiness and policy from being misreported as lifecyc
 | Protocol baseline | Chat, 1,024-dimensional embeddings, WAV TTS, gateway, dashboard, optimization proxy, and tunnel checks passed |
 | Reconciliation | Apply, idempotent no-op, conflict refusal, backup restoration, and clean manifest verification passed |
 | Failure injection | Partial-start cleanup, second-host update failure rollback, tampered artifact rejection, unreachable host handling, and invalid configuration refusal passed |
-| Candidate live acceptance | Pending for `0.9.0b10`; prior live and protocol results are not promoted to candidate evidence |
+| Candidate live acceptance | Pending for `0.9.0b11`; prior live and protocol results are not promoted to candidate evidence |
 
 ## Why The Evidence Is Sufficient
 
@@ -216,7 +216,7 @@ No single layer is treated as conclusive. The evidence chain is configuration id
 - `authority-only` does not prove that the component is running; it states that the current peer is not an authorized observer. The authority must inspect that component.
 - The current beta does not download models, install arbitrary engines, edit raw secrets, or autonomously remediate failures.
 - The Textual TUI is an on-demand client, not a daemon. A future WebUI must use the same control interfaces rather than create a second executor.
-- The `0.9.0b10` candidate remains local and unpublished. Publication is gated on prompt replay, clean-artifact acceptance, two-host live acceptance, explicit maintainer approval, and green macOS CI.
+- The `0.9.0b11` candidate remains local and unpublished. Publication is gated on prompt replay, clean-artifact acceptance, two-host live acceptance, explicit maintainer approval, and green macOS CI.
 
 ## Reproduction Outline
 

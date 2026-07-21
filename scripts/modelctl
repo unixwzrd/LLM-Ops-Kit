@@ -318,6 +318,7 @@ HOST=$HOST
 PORT=$PORT
 LOG_FILE=$model_log_file
 STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+STARTED_RUNTIME_ROOT=$(runtime_asset_root)
 EOF
 }
 
@@ -381,6 +382,7 @@ status_model() {
       echo "  running=true"
       if read_model_state 2>/dev/null; then
         echo "  started_at=${STARTED_AT:-unknown}"
+        echo "  started_runtime_root=${STARTED_RUNTIME_ROOT:-unknown}"
         echo "  state_file=$state_file"
       fi
       status_probe

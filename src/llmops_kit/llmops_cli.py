@@ -833,6 +833,12 @@ def _observed_runtime(observation: Any) -> str:
             )
         )
     text = "\n".join(str(value) for value in values if value)
+    started = re.findall(
+        r"started_runtime_root=(?:[^\n]*/)?(?:releases|versions)/([^/\s'\"]+)",
+        text,
+    )
+    if started:
+        return started[-1]
     matches = re.findall(r"(?:^|/)(?:releases|versions)/([^/\s'\"]+)", text)
     return matches[-1] if matches else ""
 
