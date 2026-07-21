@@ -113,27 +113,26 @@ Rollback is a pointer exchange between immutable releases, not reconstruction fr
 
 ```mermaid
 flowchart TB
-    subgraph Startup["Startup: dependency-first topological order"]
-        S1["1. Chat model"] -. "next plan step" .-> S2["2. Model proxy"]
-        S2 -.-> S3["3. Context optimizer"]
-        S3 -.-> S4["4. Embedding model"]
-        S4 -.-> S5["5. TTS model"]
-        S5 -.-> S6["6. TTS bridge"]
-        S6 -.-> S7["7. Agent gateway"]
-        S7 -.-> S8["8. Dashboard"]
-        S8 -.-> S9["9. Desktop tunnel"]
-    end
+    S1["Startup 1: Chat model"] -. "next plan step" .-> S2["2. Model proxy"]
+    S2 -.-> S3["3. Context optimizer"]
+    S3 -.-> S4["4. Embedding model"]
+    S4 -.-> S5["5. TTS model"]
+    S5 -.-> S6["6. TTS bridge"]
+    S6 -.-> S7["7. Agent gateway"]
+    S7 -.-> S8["8. Dashboard"]
+    S8 -.-> S9["9. Desktop tunnel"]
+```
 
-    subgraph Shutdown["Shutdown: exact reverse of startup"]
-        X9["1. Desktop tunnel"] -. "next plan step" .-> X8["2. Dashboard"]
-        X8 -.-> X7["3. Agent gateway"]
-        X7 -.-> X6["4. TTS bridge"]
-        X6 -.-> X5["5. TTS model"]
-        X5 -.-> X4["6. Embedding model"]
-        X4 -.-> X3["7. Context optimizer"]
-        X3 -.-> X2["8. Model proxy"]
-        X2 -.-> X1["9. Chat model"]
-    end
+```mermaid
+flowchart TB
+    X9["Shutdown 1: Desktop tunnel"] -. "next plan step" .-> X8["2. Dashboard"]
+    X8 -.-> X7["3. Agent gateway"]
+    X7 -.-> X6["4. TTS bridge"]
+    X6 -.-> X5["5. TTS model"]
+    X5 -.-> X4["6. Embedding model"]
+    X4 -.-> X3["7. Context optimizer"]
+    X3 -.-> X2["8. Model proxy"]
+    X2 -.-> X1["9. Chat model"]
 ```
 
 The dotted arrows show the accepted plan sequence, not additional dependency edges. Independent branches may have more than one valid topological ordering, but once the planner selects a deterministic startup order, full-stack shutdown reverses that exact list. The accepted nine-component stop plan was mechanically compared with the start plan and matched it in reverse.
