@@ -517,7 +517,14 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
     class LlmOpsApp(App[None]):
         TITLE = "LLM-Ops-Kit"
         CSS = """
-        Screen { background: #0b0f14; color: #f5f7fa; }
+        Screen {
+            background: #0b0f14;
+            color: #f5f7fa;
+            scrollbar-color: #49637c;
+            scrollbar-color-hover: #5b7893;
+            scrollbar-color-active: #6f8ea3;
+            scrollbar-background: #111923;
+        }
         Header { background: #14202b; color: #ffffff; text-style: bold; }
         #summary { height: 3; padding: 1 2; background: #111923; color: #f5f7fa; }
         #components { height: 1fr; background: #0b0f14; color: #f5f7fa; }
@@ -526,18 +533,34 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
         #detail { height: 11; border-top: solid #6f8ea3; padding: 1 2; overflow-y: auto; background: #0f151d; color: #f5f7fa; }
         #action-bar { height: 3; padding: 0 1; background: #1b2733; color: #ffffff; text-style: bold; }
         #action-bar Button { min-width: 9; height: 3; margin: 0 1 0 0; border: none; background: #33485d; color: #ffffff; }
-        #action-bar Button:hover { background: #49637c; }
+        #action-bar Button:hover, #action-bar Button:focus { background: #49637c; color: #ffffff; }
         .dialog { width: 78; height: auto; max-height: 92%; padding: 1 2; border: thick #6f8ea3; background: #111923; color: #ffffff; }
         .dialog-title { text-style: bold; color: #b8d4e8; margin-bottom: 1; }
         .dialog-body { color: #f5f7fa; overflow-y: auto; }
         .dialog-actions { height: 3; margin-top: 1; }
         .equivalent-command { margin: 1 0; color: #9fe870; background: #0b0f14; padding: 1; }
         .warning { color: #ffd166; margin-bottom: 1; }
-        Button { margin-right: 1; background: #33485d; color: #ffffff; }
+        Button { margin-right: 1; background: #33485d; color: #ffffff; border: none; }
+        Button:hover, Button:focus { background: #49637c; color: #ffffff; background-tint: transparent; }
         Button.-primary { background: #496f91; color: #ffffff; }
+        Button.-primary:hover, Button.-primary:focus { background: #5b7893; color: #ffffff; }
         Button.-error { background: #9f3d46; color: #ffffff; }
+        Button.-error:hover, Button.-error:focus { background: #b64b55; color: #ffffff; }
         Input, Select { background: #18222d; color: #ffffff; border: tall #557086; }
-        Checkbox { color: #ffffff; }
+        Input:focus { background: #18222d; color: #ffffff; border: tall #8aa6ba; background-tint: transparent; }
+        Input > .input--cursor { background: #dce8f1; color: #0b0f14; }
+        Input > .input--selection { background: #29445c; }
+        Select > SelectCurrent { background: #18222d; color: #ffffff; border: tall #557086; }
+        Select:focus > SelectCurrent { background: #18222d; color: #ffffff; border: tall #8aa6ba; background-tint: transparent; }
+        Select > SelectOverlay { background: #111923; color: #ffffff; border: tall #557086; }
+        Select > SelectOverlay:focus { background: #111923; border: tall #8aa6ba; background-tint: transparent; }
+        Select > SelectOverlay > .option-list--option-highlighted { background: #29445c; color: #ffffff; }
+        Select > SelectOverlay > .option-list--option-hover { background: #243444; color: #ffffff; }
+        Checkbox { background: #18222d; color: #ffffff; border: tall #557086; }
+        Checkbox > .toggle--button { background: #243444; color: #8aa6ba; }
+        Checkbox.-on > .toggle--button { background: #243444; color: #43d17a; }
+        Checkbox:focus { background: #18222d; border: tall #8aa6ba; background-tint: transparent; }
+        Checkbox:focus > .toggle--label { background: #29445c; color: #ffffff; text-style: bold; }
         #topology-dialog { width: 95%; height: 95%; padding: 1 2; border: thick #6f8ea3; background: #0b0f14; }
         #topology-filters { height: 5; }
         #topology-filters Select { width: 1fr; margin-right: 1; }

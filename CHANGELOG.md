@@ -4,6 +4,7 @@
 
 ### Beta release readiness
 
+- Replaced inherited Textual accent states with one explicit blue-gray high-contrast palette across Settings, forms, select overlays, buttons, cursors, and scrollbars.
 - Made topology filters apply immediately, replaced Apply with Reset, restored semantic host/component colors, exposed Settings in the primary action bar, and made the visible Quit button exit directly.
 - Moved the TUI's clickable lifecycle action bar above the component table so primary controls remain immediately accessible.
 - Made a newer controller reselect a complete target retained as an older peer's `previous` release, allowing coordinated return after rollback without relying on the old peer's update implementation.

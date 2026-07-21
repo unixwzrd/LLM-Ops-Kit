@@ -137,6 +137,14 @@ class TuiApplicationTests(unittest.IsolatedAsyncioTestCase):
                     await pilot.click("#action-settings")
                     await pilot.pause()
                     self.assertIsNotNone(app.screen.query_one("#settings-dialog"))
+                    self.assertEqual(
+                        app.screen.query_one("#settings-auto-refresh").styles.background.hex,
+                        "#18222D",
+                    )
+                    self.assertEqual(
+                        app.screen.query_one("#save").styles.background.hex,
+                        "#496F91",
+                    )
                     await pilot.press("escape")
                     await pilot.pause()
                     await pilot.click("#action-help")
