@@ -207,7 +207,16 @@ class ModelProxyStatsTests(unittest.TestCase):
                             "type": "function",
                             "function": {
                                 "name": "terminal",
-                                "arguments": json.dumps({"command": f"decode {old_image}"}),
+                                "arguments": json.dumps(
+                                    {
+                                        "command": (
+                                            "import base64\n"
+                                            "b64 = open('/tmp/img_b64.txt').read().strip()\n"
+                                            "data = base64.b64decode(b64)\n"
+                                            "open('/tmp/image.png', 'wb').write(data)"
+                                        )
+                                    }
+                                ),
                             },
                         }
                     ],
@@ -251,6 +260,7 @@ class ModelProxyStatsTests(unittest.TestCase):
         self.assertNotIn("generate old image", rendered)
         self.assertNotIn("old image decode call", rendered)
         self.assertNotIn("old image decode result", rendered)
+        self.assertNotIn("base64.b64decode", rendered)
         self.assertIn("generating a newer image", rendered)
         self.assertIn("generate again", rendered)
 

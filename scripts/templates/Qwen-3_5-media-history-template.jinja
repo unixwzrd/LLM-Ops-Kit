@@ -85,13 +85,13 @@
         {%- for original_tool_call in message.tool_calls %}
             {%- set tool_call = original_tool_call.function if original_tool_call.function is defined else original_tool_call %}
             {%- if tool_call.arguments is string %}
-                {%- if 'data:image/' in tool_call.arguments or 'iVBORw0KGgo' in tool_call.arguments or '/9j/' in tool_call.arguments or 'data:audio/' in tool_call.arguments or 'data:video/' in tool_call.arguments %}
+                {%- if 'data:image/' in tool_call.arguments or 'iVBORw0KGgo' in tool_call.arguments or '/9j/' in tool_call.arguments or 'data:audio/' in tool_call.arguments or 'data:video/' in tool_call.arguments or 'base64.b64decode' in tool_call.arguments or 'base64 --decode' in tool_call.arguments or 'base64 -d' in tool_call.arguments %}
                     {%- set tool_state.has_media = true %}
                 {%- endif %}
             {%- elif tool_call.arguments is mapping %}
                 {%- for args_name, args_value in tool_call.arguments|items %}
                     {%- set args_text = args_value | tojson | safe if args_value is mapping or (args_value is sequence and args_value is not string) else args_value | string %}
-                    {%- if 'data:image/' in args_text or 'iVBORw0KGgo' in args_text or '/9j/' in args_text or 'data:audio/' in args_text or 'data:video/' in args_text %}
+                    {%- if 'data:image/' in args_text or 'iVBORw0KGgo' in args_text or '/9j/' in args_text or 'data:audio/' in args_text or 'data:video/' in args_text or 'base64.b64decode' in args_text or 'base64 --decode' in args_text or 'base64 -d' in args_text %}
                         {%- set tool_state.has_media = true %}
                     {%- endif %}
                 {%- endfor %}

@@ -4,6 +4,7 @@
 
 ### Beta release readiness
 
+- Pruned historical assistant tool calls that explicitly decode or save prior base64 media even when the copied bytes are referenced through a temporary file rather than embedded in the call itself.
 - Corrected configuration reconciliation and TUI configuration editing to consume the mutable authority tree rather than regenerating desired snapshots from the active deployed revision.
 - Replaced the custom latest-image template with a structurally detected media-history template that preserves the final image-bearing tool response, removes earlier image payloads and assistant-side base64 copies, and leaves native structured multimodal content intact. The stock Qwen template remains unchanged.
 - Added `llmops config effective`, host-qualified component log channels, component runtime/version inspection, configurable lifecycle timeouts, and persisted detached operation records.
