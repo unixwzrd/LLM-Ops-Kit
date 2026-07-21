@@ -99,6 +99,12 @@ class InstallerTests(unittest.TestCase):
             self.assertEqual((install / "current").resolve(), (install / "releases" / "release-2").resolve())
             self.assertEqual((install / "previous").resolve(), (install / "releases" / "release-1").resolve())
             self.assertTrue((install / "current-config").is_symlink())
+            retained = install / "releases" / "release-2" / "retained-marker"
+            retained.write_text("preserve existing immutable release\n", encoding="utf-8")
+            duplicate = subprocess.run(common + ["--release-id", "release-2"], env=env, capture_output=True, text=True, check=False)
+            self.assertEqual(duplicate.returncode, 2)
+            self.assertIn("release already exists", duplicate.stderr)
+            self.assertEqual(retained.read_text(encoding="utf-8"), "preserve existing immutable release\n")
             default_env = {key: value for key, value in env.items() if key != "LLMOPS_CONFIG_HOME"}
             shown = self.run_command([str(public_bin / "llmops"), "config", "show", "--json"], default_env)
             self.assertEqual(Path(json.loads(shown.stdout)["paths"]["config_home"]).resolve(), (install / "current-config").resolve())

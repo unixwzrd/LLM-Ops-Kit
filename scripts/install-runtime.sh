@@ -212,7 +212,7 @@ current_config_created=0
 cleanup() {
   local status=$?
   trap - EXIT INT TERM
-  rm -rf "$staging"
+  [[ "$release_created" -eq 1 ]] && rm -rf "$staging"
   if [[ "$status" -ne 0 ]]; then
     if [[ "$switched" -eq 1 ]]; then
       if [[ -n "$old" ]]; then
@@ -226,7 +226,6 @@ cleanup() {
         rm -f "$PREVIOUS"
       fi
     fi
-    [[ "$release_created" -eq 1 ]] && rm -rf "$release"
     [[ "$current_config_created" -eq 1 ]] && rm -f "$INSTALL_BASE/current-config"
     [[ "$config_revision_created" -eq 1 ]] && rm -rf "$config_revision"
   fi
