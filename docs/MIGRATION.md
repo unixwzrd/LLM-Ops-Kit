@@ -66,4 +66,6 @@ llmops migrate-schema --authority-host model-host --apply --yes
 
 `--authority-host` must name a `trusted_control` inventory host. Setting it during migration avoids relying on inventory order and makes the desired-state authority explicit before reconciliation.
 
+During the bounded cutover, reconciliation may replace a selected version-one target snapshot after the new runtime reports `unsupported schema_version: 1`. This is a transport bootstrap only: normal runtime commands never load the legacy snapshot, and the target validates the complete version-two revision before selecting it.
+
 The plan assigns reviewed built-in template IDs from existing drivers, preserves profile values, normalizes legacy `env` into canonical `environment`, derives structured llama.cpp and service fields without removing the source values, and adds explicit restart policy defaults. Non-llama workloads managed by `modelctl`, including TTS engines, use the generic `modelctl` template rather than being mislabeled as llama.cpp. String ports become integers where required by the schema. Ambiguous profiles remain review findings, and application is refused while findings remain. After migration, normal runtime commands accept schema version 2 only; version 1 documents remain test fixtures rather than compatibility inputs.

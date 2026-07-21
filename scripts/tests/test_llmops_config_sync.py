@@ -92,6 +92,7 @@ class ConfigSyncTests(unittest.TestCase):
                 ({"reachable": True, "ok": False, "valid": False, "config_hash": "declared"}, "conflict"),
                 ({"reachable": False, "ok": False, "error": "offline"}, "unreachable"),
                 ({"reachable": True, "ok": False, "error": "inventory not found: target"}, "apply"),
+                ({"reachable": True, "ok": False, "error": "unsupported schema_version: 1"}, "apply"),
                 ({"reachable": True, "ok": False, "error": "bad response"}, "error"),
             )
             for observed, expected in cases:

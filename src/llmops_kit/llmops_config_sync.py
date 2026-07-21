@@ -112,7 +112,12 @@ def reconcile_plan(topology: Topology, host_names: Iterable[str]) -> tuple[list[
         error_text = str(observed.get("error", "")).lower()
         uninitialized = any(
             phrase in error_text
-            for phrase in ("inventory not found", "configuration not found", "config.json not found")
+            for phrase in (
+                "inventory not found",
+                "configuration not found",
+                "config.json not found",
+                "unsupported schema_version: 1",
+            )
         )
         if not observed.get("reachable", True):
             action = "unreachable"
