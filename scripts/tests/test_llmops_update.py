@@ -26,6 +26,62 @@ HOST = {
 
 
 class RemoteUpdateTests(unittest.TestCase):
+    def test_selected_host_rollback_does_not_fall_through_to_local_installer(self) -> None:
+        with (
+            mock.patch.object(llmops_update, "_select_hosts", return_value=[("peer", HOST)]),
+            mock.patch.object(llmops_update, "_remote_preflight", return_value={"host": "peer", "version": "beta-2"}),
+            mock.patch.object(llmops_update, "_remote_rollback", return_value={"host": "peer", "ok": True, "output": "rolled back", "error": ""}) as rollback,
+            mock.patch("subprocess.run") as local_run,
+        ):
+            result = llmops_update.main(["--rollback", "--host", "peer", "--json"])
+        self.assertEqual(result, 0)
+        rollback.assert_called_once_with("peer", HOST, 900)
+        local_run.assert_not_called()
+
+    def test_apply_skips_hosts_already_at_target_version(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            archive = root / "LLM-Ops-Kit-beta-2.tar.xz"
+            archive.write_bytes(b"verified release")
+            checksum = root / f"{archive.name}.sha256"
+            checksum.write_text(hashlib.sha256(archive.read_bytes()).hexdigest() + "  " + archive.name + "\n", encoding="utf-8")
+            with (
+                mock.patch.object(llmops_update, "_select_hosts", return_value=[("peer", HOST)]),
+                mock.patch.object(llmops_update, "_remote_preflight", return_value={"host": "peer", "ok": True, "version": "beta-2"}),
+                mock.patch.object(llmops_update, "_remote_stage") as stage,
+                mock.patch.object(llmops_update, "_remote_apply") as apply,
+            ):
+                result = llmops_update.main(["--apply", "--archive", str(archive), "--checksum-file", str(checksum), "--host", "peer", "--json"])
+        self.assertEqual(result, 0)
+        stage.assert_not_called()
+        apply.assert_not_called()
+
+    def test_local_apply_selects_complete_previous_target(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            current = root / "releases" / "beta-1"
+            previous = root / "releases" / "beta-2"
+            (current / "scripts").mkdir(parents=True)
+            previous.mkdir(parents=True)
+            (current / "RELEASE.json").write_text('{"version":"beta-1"}\n', encoding="utf-8")
+            (previous / "RELEASE.json").write_text('{"version":"beta-2"}\n', encoding="utf-8")
+            (current / "scripts" / "install-runtime.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+            (root / "current").symlink_to(current)
+            (root / "previous").symlink_to(previous)
+            archive = Path(temporary) / "LLM-Ops-Kit-beta-2.tar.xz"
+            archive.write_bytes(b"unused")
+            checksum = Path(temporary) / f"{archive.name}.sha256"
+            checksum.write_text(hashlib.sha256(archive.read_bytes()).hexdigest() + "  " + archive.name + "\n", encoding="utf-8")
+
+            def select_previous(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+                (root / "current").unlink()
+                (root / "current").symlink_to(previous)
+                return subprocess.CompletedProcess([], 0, "", "")
+
+            with mock.patch("subprocess.run", side_effect=select_previous):
+                result = llmops_update.main(["--apply", "--archive", str(archive), "--checksum-file", str(checksum), "--prefix", str(root), "--json"])
+        self.assertEqual(result, 0)
+
     def test_managed_catalog_precedes_release_legacy_config(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

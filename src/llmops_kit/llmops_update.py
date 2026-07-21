@@ -55,6 +55,22 @@ def current_version(install_base: Path) -> Optional[str]:
     return current.resolve().name
 
 
+def previous_version(install_base: Path) -> Optional[str]:
+    """Return the previous immutable release version, if selectable."""
+
+    previous = install_base / "previous"
+    if not previous.is_symlink() or not previous.exists():
+        return None
+    release_file = previous / "RELEASE.json"
+    try:
+        value = json.loads(release_file.read_text(encoding="utf-8")).get("version")
+        if isinstance(value, str) and value:
+            return value
+    except (OSError, json.JSONDecodeError):
+        pass
+    return previous.resolve().name
+
+
 def resolve_latest(repository: str) -> str:
     """Resolve the latest GitHub release tag through its stable redirect."""
 
@@ -422,7 +438,24 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     args = build_parser().parse_args(argv)
     try:
+        selected_hosts = _select_hosts(args) if args.hosts or args.all_hosts else []
         if args.rollback:
+            if selected_hosts:
+                before = [_remote_preflight(name, host, args.host_timeout) for name, host in selected_hosts]
+                changed: list[tuple[str, dict[str, object]]] = []
+                results: list[dict[str, object]] = []
+                try:
+                    for name, host in selected_hosts:
+                        result = _remote_rollback(name, host, args.host_timeout)
+                        if not result["ok"]:
+                            raise UpdateError(f"remote rollback failed for {name}: {result['error'] or result['output']}")
+                        changed.append((name, host))
+                        results.append(result)
+                except UpdateError as exc:
+                    restored = [_remote_rollback(name, host, args.host_timeout) for name, host in reversed(changed)]
+                    raise UpdateError(f"{exc}; restore results: {json.dumps(restored, sort_keys=True)}") from exc
+                emit({"ok": True, "action": "rollback", "hosts": results, "before": before}, json_output=args.json)
+                return 0
             installer = args.prefix / "current" / "scripts" / "install-runtime.sh"
             if not installer.is_file():
                 raise UpdateError(f"active rollback installer is missing: {installer}")
@@ -452,13 +485,21 @@ def main(argv: Optional[list[str]] = None) -> int:
             "update_available": installed != available,
             "repository": args.repository,
         }
-        selected_hosts = _select_hosts(args) if args.hosts or args.all_hosts else []
         if selected_hosts:
             preflight = [_remote_preflight(name, host, args.host_timeout) for name, host in selected_hosts]
             payload["hosts"] = preflight
             payload["current_scope"] = "controller"
             payload["update_available"] = any(item.get("version") != available for item in preflight)
             if not args.apply:
+                emit(payload, json_output=args.json)
+                return 0
+            pending_hosts = [
+                selected_hosts[index]
+                for index, item in enumerate(preflight)
+                if item.get("version") != available
+            ]
+            if not pending_hosts:
+                payload["action"] = "none"
                 emit(payload, json_output=args.json)
                 return 0
             with tempfile.TemporaryDirectory(prefix="llmops-update-") as temporary_name:
@@ -473,7 +514,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                 verify_archive(archive, checksum_file)
                 staged = [
                     (name, host, *_remote_stage(name, host, archive, checksum_file, available, args.host_timeout))
-                    for name, host in selected_hosts
+                    for name, host in pending_hosts
                 ]
                 updated: list[tuple[str, dict[str, object]]] = []
                 results: list[dict[str, object]] = []
@@ -492,6 +533,18 @@ def main(argv: Optional[list[str]] = None) -> int:
             return 0
         if installed == available:
             payload["action"] = "none"
+            emit(payload, json_output=args.json)
+            return 0
+        if previous_version(args.prefix) == available:
+            installer = args.prefix / "current" / "scripts" / "install-runtime.sh"
+            completed = subprocess.run(
+                ["/usr/local/bin/bash", str(installer), "--prefix", str(args.prefix), "--public-bin-dir", str(args.public_bin_dir), "--state-home", str(args.state_home), "--rollback"],
+                text=True,
+                check=False,
+            )
+            if completed.returncode != 0 or current_version(args.prefix) != available:
+                raise UpdateError(f"could not select existing previous release {available}")
+            payload["action"] = "select-previous"
             emit(payload, json_output=args.json)
             return 0
         with tempfile.TemporaryDirectory(prefix="llmops-update-") as temporary_name:
