@@ -29,7 +29,9 @@ class TuiContractTests(unittest.TestCase):
         catalog = {
             "schema_version": 1,
             "trusted_control_hosts": ["control-host"],
-            "hosts": [{"name": "desktop-host", "peer_observable": False}],
+            "hosts": [
+                {"name": "desktop-host", "user": "operator", "peer_observable": False}
+            ],
             "components": [
                 {
                     "id": "example:desktop-tunnel",
@@ -59,6 +61,7 @@ class TuiContractTests(unittest.TestCase):
         self.assertEqual(payload[0]["observability"], "authority-only")
         self.assertEqual(payload[0]["condition"], "unobserved")
         self.assertEqual(payload[0]["lifecycle"], "unknown")
+        self.assertEqual(payload[0]["execution_user"], "operator")
 
     def test_condition_styles_are_distinct_and_textual(self) -> None:
         self.assertEqual(set(CONDITION_STYLES), {"ok", "attention", "error", "unobserved"})

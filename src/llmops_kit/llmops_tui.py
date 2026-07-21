@@ -481,6 +481,7 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                 "Health",
                 "Component",
                 "Host",
+                "Run as",
                 "Driver",
                 "Version",
                 "Drift",
@@ -517,7 +518,8 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                 state = self.status_by_id.get(item.qualified_id, {})
                 detail = (
                     f"{item.qualified_id}\n"
-                    f"Host: {item.host}  Driver: {item.driver}  Profile: {item.profile}\n"
+                    f"Host: {item.host}  Run as: {state.get('execution_user') or 'unknown'}  "
+                    f"Driver: {item.driver}  Profile: {item.profile}\n"
                     f"Condition: {state.get('condition', 'unobserved')}  "
                     f"Lifecycle: {state.get('lifecycle', 'unknown')}  "
                     f"Health: {state.get('health', 'unknown')}  "
@@ -563,6 +565,7 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                         item["health"],
                         component.qualified_id,
                         component.host,
+                        item.get("execution_user", ""),
                         component.driver,
                         item.get("component_version", ""),
                         item.get("drift", ""),

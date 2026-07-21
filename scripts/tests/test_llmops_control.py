@@ -346,7 +346,13 @@ class TopologyTests(ControlFixture):
         self.assertEqual(payload[0]["lifecycle"], "running")
         self.assertEqual(payload[0]["health"], "degraded")
         self.assertEqual(payload[0]["condition"], "attention")
+        self.assertEqual(payload[0]["execution_user"], "operator")
         self.assertEqual(payload[0]["component_version"], "0.9.0b4")
+
+        output = io.StringIO()
+        with redirect_stdout(output):
+            llmops_cli._human_status(payload)
+        self.assertIn("RUN_AS", output.getvalue().splitlines()[0])
 
     def test_topology_projection_is_bounded_to_immediate_relationships(self) -> None:
         projection = project_topology(self.topology, component="proxy")

@@ -623,16 +623,21 @@ def _human_status(payload: list[dict[str, Any]]) -> None:
         "health",
         "component",
         "host",
+        "execution_user",
         "driver",
         "component_version",
         "toolkit_version",
         "drift",
     )
+    headers = {"execution_user": "RUN_AS"}
     widths = {
-        column: max(len(column.upper()), *(len(str(item.get(column, ""))) for item in payload))
+        column: max(
+            len(headers.get(column, column.upper())),
+            *(len(str(item.get(column, ""))) for item in payload),
+        )
         for column in columns
     }
-    print("  ".join(column.upper().ljust(widths[column]) for column in columns))
+    print("  ".join(headers.get(column, column.upper()).ljust(widths[column]) for column in columns))
     print("  ".join("-" * widths[column] for column in columns))
     for item in payload:
         print("  ".join(str(item.get(column, "")).ljust(widths[column]) for column in columns))
@@ -723,6 +728,7 @@ def _inspect_status(components: list[Any], args: argparse.Namespace) -> list[dic
             "observability": observability,
             "component": component.qualified_id,
             "host": component.host,
+            "execution_user": CURRENT_TOPOLOGY.hosts[component.host].user,
             "driver": component.driver,
             "profile": component.profile,
             "tags": list(component.tags),
@@ -1117,6 +1123,7 @@ def _catalog_status(args: argparse.Namespace, catalog: dict[str, Any]) -> list[d
                         "observability": "observed",
                         "component": component.get("id", ""),
                         "host": host_name,
+                        "execution_user": str(hosts.get(host_name, {}).get("user", "")),
                         "driver": component.get("driver", ""),
                         "profile": component.get("profile", ""),
                         "tags": component.get("tags", []),
@@ -1136,6 +1143,7 @@ def _catalog_status(args: argparse.Namespace, catalog: dict[str, Any]) -> list[d
                         "observability": "authority-only",
                         "component": component.get("id", ""),
                         "host": host_name,
+                        "execution_user": str(hosts.get(host_name, {}).get("user", "")),
                         "driver": component.get("driver", ""),
                         "profile": component.get("profile", ""),
                         "tags": component.get("tags", []),
@@ -1154,6 +1162,7 @@ def _catalog_status(args: argparse.Namespace, catalog: dict[str, Any]) -> list[d
                     "observability": "unreachable",
                     "component": component.get("id", ""),
                     "host": host_name,
+                    "execution_user": str(hosts.get(host_name, {}).get("user", "")),
                     "driver": component.get("driver", ""),
                     "profile": component.get("profile", ""),
                     "tags": component.get("tags", []),
