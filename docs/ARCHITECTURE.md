@@ -1,7 +1,7 @@
 # Architecture
 
 **Created**: 2026-07-16
-**Updated**: 2026-07-19
+**Updated**: 2026-07-21
 
 Back: [Documentation index](./INDEX.md)
 
@@ -30,7 +30,7 @@ Canonical configuration is converted into a validated topology, dependency plan,
 canonical configuration -> schema validation -> topology -> dependency plan -> adapter -> local or remote transport
 ```
 
-Component start satisfies missing upstream dependencies. Component restart affects only the target by default. Component stop refuses active dependents unless `--force` or `--cascade` is used. Stack operations compose the same component planner in dependency order.
+Component start satisfies missing upstream dependencies. Component restart affects only the target by default. Component stop refuses active dependents unless `--force` or `--cascade` is used. CLI and TUI call the same mutation preparation service, so interface code cannot bypass dependent-impact checks. Stack operations start in dependency order and stop in the exact reverse of the selected startup order.
 
 The executor is idempotent. A failed start stops only components started by that invocation and leaves pre-existing services untouched. Mutations use a lifecycle lock; status, health, drift, plans, and logs are read-only.
 
@@ -71,9 +71,12 @@ validate -> plan -> status -> health -> start -> stop -> restart -> logs
 Optional capability interfaces provide:
 
 ```text
-install -> repair -> update_check -> update_plan -> uninstall
+install -> repair -> update_check -> update_plan -> update_apply -> update_rollback -> uninstall
+relocation_preflight -> relocation_cutover -> relocation_rollback
 observe -> metrics -> drift -> corrective_actions
 ```
+
+Update capability metadata distinguishes check, plan, apply, backup, rollback, and post-update health support. Relocation capability metadata distinguishes stateless ownership, preflight, cutover, and rollback. Built-in adapters do not advertise mutating update or relocation capabilities until their native implementations pass failure and rollback acceptance.
 
 All mutating methods receive an approved plan and argument arrays. Adapters must not accept unvalidated shell strings, embed secrets in returned plans, silently install dependencies, or mutate unrelated component state. Corrective actions are deterministic rules with evidence and an equivalent CLI plan; LLM-Ops-Kit does not act as an agent.
 
@@ -113,13 +116,17 @@ Lifecycle adapters operate on the host that owns the subsystem. A control interf
 
 The first graphical interface is a Textual TUI that runs on demand and requires no daemon. Its beta scope is:
 
-- Global and per-host status, health, version, drift, and authority.
+- Global and per-host lifecycle, health, condition, observability, version, drift, and authority.
 - Component and stack drill-down.
 - Start, stop, restart, logs, plans, and update checks.
-- Schema-driven configuration forms with validation.
-- Deterministic corrective-action suggestions.
+- Guided editing of stable desired-state component fields with validation.
+- High-contrast keyboard and mouse navigation, local refresh settings, shared display labels, and contextual help.
+- A bounded host-grouped topology view with immediate dependency relationships and filters.
 - Equivalent CLI display before every mutation.
-- Model-proxy request, rendered-prompt, response, timing, and error correlation without changing proxied traffic.
+
+The status model keeps lifecycle, health, and observation policy independent. A process may be running while its readiness check is degraded. A component may be known but `authority-only`, which is unobserved rather than unreachable. Toolkit and component versions are separate fields.
+
+Local TUI preferences live in `ui.json` and are excluded from desired-state hashes. Organization and site labels live in canonical configuration and reconcile normally.
 
 The optional WebUI is a separate loopback-only control process serving static HTML, CSS, and JavaScript through a small API layer. It uses the same control library and operation schema, remains available while models and agents are stopped, and uses SSH tunnels or an explicitly configured HTTPS endpoint for remote access. It is not required for CLI or TUI operation.
 

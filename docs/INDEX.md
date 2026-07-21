@@ -10,6 +10,8 @@
 - [Upgrade and rollback](./UPGRADE_AND_ROLLBACK.md)
 - [Operator checklist](./OPERATOR_CHECKLIST.md)
 - [Textual console](./TUI.md)
+- [Status semantics](./STATUS.md)
+- [Topology views](./TOPOLOGY.md)
 - [Adapters](./ADAPTERS.md)
 - [Model profiles](./MODELCTL_GUIDE.md)
 - [Model proxy](./PROXY_TAP_RUNBOOK.md)

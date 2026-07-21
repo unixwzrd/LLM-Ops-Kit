@@ -33,7 +33,7 @@ def snapshot_hash(root: Path) -> tuple[str, bool, list[str]]:
                 "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
             }
             for path in sorted(root.rglob("*.json"))
-            if path.is_file()
+            if path.is_file() and path.name != "ui.json"
         ]
         if not records:
             raise ReconcileError(f"configuration contains no JSON documents: {root}")

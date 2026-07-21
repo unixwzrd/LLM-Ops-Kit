@@ -34,6 +34,16 @@ def _resolve_home(
     return (_home(env) / default_relative / APP_NAME).expanduser()
 
 
+def resolve_authority_config_home(env: dict[str, str] | None = None) -> Path:
+    """Return the mutable desired-state root, independent of deployed revisions."""
+
+    values = dict(os.environ if env is None else env)
+    if values.get("LLMOPS_AUTHORITY_CONFIG_HOME"):
+        return Path(values["LLMOPS_AUTHORITY_CONFIG_HOME"]).expanduser()
+    base = Path(values.get("XDG_CONFIG_HOME", _home(values) / ".config")).expanduser()
+    return base / APP_NAME
+
+
 @dataclass(frozen=True)
 class LlmOpsPaths:
     """Resolved LLM-Ops-Kit paths."""

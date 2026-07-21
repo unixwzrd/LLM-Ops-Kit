@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from llmops_kit.llmops_config import ConfigError, load_config
+from llmops_kit.llmops_config import ConfigError, load_config, update_display
 from llmops_kit.llmops_paths import resolve_paths
 
 
@@ -62,6 +62,14 @@ class LlmOpsConfigTests(unittest.TestCase):
             )
             with self.assertRaises(ConfigError):
                 load_config(config_path)
+
+    def test_display_metadata_is_transactional_and_validated(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "config.json"
+            config_path.write_text('{"schema_version": 1}\n', encoding="utf-8")
+            backup = update_display(config_path, organization="Example", site="Lab")
+            self.assertTrue(backup.is_file())
+            self.assertEqual(load_config(config_path).data["display"], {"organization": "Example", "site": "Lab"})
 
 
 if __name__ == "__main__":

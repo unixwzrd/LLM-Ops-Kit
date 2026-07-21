@@ -1,7 +1,7 @@
 # Maintainer TODO
 
 **Created**: 2026-07-16
-**Updated**: 2026-07-20
+**Updated**: 2026-07-21
 
 Back: [Documentation index](./INDEX.md)
 
@@ -13,23 +13,23 @@ Back: [Documentation index](./INDEX.md)
 - [x] Support normal Textual and `--minimal` CLI installations, repair, immutable current/previous releases, local update, rollback, normal uninstall, and purge.
 - [x] Preserve configuration and operational state outside immutable releases and record the actual custom install layout for initialization and probes.
 - [x] Register built-in lifecycle adapters through a versioned entry-point registry and provide `adapter list`, `adapter show`, `adapter doctor`, and conformance fixtures.
-- [x] Add global and per-component status with host, toolkit version, catalog/configuration hashes, authority, drift, reachability, and last synchronization.
+- [x] Replace ambiguous status with shared lifecycle, health, condition, observability, component-version, and toolkit-version fields across CLI and TUI.
 - [x] Add coordinated remote update selection, preflight, staging, old-peer use, missing-peer bootstrap, sequential apply, post-apply identity verification, and rollback reporting.
 - [x] Add one-way configuration reconciliation with complete trusted-controller snapshots, role-filtered component-host snapshots, conflict refusal, immutable revisions, previous/current links, and no automatic merge.
-- [x] Add the on-demand Textual dashboard over the shared planner/executor with component and stack views, logs, plans, lifecycle actions, existing-component editing, update actions, confirmation, and equivalent CLI commands.
+- [x] Add the on-demand high-contrast Textual dashboard with immediate keyboard detail updates, refresh settings, help, shared display labels, bounded topology, logs, plans, lifecycle actions, dependent-impact confirmation, existing-component editing, and equivalent CLI commands.
 - [x] Remove proof-of-concept repository synchronization, source-checkout deployment, runtime legacy reads, embedded Python shell blocks, and privileged Hermes/OpenClaw behavior.
 - [x] Preserve test-only legacy migration fixtures; they are not installed in release artifacts.
 - [x] Complete the prior operator-v1 48-hour live soak while retaining prior runtimes and checksummed backups.
 
 ## Beta Release Gates
 
-- [x] Pass the dependency-complete Python suite and local precheck in the packaged UV environment. Current evidence: 121 tests pass on 2026-07-20, including exact reverse start/stop ordering and shared CLI/TUI status semantics.
+- [x] Pass the dependency-complete source suite and precheck in the packaged UV environment. Current pre-artifact evidence: 129 tests and precheck passed on 2026-07-21; the final clean artifact must rerun the same gates.
 - [x] Pass normal clean installation from a verified archive on isolated Apple Silicon and Intel macOS users.
 - [ ] Repeat normal installation from the final committed release artifact on both macOS users after documentation and acceptance fixes stop changing the package.
 - [x] Pass `--minimal` installation on isolated Apple Silicon and Intel macOS users and confirm the CLI works while `llmops tui` reports the omitted optional dependency cleanly.
 - [x] Pass guided interactive model-profile reuse and deterministic non-interactive import against each test user's existing model profiles.
 - [ ] Pass final-artifact repair, upgrade, rollback, normal uninstall, and purge on both macOS users.
-- [ ] Pass Textual interaction tests for status, component/stack views, logs, lifecycle confirmation/cancellation, configuration validation, update check, and update cancellation.
+- [ ] Pass final-artifact Textual interaction tests for status, arrow and mouse selection, selection persistence, automatic-refresh pause, help, settings, topology, lifecycle impact confirmation/cancellation, configuration validation, update check, and update cancellation. Source-level headless coverage passes.
 - [ ] Pass coordinated two-host update tests for unreachable preflight, interrupted transfer, old-peer bootstrap, apply failure, automatic rollback, and mixed-version refusal.
 - [x] Pass live configuration reconciliation plan/apply/idempotence and independently edited target conflict refusal.
 - [x] Confirm identical topology/catalog hashes and global status from both trusted live hosts.
@@ -48,6 +48,8 @@ Back: [Documentation index](./INDEX.md)
 - [ ] Package an agent-neutral operational skill using `doctor`, `plan`, `status`, and JSON output with explicit approval for mutations and SSH provisioning.
 - [ ] Add a per-component supervisor/restart policy with desired-running state, bounded retry, restart count, and last-exit status. Keep automatic restart disabled by default.
 - [ ] Add the loopback static WebUI over the same control library after the TUI stabilizes.
+- [ ] Add stateless component relocation with adapter preflight, cutover, dependent endpoint update, and rollback. Do not treat a desired-state host edit as provisioning.
+- [ ] Add component-native update check/plan/apply commands after provider backup, rollback, and post-update health contracts pass acceptance.
 
 ## Integration Roadmap
 

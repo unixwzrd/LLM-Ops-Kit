@@ -38,12 +38,13 @@ llmops component plan restart <component>
 llmops component restart <component>
 llmops stack status
 llmops host list
+llmops topology show --component <component>
 llmops tui
 ```
 
 Starting a component starts missing dependencies. Restarting affects only the requested component unless `--cascade` is supplied. Stopping a component with active dependents requires `--force` or `--cascade`.
 
-Status includes the owning host, runtime version, catalog and configuration identity, authority, drift, and last synchronization where available. `authority-only` means the catalog knows the component but the current account has no authorized observation route; it does not mean the component is stopped.
+Status reports lifecycle, health, operator condition, observability, owning host, component and toolkit versions, catalog and configuration identity, authority, drift, and last synchronization where available. `authority-only` means the catalog knows the component but the current account has no authorized observation route; it does not mean the component is stopped.
 
 ## Configure And Update
 
@@ -65,6 +66,8 @@ Independent remote edits are reported as drift and are never merged automaticall
 - [Quickstart](docs/QUICKSTART.md)
 - [Operator checklist](docs/OPERATOR_CHECKLIST.md)
 - [Textual console](docs/TUI.md)
+- [Status semantics](docs/STATUS.md)
+- [Topology views](docs/TOPOLOGY.md)
 - [Adapters](docs/ADAPTERS.md)
 - [Configuration](docs/CONFIGURATION.md)
 - [Migration](docs/MIGRATION.md)

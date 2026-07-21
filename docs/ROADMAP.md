@@ -1,7 +1,7 @@
 # Roadmap
 
 **Created**: 2026-07-19
-**Updated**: 2026-07-20
+**Updated**: 2026-07-21
 
 Back: [Documentation index](./INDEX.md)
 
@@ -27,13 +27,12 @@ The runtime completed its 48-hour soak with continuous successful hourly health 
 
 ### Beta TUI
 
-- Overview of hosts, components, stacks, status, health, versions, and drift.
-- Drill-down status and recent logs.
-- Component and stack start, stop, restart, plan, and update-check actions.
+- Overview of hosts, components, stacks, lifecycle, health, condition, observability, versions, and drift.
+- High-contrast keyboard and mouse navigation, automatic-refresh settings, shared display labels, contextual help, and recent logs.
+- Component and stack start, stop, restart, plan, and explicitly toolkit-scoped update-check actions.
 - Equivalent `llmops` command shown before mutation.
-- Schema-driven editing for inventory, profiles, components, dependencies, health checks, and transports.
-- Validation errors with exact configuration fields and deterministic corrective suggestions.
-- Read-only model-proxy exchange view when diagnostic logs are enabled.
+- Guided editing for stable existing-component fields, dependencies, ownership, and readiness timeout.
+- Read-only bounded topology grouped by host with host, stack, driver, and condition filters.
 - No daemon, autonomous changes, model downloads, or secret-value editor.
 
 The TUI should begin as a compact operational dashboard. Configuration screens are reached from host or component detail views rather than presenting every possible field at startup.
@@ -63,6 +62,8 @@ macOS remains the supported beta platform. A systemd adapter may be developed an
 - Rule-based health and drift remediation suggestions with explicit plans and approval.
 - Agent-neutral operational skill for read-only status, doctor, plan, drift, and approved lifecycle actions.
 - Component update catalog with security/benefit/risk summaries and rollback metadata.
+- Product-native update providers enabled only after backup, rollback, and post-update health acceptance.
+- Stateless component relocation for proxies, bridges, dashboards, and tunnels with preflight, transactional cutover, and rollback.
 - Typed early-alpha MLXForge engine adapter behind an explicit feature flag.
 - TTS Bridge recipe for OpenAI-compatible local or remote speech services; providers and voice material remain user supplied.
 
@@ -87,6 +88,7 @@ The following are adapter or recipe candidates, not core dependencies:
 - Community adapter SDK, template, conformance tests, compatibility matrix, and publishing workflow.
 - Multiple desired-state authorities only if a clear conflict-resolution model is designed; no implicit distributed merge.
 - Additional cloud, VPS, container, model-engine, memory, cache, and observability adapters driven by tested demand.
+- Stateful relocation only after adapters declare data ownership, transfer, integrity validation, and rollback behavior.
 
 ## Explicit Non-Goals
 

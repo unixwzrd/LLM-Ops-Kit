@@ -4,6 +4,9 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -15,7 +18,16 @@ except ModuleNotFoundError:  # pragma: no cover - direct source execution
 
 
 SUPPORTED_SCHEMA_VERSION = 1
-OBJECT_SECTIONS = {"runtime", "models", "agents", "profiles", "services", "deployment", "secrets"}
+OBJECT_SECTIONS = {
+    "runtime",
+    "models",
+    "agents",
+    "profiles",
+    "services",
+    "deployment",
+    "secrets",
+    "display",
+}
 
 
 class ConfigError(ValueError):
@@ -47,6 +59,7 @@ def default_config() -> dict[str, Any]:
         "profiles": {},
         "services": {},
         "deployment": {},
+        "display": {},
         "secrets": {
             "provider": "env",
         },
@@ -68,6 +81,11 @@ def validate_config(data: dict[str, Any]) -> None:
     provider = secrets.get("provider", "env") if isinstance(secrets, dict) else "env"
     if provider not in {"env", "none", "seckit"}:
         raise ConfigError(f"unsupported secrets.provider: {provider}")
+    display = data.get("display", {})
+    for field in ("organization", "site"):
+        value = display.get(field, "") if isinstance(display, dict) else ""
+        if not isinstance(value, str):
+            raise ConfigError(f"display.{field} must be a string")
 
 
 def load_config(path: Path | None = None, *, paths: LlmOpsPaths | None = None) -> LlmOpsConfig:
@@ -88,3 +106,20 @@ def load_config(path: Path | None = None, *, paths: LlmOpsPaths | None = None) -
     data = {**default_config(), **raw}
     validate_config(data)
     return LlmOpsConfig(path=config_path, data=data, exists=True)
+
+
+def update_display(path: Path, *, organization: str, site: str) -> Path:
+    """Transactionally update shared display metadata and preserve a backup."""
+
+    loaded = load_config(path)
+    data = dict(loaded.data)
+    data["display"] = {"organization": organization.strip(), "site": site.strip()}
+    validate_config(data)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    backup = path.with_name(f"{path.name}.backup-{time.strftime('%Y%m%dT%H%M%S')}")
+    if path.exists():
+        shutil.copy2(path, backup)
+    temporary = path.with_name(f".{path.name}.new-{os.getpid()}")
+    temporary.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    os.replace(temporary, path)
+    return backup

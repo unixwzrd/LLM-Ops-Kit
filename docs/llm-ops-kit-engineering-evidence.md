@@ -1,9 +1,10 @@
 # LLM-Ops-Kit Engineering Evidence
 
-- **Evidence date:** 2026-07-20
-- **Release candidate:** `0.9.0b5`
-- **Runtime artifact source commit:** `6989f97`
-- **Release archive SHA-256:** `8169e9c6f953a3036c1c5e30aa2868ac4e9ab704172c5074c184d71140076b8f`
+- **Evidence updated:** 2026-07-21
+- **Accepted runtime baseline:** `0.9.0b5`
+- **Current source candidate:** `0.9.0b6`
+- **Baseline runtime artifact source commit:** `6989f97`
+- **Baseline release archive SHA-256:** `8169e9c6f953a3036c1c5e30aa2868ac4e9ab704172c5074c184d71140076b8f`
 
 ## Purpose
 
@@ -17,7 +18,9 @@ The central correctness argument is that LLM-Ops-Kit separates desired state, pl
 
 The full two-host and protocol acceptance baseline was collected against `0.9.0b4`. It included exact-artifact installation on Apple Silicon and Intel macOS, rollback and return, bidirectional remote lifecycle operations, a dependency-ordered cold stop/start, model-proxy chat, 1,024-dimensional embeddings, cloned-voice TTS, agent services, dashboards, optimization services, and the Desktop tunnel.
 
-Release candidate `0.9.0b5` adds one narrow operational correction: CLI and Textual TUI status now use the same catalog-aware collector. A regression proves that a deliberately peer-unobservable Desktop tunnel is reported as `authority-only`, not `unreachable`. The runtime artifact precheck passed 120 tests. The current source suite passes 121 tests after adding an explicit exact-reversal assertion for full-stack start and stop plans. The exact checksummed artifact was installed on both live macOS hosts through coordinated update, the shared catalog and host-specific configuration hashes remained unchanged, and all observable services remained running.
+Accepted runtime baseline `0.9.0b5` added a shared catalog-aware status collector and was installed on both live macOS hosts through coordinated update. Its shared catalog and host-specific configuration hashes remained unchanged, and all observable services remained running.
+
+Source candidate `0.9.0b6` separates lifecycle, health, condition, and observability; separates toolkit and observed component versions; centralizes dependent-impact enforcement across CLI and TUI; and adds the high-contrast, keyboard-accessible, configurable TUI and bounded topology projection. Source regression passes, including a live-process/degraded-upstream proxy fixture, TUI dependent-stop protection, arrow navigation, topology rendering, local preference isolation, and exact reverse shutdown. Clean artifact and live-host evidence for `0.9.0b6` remain open and are not inferred from the `0.9.0b5` baseline.
 
 ## Topology And Trust Boundary
 
@@ -53,13 +56,14 @@ This arrangement is correct for a small trusted LAN control plane because it avo
 | Invariant | Enforcement mechanism | Acceptance evidence | Failure prevented |
 |---|---|---|---|
 | One desired-state authority | Canonical configuration is rendered into checksummed host revisions; remote edits are never merged | A deliberate remote edit produced `conflict`; reconciliation refused replacement; restoring the backup returned validation to clean | Split-brain configuration and silent loss of an operator change |
-| Plans precede mutations | CLI and TUI use the same planner and operation model; TUI displays the equivalent CLI command before confirmation | Headless TUI tests verify equivalent commands and cancellation without configuration mutation | A UI-specific orchestration path with different behavior |
+| Plans precede mutations | CLI and TUI use the same mutation preparation service; active-dependent impact and equivalent CLI commands are resolved before confirmation | Headless TUI tests verify equivalent commands, cancellation, and mandatory dependent-impact choice | A UI-specific orchestration path bypassing lifecycle safety |
 | Dependencies determine order | Start uses topological order; stop uses reverse topological order; cycles are rejected during validation | Unit tests verify dependency-first start and reverse stop; live cold-cycle acceptance stopped and started the complete stack in the expected order | Starting consumers before providers or stopping providers under active consumers |
 | Failure cleanup is bounded | The executor records components started by the current invocation and only stops that set on failure | Regression injects a failed start while a pre-existing service remains running | A failed operation taking down unrelated healthy services |
 | Releases are immutable and reversible | Each release is installed under a versioned directory; `current` and `previous` are atomically selected | Both hosts rolled back from `0.9.0b4` to `0.9.0b3` and returned; the `0.9.0b5` update retained `0.9.0b4` as `previous` | In-place partial upgrades and unrecoverable runtime replacement |
 | Coordinated update is all-or-rollback | All selected hosts preflight before apply; the same verified archive is staged; apply is sequential; changed hosts roll back if a later host fails | Tests inject second-host failure and verify rollback of the first; the live two-host update installed one archive and verified version/config/catalog identity | Silent mixed-version operation after a partial update |
 | Configuration selection is atomic | Accepted revisions are immutable and `current-config` selects one revision; replacement creates a backup | Reconciliation applied once, a second plan was a no-op, and manually divergent content was refused | Processes reading a half-written configuration tree |
-| Observation respects authorization | The observer catalog marks hosts as peer-observable or authority-only; status distinguishes policy from transport failure | Both trusted hosts produced the same component set; the local Desktop tunnel was `authority-only`; `0.9.0b5` made CLI and TUI use the same collector | False outage alarms for resources a peer is intentionally unable to inspect |
+| Observation separates lifecycle from readiness | Lifecycle, health, condition, and observability are independent fields; readiness failure cannot silently become stopped lifecycle | A proxy fixture and live read-only source probe report a running proxy with failed upstream health as `running/degraded/attention` | Restarting or stopping a live process because its dependency is temporarily unavailable |
+| Observation respects authorization | The observer catalog marks hosts as peer-observable or authority-only; status distinguishes policy from transport failure | Both trusted hosts produced the same component set; the local Desktop tunnel is `unknown/unknown/unobserved` with `authority-only` observability | False outage alarms for resources a peer is intentionally unable to inspect |
 | Product integrations do not invade the core | Versioned adapters own lifecycle details; planner, executor, CLI, and TUI consume the registry | Six built-in adapters passed discovery and conformance; a fixture adapter registers without core parser or planner changes | Vendor-specific conditionals spreading through orchestration code |
 | Runtime Python is application-owned | UV installs locked dependencies into each immutable release and wrappers use absolute release paths | Exact artifacts installed without Git, system Python, Conda activation, shell-profile sourcing, or a checkout on both macOS architectures | Launchd and SSH selecting an accidental or incompatible Python environment |
 | Proxies are observational, not mutating | Model-proxy forwards the original request and performs template rendering only in a diagnostic path | Clean-artifact proxy rendering and protocol acceptance passed while raw upstream behavior remained unchanged | Debug tooling changing production prompts |
@@ -169,22 +173,20 @@ Trusted controllers receive a complete secret-free catalog so each can produce t
 
 ## Status Semantics
 
-Status is not a single Boolean. The significant states are:
+Status is a structured observation rather than a Boolean or overloaded string:
 
-- `running`: the authorized observer reached the owning adapter and the adapter reported success.
-- `not-running`: the target was observable but inactive.
-- `unreachable`: an authorized observation route exists but transport failed.
-- `authority-only`: the catalog knows the component, but the current peer is intentionally not authorized or able to observe it.
-- `disabled`: canonical configuration excludes the component from lifecycle execution.
-- `error`: observation ran but failed outside the normal inactive or transport cases.
+- `lifecycle` reports `running`, `stopped`, `disabled`, or `unknown`.
+- `health` reports `healthy`, `degraded`, `unhealthy`, `unknown`, or `not-applicable`.
+- `condition` reports `ok`, `attention`, `error`, or `unobserved`.
+- `observability` reports `observed`, `authority-only`, or `unreachable`.
 
-This distinction prevents policy from being misreported as failure. In `0.9.0b5`, CLI and TUI call the same catalog-aware collection function. The regression specifically models a Desktop tunnel on a non-peer-observable host and requires `authority-only` in the shared payload.
+This distinction prevents readiness and policy from being misreported as lifecycle. A live proxy with an unavailable upstream is running but degraded. A Desktop tunnel that cannot be inspected from a peer is unknown and unobserved, not unreachable. The former `status` alias is absent from candidate JSON records.
 
 ## Acceptance Record
 
 | Evidence | Result |
 |---|---|
-| Source precheck | Runtime artifact passed 120 tests; current source passes 121 after adding the exact reverse-order regression |
+| Candidate source regression | `0.9.0b6` passes 129 source tests and the complete precheck in the application-owned Python environment; clean-artifact rerun remains required |
 | Clean distribution | Runtime-only archive built from clean commit `6989f97` |
 | Release identity | Version `0.9.0b5`; archive SHA-256 `8169e9c6f953a3036c1c5e30aa2868ac4e9ab704172c5074c184d71140076b8f` |
 | macOS packaging baseline | Exact-artifact normal and minimal installation previously passed on Apple Silicon and Intel isolated users |
@@ -195,6 +197,7 @@ This distinction prevents policy from being misreported as failure. In `0.9.0b5`
 | Protocol baseline | Chat, 1,024-dimensional embeddings, WAV TTS, gateway, dashboard, optimization proxy, and tunnel checks passed |
 | Reconciliation | Apply, idempotent no-op, conflict refusal, backup restoration, and clean manifest verification passed |
 | Failure injection | Partial-start cleanup, second-host update failure rollback, tampered artifact rejection, unreachable host handling, and invalid configuration refusal passed |
+| Candidate artifact and live acceptance | Pending for `0.9.0b6`; baseline results are not promoted to candidate evidence |
 
 ## Why The Evidence Is Sufficient
 
@@ -209,7 +212,7 @@ No single layer is treated as conclusive. The evidence chain is configuration id
 - `authority-only` does not prove that the component is running; it states that the current peer is not an authorized observer. The authority must inspect that component.
 - The current beta does not download models, install arbitrary engines, edit raw secrets, or autonomously remediate failures.
 - The Textual TUI is an on-demand client, not a daemon. A future WebUI must use the same control interfaces rather than create a second executor.
-- The `0.9.0b5` branch and artifact have not been pushed, tagged, or published. Explicit maintainer approval and green macOS CI remain release gates.
+- The `0.9.0b6` source candidate has not been committed, pushed, tagged, deployed, or published. Clean-artifact acceptance, explicit maintainer approval, and green macOS CI remain release gates.
 
 ## Reproduction Outline
 

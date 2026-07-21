@@ -1,7 +1,7 @@
 # Configuration
 
 **Created**: 2026-07-16
-**Updated**: 2026-07-20
+**Updated**: 2026-07-21
 
 Back: [Documentation index](./INDEX.md)
 
@@ -9,7 +9,9 @@ Back: [Documentation index](./INDEX.md)
 
 Configuration precedence is shipped runtime defaults, global JSON, referenced profile JSON, host snapshot values, then temporary CLI overrides. Process environment may provide secrets and documented emergency overrides, but no shell configuration file is read implicitly.
 
-`LLMOPS_CONFIG_HOME`, `LLMOPS_DATA_HOME`, `LLMOPS_STATE_HOME`, and `LLMOPS_CACHE_HOME` select alternate roots. Installed immutable releases use the role-filtered revision selected by `~/.local/llm-ops/current-config`, then fall back to the release's migration snapshot when no managed revision exists.
+`LLMOPS_CONFIG_HOME`, `LLMOPS_DATA_HOME`, `LLMOPS_STATE_HOME`, and `LLMOPS_CACHE_HOME` select alternate runtime roots. Installed immutable releases use the role-filtered revision selected by `~/.local/llm-ops/current-config`, then fall back to the release's migration snapshot when no managed revision exists.
+
+Mutating configuration commands use the authority's mutable `~/.config/llm-ops/` tree rather than editing `current-config`. Set `LLMOPS_AUTHORITY_CONFIG_HOME` only when the desired-state authority uses a different canonical root. Reconciliation publishes validated revisions after desired-state editing.
 
 Canonical configuration contains:
 
@@ -21,6 +23,26 @@ agents/*.json
 services/*.json
 stacks/*.json
 ```
+
+Optional organization and site labels are canonical display metadata:
+
+```json
+{
+  "display": {
+    "organization": "Example Organization",
+    "site": "Local AI Lab"
+  }
+}
+```
+
+Plan and apply them with:
+
+```bash
+llmops config display --organization "Example Organization" --site "Local AI Lab" --plan
+llmops config display --organization "Example Organization" --site "Local AI Lab" --apply --yes
+```
+
+Textual refresh and theme preferences live separately in `ui.json`. That host-local file is not included in desired-state hashes or reconciled snapshots.
 
 ## Inventory
 

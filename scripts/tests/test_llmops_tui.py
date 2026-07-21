@@ -12,8 +12,10 @@ from unittest import mock
 
 from llmops_kit import llmops_cli
 from llmops_kit.llmops_init import initialize
+from llmops_kit.llmops_executor import MutationPlan, Operation
 from llmops_kit.llmops_paths import resolve_paths
-from llmops_kit.llmops_tui import build_application, equivalent_command
+from llmops_kit.llmops_tui import CONDITION_STYLES, build_application, equivalent_command
+from llmops_kit.llmops_ui import UiPreferences, load_ui_preferences, save_ui_preferences
 
 
 class TuiContractTests(unittest.TestCase):
@@ -54,7 +56,20 @@ class TuiContractTests(unittest.TestCase):
             mock.patch.object(llmops_cli, "_current_snapshot_host", return_value="control-host"),
         ):
             payload = llmops_cli._collect_status(args)
-        self.assertEqual(payload[0]["status"], "authority-only")
+        self.assertEqual(payload[0]["observability"], "authority-only")
+        self.assertEqual(payload[0]["condition"], "unobserved")
+        self.assertEqual(payload[0]["lifecycle"], "unknown")
+
+    def test_condition_styles_are_distinct_and_textual(self) -> None:
+        self.assertEqual(set(CONDITION_STYLES), {"ok", "attention", "error", "unobserved"})
+        self.assertEqual(len(set(CONDITION_STYLES.values())), 4)
+
+    def test_local_preferences_do_not_require_canonical_configuration(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "ui.json"
+            expected = UiPreferences(auto_refresh=False, refresh_seconds=30)
+            save_ui_preferences(path, expected)
+            self.assertEqual(load_ui_preferences(path), expected)
 
 
 class TuiApplicationTests(unittest.IsolatedAsyncioTestCase):
@@ -82,6 +97,9 @@ class TuiApplicationTests(unittest.IsolatedAsyncioTestCase):
                     await pilot.pause(1)
                     table = app.query_one("#components")
                     self.assertEqual(table.row_count, 3)
+                    await pilot.press("down")
+                    await pilot.pause()
+                    self.assertIn(app.rows[1].qualified_id, str(app.query_one("#detail").render()))
                     await pilot.press("v")
                     await pilot.pause()
                     self.assertEqual(table.row_count, 1)
@@ -95,8 +113,49 @@ class TuiApplicationTests(unittest.IsolatedAsyncioTestCase):
                     )
                     await pilot.click("#cancel")
                     await pilot.pause()
+                    await pilot.press("t")
+                    await pilot.pause()
+                    self.assertIsNotNone(app.screen.query_one("#topology-tree"))
+                    await pilot.click("#close")
+                    await pilot.pause()
+                    await pilot.press("?")
+                    await pilot.pause()
+                    self.assertIsNotNone(app.screen.query_one("#help-dialog"))
+                    await pilot.click("#close")
+                    await pilot.pause()
                 collect.assert_called()
             self.assertEqual((paths.stacks_dir / "starter.json").read_bytes(), original)
+
+    async def test_stop_requires_explicit_dependent_policy(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            paths = resolve_paths(
+                {
+                    "HOME": str(root),
+                    "LLMOPS_CONFIG_HOME": str(root / "config"),
+                    "LLMOPS_DATA_HOME": str(root / "data"),
+                    "LLMOPS_STATE_HOME": str(root / "state"),
+                    "LLMOPS_CACHE_HOME": str(root / "cache"),
+                }
+            )
+            initialize(paths, preset="single-host", user="operator")
+            stack_path = paths.stacks_dir / "starter.json"
+            stack = json.loads(stack_path.read_text(encoding="utf-8"))
+            for item in stack["components"]:
+                item["enabled"] = True
+            stack_path.write_text(json.dumps(stack, indent=2) + "\n", encoding="utf-8")
+            app = build_application(str(paths.config_home), None)
+            target = app.topology.resolve_component("chat")
+            dependent = app.topology.resolve_component("model-proxy")
+            prepared = MutationPlan((Operation(target, "stop"),), (dependent,))
+            with mock.patch("llmops_kit.llmops_tui.Executor.prepare_component", return_value=prepared):
+                async with app.run_test(size=(120, 40)) as pilot:
+                    await pilot.pause(1)
+                    await pilot.press("x")
+                    await pilot.pause()
+                    self.assertIsNotNone(app.screen.query_one("#impact-dialog"))
+                    await pilot.click("#cancel")
+                    await pilot.pause()
 
 
 if __name__ == "__main__":

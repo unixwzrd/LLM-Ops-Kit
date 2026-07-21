@@ -16,11 +16,11 @@ from llmops_kit import __version__, entrypoint, llmops_cli
 from llmops_kit.llmops_cli import _host_command as host_command
 from llmops_kit.llmops_cli import _remote_status as remote_status
 from llmops_kit.llmops_cli import _status_components as status_components
-from llmops_kit.llmops_cli import _status_state as status_state
+from llmops_kit.llmops_cli import _condition as condition
 from llmops_kit.llmops_cli import _validate_host_operation as validate_host_operation
 from llmops_kit.llmops_cli import stack_operations
 from llmops_kit.llmops_config import load_config
-from llmops_kit.llmops_drivers import CommandResult, DriverError, _launchd_command
+from llmops_kit.llmops_drivers import CommandResult, ComponentObservation, ComponentRunner, DriverError, _launchd_command
 from llmops_kit.llmops_executor import Executor, ExecutionError, Operation, component_plan, stack_plan
 from llmops_kit.llmops_inventory import InventoryError, load_inventory
 from llmops_kit.llmops_paths import resolve_paths
@@ -33,6 +33,7 @@ from llmops_kit.llmops_topology import (
     validate_topology,
     write_host_snapshot,
 )
+from llmops_kit.llmops_topology_view import project_topology, render_dot, render_mermaid
 
 
 class FakeRunner:
@@ -47,6 +48,9 @@ class FakeRunner:
     def status(self, component):
         ok = component.qualified_id in self.running
         return CommandResult(component.qualified_id, "status", "fake", 0 if ok else 1, "", "")
+
+    def is_running(self, component):
+        return component.qualified_id in self.running
 
     def run(self, component, action):
         self.calls.append((component.qualified_id, action))
@@ -293,12 +297,65 @@ class TopologyTests(ControlFixture):
         self.assertEqual(len(status_components("sample", include_disabled=False)), 4)
         self.assertEqual(len(status_components("modelctl", include_disabled=False)), 2)
 
-    def test_status_state_distinguishes_stopped_unreachable_and_error(self) -> None:
-        self.assertEqual(status_state(enabled=True, returncode=0), "running")
-        self.assertEqual(status_state(enabled=True, returncode=1), "not-running")
-        self.assertEqual(status_state(enabled=True, returncode=255), "unreachable")
-        self.assertEqual(status_state(enabled=True, returncode=None, error="bad profile"), "error")
-        self.assertEqual(status_state(enabled=False, returncode=None), "disabled")
+    def test_condition_preserves_lifecycle_health_and_observability(self) -> None:
+        self.assertEqual(condition(lifecycle="running", health="healthy", observability="observed", drift="none"), "ok")
+        self.assertEqual(condition(lifecycle="running", health="degraded", observability="observed", drift="none"), "attention")
+        self.assertEqual(condition(lifecycle="stopped", health="not-applicable", observability="observed", drift="none"), "error")
+        self.assertEqual(condition(lifecycle="unknown", health="unknown", observability="authority-only", drift="unknown"), "unobserved")
+        self.assertEqual(condition(lifecycle="unknown", health="unknown", observability="unreachable", drift="unknown"), "error")
+
+    def test_proxy_lifecycle_remains_running_when_health_status_fails(self) -> None:
+        proxy = self.topology.resolve_component("proxy")
+        result = CommandResult(
+            proxy.qualified_id,
+            "status",
+            "model-proxy status",
+            1,
+            "model-proxy: running pid=123\nhealth=down",
+            "",
+        )
+        self.assertEqual(ComponentRunner.lifecycle_from_result(proxy, result), "running")
+
+    def test_status_record_has_no_legacy_status_alias(self) -> None:
+        proxy = self.topology.resolve_component("proxy")
+        result = CommandResult(
+            proxy.qualified_id,
+            "status",
+            "/tmp/releases/0.9.0b4/bin/model-proxy status",
+            1,
+            "model-proxy: running pid=123\nhealth=down",
+            "",
+        )
+        observation = ComponentObservation("running", "degraded", "observed", result, result)
+        args = type(
+            "Args",
+            (),
+            {
+                "selector": "proxy",
+                "all": True,
+                "verbose": False,
+                "workers": 1,
+                "status_host": None,
+                "local": True,
+            },
+        )()
+        llmops_cli.CURRENT_TOPOLOGY = self.topology
+        with mock.patch("llmops_kit.llmops_cli.ComponentRunner.inspect", return_value=observation):
+            payload = llmops_cli._collect_status(args)
+        self.assertNotIn("status", payload[0])
+        self.assertEqual(payload[0]["lifecycle"], "running")
+        self.assertEqual(payload[0]["health"], "degraded")
+        self.assertEqual(payload[0]["condition"], "attention")
+        self.assertEqual(payload[0]["component_version"], "0.9.0b4")
+
+    def test_topology_projection_is_bounded_to_immediate_relationships(self) -> None:
+        projection = project_topology(self.topology, component="proxy")
+        self.assertEqual(
+            {item["id"] for item in projection["components"]},
+            {"sample:chat", "sample:proxy", "sample:agent"},
+        )
+        self.assertIn("flowchart LR", render_mermaid(projection))
+        self.assertIn('"sample:chat" -> "sample:proxy"', render_dot(projection))
 
     def test_topological_order_is_dependency_first(self) -> None:
         order = [item.component_id for item in topological_order(self.topology.stacks["sample"])]

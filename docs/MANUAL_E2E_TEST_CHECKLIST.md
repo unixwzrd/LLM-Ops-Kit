@@ -1,5 +1,8 @@
 # Manual End-to-End Acceptance
 
+**Created**: 2026-07-17
+**Updated**: 2026-07-21
+
 Back: [Documentation index](./INDEX.md)
 
 Record artifact version, SHA-256, host, architecture, timestamp, result, and evidence path for every section. Do not carry proof-of-concept or earlier release-candidate checks forward without rerunning them against the final artifact.
@@ -25,7 +28,9 @@ Record artifact version, SHA-256, host, architecture, timestamp, result, and evi
 - [ ] Exercise interactive saved-model discovery and selective import.
 - [ ] Repeat initialization non-interactively with explicit flags and compare canonical output.
 - [ ] Confirm imported secret literals become references and source defaults remain unchanged.
-- [ ] Run `doctor --probe`, `status --all --json`, component/stack plans, and TUI startup.
+- [ ] Run `doctor --probe`, `status --all --json`, component/stack plans, topology table/JSON/Mermaid output, and TUI startup.
+- [ ] Confirm a running component with failed readiness reports running lifecycle and degraded health, while an intentionally unobservable component reports authority-only observability.
+- [ ] Confirm arrow selection updates TUI details, automatic refresh pauses during dialogs, help/settings open, and active-dependent stop requires cascade or force.
 
 ## Minimal Install
 

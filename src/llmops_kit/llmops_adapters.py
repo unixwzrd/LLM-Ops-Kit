@@ -5,7 +5,7 @@ from __future__ import annotations
 import importlib.metadata
 import platform
 from dataclasses import asdict, dataclass, field
-from typing import Any, Callable, Iterable, Optional
+from typing import Any, Callable, Iterable, Optional, Protocol
 
 
 API_VERSION = "1.0"
@@ -25,6 +25,47 @@ class AdapterError(RuntimeError):
 
 
 @dataclass(frozen=True)
+class AdapterUpdateCapabilities:
+    """Optional product-native update operations implemented by an adapter."""
+
+    check: bool = True
+    plan: bool = False
+    apply: bool = False
+    backup: bool = False
+    rollback: bool = False
+    post_update_health: bool = False
+
+
+@dataclass(frozen=True)
+class AdapterRelocationCapabilities:
+    """Optional validated placement operations implemented by an adapter."""
+
+    stateless: bool = False
+    preflight: bool = False
+    cutover: bool = False
+    rollback: bool = False
+
+
+class AdapterUpdateProvider(Protocol):
+    """Execution boundary for product-native component update providers."""
+
+    def installed_version(self, component: Any) -> str:
+        """Return the installed product version."""
+
+    def available_version(self, component: Any) -> dict[str, Any]:
+        """Return available version, security, compatibility, and risk metadata."""
+
+    def plan_update(self, component: Any) -> list[dict[str, Any]]:
+        """Return a non-mutating native update plan."""
+
+    def apply_update(self, component: Any) -> dict[str, Any]:
+        """Apply the native update and post-update validation."""
+
+    def rollback_update(self, component: Any) -> dict[str, Any]:
+        """Restore the adapter-owned pre-update state."""
+
+
+@dataclass(frozen=True)
 class AdapterManifest:
     """Declarative capabilities and requirements for one adapter."""
 
@@ -38,6 +79,8 @@ class AdapterManifest:
     required_executables: tuple[str, ...] = ()
     transports: tuple[str, ...] = ("local", "ssh")
     schema: dict[str, Any] = field(default_factory=dict)
+    update: Optional[AdapterUpdateCapabilities] = None
+    relocation: Optional[AdapterRelocationCapabilities] = None
 
     def as_dict(self) -> dict[str, Any]:
         """Return a stable JSON-compatible representation."""

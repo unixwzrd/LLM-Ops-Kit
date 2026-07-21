@@ -55,6 +55,20 @@ class Operation:
         }
 
 
+@dataclass(frozen=True)
+class MutationPlan:
+    """A component plan plus currently active dependent impact."""
+
+    operations: tuple[Operation, ...]
+    active_dependents: tuple[Component, ...] = ()
+
+    @property
+    def requires_force(self) -> bool:
+        """Return whether a target-only stop would disrupt dependents."""
+
+        return bool(self.active_dependents)
+
+
 def component_plan(
     topology: Topology,
     component: Component,
@@ -140,7 +154,53 @@ class Executor:
         stack = self.topology.stacks[component.stack]
         selected = dependent_closure(stack, component) - {component.qualified_id}
         ordered = topological_order(stack, subset=selected)
-        return [item for item in ordered if self.runner.status(item).ok]
+        return [item for item in ordered if self.runner.is_running(item)]
+
+    def prepare_component(
+        self,
+        component: Component,
+        action: str,
+        *,
+        cascade: bool = False,
+        no_deps: bool = False,
+    ) -> MutationPlan:
+        """Build a component plan and calculate its current operational impact."""
+
+        dependents: tuple[Component, ...] = ()
+        if action == "stop" and not cascade:
+            dependents = tuple(self.active_dependents(component))
+        operations = component_plan(
+            self.topology,
+            component,
+            action,
+            cascade=cascade,
+            no_deps=no_deps,
+        )
+        return MutationPlan(tuple(operations), dependents)
+
+    def execute_component(
+        self,
+        component: Component,
+        action: str,
+        *,
+        cascade: bool = False,
+        no_deps: bool = False,
+        force: bool = False,
+    ) -> list[CommandResult]:
+        """Safely prepare and execute a component lifecycle mutation."""
+
+        prepared = self.prepare_component(
+            component,
+            action,
+            cascade=cascade,
+            no_deps=no_deps,
+        )
+        if prepared.requires_force and not force:
+            names = ", ".join(item.qualified_id for item in prepared.active_dependents)
+            raise ExecutionError(
+                f"{component.qualified_id}: active dependents: {names}; use --force or --cascade"
+            )
+        return self.execute(list(prepared.operations))
 
     def execute(self, operations: list[Operation]) -> list[CommandResult]:
         """Execute a plan, rolling back only newly started components on failure."""
@@ -154,7 +214,7 @@ class Executor:
                     component = operation.component
                     action = operation.action
                     if action == "start":
-                        if self.runner.status(component).ok:
+                        if self.runner.is_running(component):
                             continue
                         result = self.runner.run(component, "start")
                         results.append(result)
@@ -173,7 +233,7 @@ class Executor:
                             )
                         self.runner.wait_healthy(component)
                     elif action == "stop":
-                        if not self.runner.status(component).ok:
+                        if not self.runner.is_running(component):
                             continue
                         result = self.runner.run(component, "stop")
                         results.append(result)

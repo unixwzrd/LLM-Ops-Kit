@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shlex
 import subprocess
 import time
@@ -52,6 +53,23 @@ class CommandResult:
             "stdout": self.stdout,
             "stderr": self.stderr,
         }
+
+
+@dataclass(frozen=True)
+class ComponentObservation:
+    """Independent lifecycle and readiness observation for one component."""
+
+    lifecycle: str
+    health: str
+    observability: str
+    lifecycle_result: CommandResult
+    health_result: Optional[CommandResult] = None
+
+    @property
+    def running(self) -> bool:
+        """Return whether the managed process or service is running."""
+
+        return self.lifecycle == "running"
 
 
 def _remote_root(path: str) -> str:
@@ -190,6 +208,85 @@ class ComponentRunner:
 
         return self.run(component, "status")
 
+    @staticmethod
+    def lifecycle_from_result(component: Component, result: CommandResult) -> str:
+        """Interpret a driver status command as lifecycle, not readiness."""
+
+        if result.returncode == 255:
+            return "unknown"
+        output = f"{result.stdout}\n{result.stderr}".casefold()
+        if component.driver in {"model-proxy", "tts-bridge", "modelctl"}:
+            if re.search(r"(^|\n)[^\n]*:\s+running(?:\s|$)", output):
+                return "running"
+            if re.search(r"(^|\n)[^\n]*:\s+(?:not running|stopped)(?:\s|$)", output):
+                return "stopped"
+        return "running" if result.ok else "stopped"
+
+    def is_running(self, component: Component) -> bool:
+        """Return lifecycle state without treating failed readiness as stopped."""
+
+        return self.lifecycle_from_result(component, self.status(component)) == "running"
+
+    def probe_health(
+        self,
+        component: Component,
+        *,
+        driver_result: Optional[CommandResult] = None,
+    ) -> Optional[CommandResult]:
+        """Run one configured readiness probe without retries."""
+
+        health = component.health
+        if health.kind == "none":
+            return None
+        if health.kind == "driver":
+            return driver_result or self.status(component)
+        host = self.topology.hosts[component.host]
+        if health.kind == "http":
+            script = f"curl -fsS --max-time 3 {shlex.quote(health.target)} >/dev/null"
+        else:
+            target_host, separator, target_port = health.target.rpartition(":")
+            if not separator or not target_host or not target_port.isdigit():
+                raise DriverError(
+                    f"{component.qualified_id}: TCP health target must be host:port"
+                )
+            script = f"nc -z -w 3 {shlex.quote(target_host)} {int(target_port)}"
+        command = (
+            ["/bin/sh", "-c", script]
+            if host.transport == "local"
+            else host.ssh_base() + [script]
+        )
+        completed = subprocess.run(command, capture_output=True, text=True, check=False)
+        return CommandResult(
+            component.qualified_id,
+            "health",
+            " ".join(shlex.quote(token) for token in command),
+            completed.returncode,
+            completed.stdout.strip(),
+            completed.stderr.strip(),
+        )
+
+    def inspect(self, component: Component) -> ComponentObservation:
+        """Observe lifecycle and health as separate component properties."""
+
+        result = self.status(component)
+        lifecycle = self.lifecycle_from_result(component, result)
+        observability = "unreachable" if result.returncode == 255 else "observed"
+        if lifecycle != "running":
+            health = "unknown" if lifecycle == "unknown" else "not-applicable"
+            return ComponentObservation(lifecycle, health, observability, result)
+        health_result = self.probe_health(component, driver_result=result)
+        if health_result is None:
+            health = "not-applicable"
+        else:
+            health = "healthy" if health_result.ok else "degraded"
+        return ComponentObservation(
+            lifecycle,
+            health,
+            observability,
+            result,
+            health_result,
+        )
+
     def wait_healthy(self, component: Component) -> CommandResult:
         """Wait for the configured readiness check to pass."""
 
@@ -199,33 +296,7 @@ class ComponentRunner:
         deadline = time.monotonic() + health.timeout_seconds
         last: Optional[CommandResult] = None
         while time.monotonic() < deadline:
-            if health.kind == "driver":
-                last = self.status(component)
-            else:
-                host = self.topology.hosts[component.host]
-                if health.kind == "http":
-                    script = f"curl -fsS --max-time 3 {shlex.quote(health.target)} >/dev/null"
-                else:
-                    target_host, separator, target_port = health.target.rpartition(":")
-                    if not separator or not target_host or not target_port.isdigit():
-                        raise DriverError(
-                            f"{component.qualified_id}: TCP health target must be host:port"
-                        )
-                    script = f"nc -z -w 3 {shlex.quote(target_host)} {int(target_port)}"
-                command = (
-                    ["/bin/sh", "-c", script]
-                    if host.transport == "local"
-                    else host.ssh_base() + [script]
-                )
-                completed = subprocess.run(command, capture_output=True, text=True, check=False)
-                last = CommandResult(
-                    component.qualified_id,
-                    "health",
-                    " ".join(shlex.quote(token) for token in command),
-                    completed.returncode,
-                    completed.stdout.strip(),
-                    completed.stderr.strip(),
-                )
+            last = self.probe_health(component)
             if last.ok:
                 return last
             time.sleep(1.0)

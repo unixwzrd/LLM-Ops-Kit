@@ -1,7 +1,7 @@
 # Operator Checklist
 
 **Created**: 2026-07-20
-**Updated**: 2026-07-20
+**Updated**: 2026-07-21
 
 Back: [Documentation index](./INDEX.md)
 
@@ -15,7 +15,7 @@ Back: [Documentation index](./INDEX.md)
 
 ## Operate
 
-- [ ] Run `llmops status` and review every `unreachable`, `error`, and `not-running` result.
+- [ ] Run `llmops status` and review every `attention` or `error` condition; inspect lifecycle, health, and observability before acting.
 - [ ] Treat `authority-only` as unobserved, not stopped; inspect it from the owning account.
 - [ ] Use `component plan` before first-time lifecycle changes.
 - [ ] Confirm the equivalent command shown by `llmops tui` before mutation.

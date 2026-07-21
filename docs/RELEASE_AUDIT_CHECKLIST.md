@@ -1,5 +1,8 @@
 # Release Audit
 
+**Created**: 2026-07-18
+**Updated**: 2026-07-21
+
 Back: [Documentation index](./INDEX.md)
 
 ## Implemented
@@ -16,6 +19,9 @@ Back: [Documentation index](./INDEX.md)
 
 ## Required Before Approval
 
+- [ ] Confirm `0.9.0b6` status records contain lifecycle, health, condition, observability, component version, and toolkit version without the removed legacy status alias on both trusted hosts.
+- [ ] Confirm CLI and TUI both refuse a target-only stop with active dependents unless cascade or force is explicitly selected.
+- [ ] Pass keyboard navigation, high-contrast rendering, help, settings, branding, automatic-refresh pause, and bounded topology acceptance in the final Textual artifact.
 - [ ] Build the final documentation-and-test revision from a clean committed `git archive HEAD`, not a dirty working-tree fixture. The `0.9.0b5` runtime artifact passed this gate before the evidence-document corrections.
 - [ ] Pass final normal/minimal install, repair, upgrade, rollback, uninstall, purge, migration, TUI, remote update, reconciliation, and protocol acceptance.
 - [x] Confirm all Markdown links, command examples, and public paths resolve.

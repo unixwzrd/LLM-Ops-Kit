@@ -8,6 +8,7 @@ import concurrent.futures
 import hashlib
 import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -23,28 +24,30 @@ except ImportError:
 
 try:
     from .llmops_adapters import AdapterError, discover_adapters, validate_adapters
-    from .llmops_config import ConfigError, load_config
+    from .llmops_config import ConfigError, load_config, update_display
     from .llmops_config_sync import ReconcileError, apply_snapshot, reconcile_plan, snapshot_hash
     from .llmops_drivers import ComponentRunner, DriverError, build_component_command
     from .llmops_executor import ExecutionError, Executor, component_plan, stack_plan
     from .llmops_inventory import InventoryError, load_inventory
     from .llmops_init import InitError, ModelCandidate, discover_model_profiles, initialize
     from .llmops_migration import MigrationError, migrate
-    from .llmops_paths import LlmOpsPaths, resolve_paths
+    from .llmops_paths import LlmOpsPaths, resolve_authority_config_home, resolve_paths
     from .llmops_probe import probe_topology
-    from .llmops_topology import Topology, TopologyError, load_stacks, validate_topology
+    from .llmops_topology import Topology, TopologyError, load_profile, load_stacks, validate_topology
+    from .llmops_topology_view import project_topology, render_dot, render_mermaid, render_table
 except ImportError:  # Direct source execution.
     from llmops_adapters import AdapterError, discover_adapters, validate_adapters
-    from llmops_config import ConfigError, load_config
+    from llmops_config import ConfigError, load_config, update_display
     from llmops_config_sync import ReconcileError, apply_snapshot, reconcile_plan, snapshot_hash
     from llmops_drivers import ComponentRunner, DriverError, build_component_command
     from llmops_executor import ExecutionError, Executor, component_plan, stack_plan
     from llmops_inventory import InventoryError, load_inventory
     from llmops_init import InitError, ModelCandidate, discover_model_profiles, initialize
     from llmops_migration import MigrationError, migrate
-    from llmops_paths import LlmOpsPaths, resolve_paths
+    from llmops_paths import LlmOpsPaths, resolve_authority_config_home, resolve_paths
     from llmops_probe import probe_topology
-    from llmops_topology import Topology, TopologyError, load_stacks, validate_topology
+    from llmops_topology import Topology, TopologyError, load_profile, load_stacks, validate_topology
+    from llmops_topology_view import project_topology, render_dot, render_mermaid, render_table
 
 
 PUBLIC_COMMANDS = {
@@ -52,6 +55,7 @@ PUBLIC_COMMANDS = {
     "host": "List trusted hosts or run a restricted operation on a peer",
     "component": "Inspect or operate one independently managed component",
     "stack": "Inspect or operate a dependency group of components",
+    "topology": "Show bounded host and dependency relationships",
     "adapter": "List and validate installed lifecycle adapters",
     "plan": "Preview dependency-ordered operations",
     "doctor": "Validate configuration and probe hosts and dependencies",
@@ -91,6 +95,15 @@ def build_topology(*, config_home: Optional[str], inventory: Optional[str]) -> T
         paths=paths,
         config=config,
     )
+
+
+def desired_topology(config_home: Optional[str] = None) -> Topology:
+    """Load mutable authority configuration, falling back to the active topology."""
+
+    root = Path(config_home).expanduser() if config_home else resolve_authority_config_home()
+    if not (root / "config.json").is_file() or not (root / "inventory.json").is_file():
+        return CURRENT_TOPOLOGY
+    return build_topology(config_home=str(root), inventory=str(root / "inventory.json"))
 
 
 def emit(payload: Any, *, json_output: bool) -> None:
@@ -169,6 +182,60 @@ def cmd_config_hash(args: argparse.Namespace) -> int:
     }
     emit(payload, json_output=args.json)
     return 0 if valid else 2
+
+
+def cmd_config_display(args: argparse.Namespace) -> int:
+    """Plan or transactionally update shared operator display metadata."""
+
+    desired = desired_topology(getattr(args, "config_home", None))
+    current = desired.config.data.get("display", {})
+    organization = args.organization if args.organization is not None else current.get("organization", "")
+    site = args.site if args.site is not None else current.get("site", "")
+    command = ["llmops", "config", "display", "--organization", organization, "--site", site]
+    payload = {
+        "organization": organization,
+        "site": site,
+        "command": command + (["--apply", "--yes"] if args.apply else ["--plan"]),
+        "applied": False,
+    }
+    if not args.apply:
+        emit(payload, json_output=args.json)
+        return 0
+    if not args.yes:
+        if args.json or not sys.stdin.isatty():
+            raise TopologyError("config display --apply requires --yes in non-interactive mode")
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        if input("Apply display configuration? [y/N]: ").strip().lower() not in {"y", "yes"}:
+            return 0
+    backup = update_display(
+        desired.paths.config_file,
+        organization=organization,
+        site=site,
+    )
+    payload.update({"applied": True, "backup": str(backup) if backup.exists() else ""})
+    emit(payload, json_output=args.json)
+    return 0
+
+
+def cmd_topology_show(args: argparse.Namespace) -> int:
+    """Render a bounded view of hosts, components, and dependencies."""
+
+    projection = project_topology(
+        CURRENT_TOPOLOGY,
+        component=args.component,
+        host=args.topology_host,
+        stack=args.stack,
+        adapter=args.adapter,
+    )
+    if args.format == "json" or args.json:
+        emit(projection, json_output=True)
+    elif args.format == "mermaid":
+        print(render_mermaid(projection))
+    elif args.format == "dot":
+        print(render_dot(projection))
+    else:
+        print(render_table(projection))
+    return 0
 
 
 def cmd_config_reconcile(args: argparse.Namespace) -> int:
@@ -400,9 +467,22 @@ def cmd_component_plan(args: argparse.Namespace) -> int:
 
 def cmd_component_status(args: argparse.Namespace) -> int:
     component = CURRENT_TOPOLOGY.resolve_component(args.component)
-    result = ComponentRunner(CURRENT_TOPOLOGY).run(component, args.action)
-    emit(result.as_dict(), json_output=args.json)
-    return 0 if result.ok else 1
+    if args.action == "logs":
+        result = ComponentRunner(CURRENT_TOPOLOGY).run(component, args.action)
+        emit(result.as_dict(), json_output=args.json)
+        return 0 if result.ok else 1
+    status_args = argparse.Namespace(
+        selector=component.qualified_id,
+        all=True,
+        verbose=True,
+        workers=1,
+        host_timeout=20,
+        status_host=None,
+        local=True,
+    )
+    payload = _collect_status(status_args)
+    emit(payload[0], json_output=args.json)
+    return _status_exit_code(payload)
 
 
 def _component_changes(args: argparse.Namespace) -> dict[str, Any]:
@@ -420,7 +500,13 @@ def _component_changes(args: argparse.Namespace) -> dict[str, Any]:
     return changes
 
 
-def configure_component(component: Any, changes: dict[str, Any], *, apply: bool) -> dict[str, Any]:
+def configure_component(
+    component: Any,
+    changes: dict[str, Any],
+    *,
+    apply: bool,
+    topology: Optional[Topology] = None,
+) -> dict[str, Any]:
     """Plan or transactionally apply supported component configuration fields."""
 
     if not changes:
@@ -429,7 +515,8 @@ def configure_component(component: Any, changes: dict[str, Any], *, apply: bool)
         raise TopologyError("ownership must be managed or external")
     if "health_timeout" in changes and not 1 <= changes["health_timeout"] <= 3600:
         raise TopologyError("health timeout must be 1..3600 seconds")
-    stack = CURRENT_TOPOLOGY.stacks[component.stack]
+    active_topology = topology or CURRENT_TOPOLOGY
+    stack = active_topology.stacks[component.stack]
     command = ["llmops", "component", "configure", component.qualified_id]
     for key in ("host", "profile", "ownership"):
         if key in changes:
@@ -465,7 +552,7 @@ def configure_component(component: Any, changes: dict[str, Any], *, apply: bool)
     temporary.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     os.replace(temporary, stack.path)
     try:
-        refreshed = build_topology(config_home=str(CURRENT_TOPOLOGY.paths.config_home), inventory=str(CURRENT_TOPOLOGY.paths.inventory_file))
+        refreshed = build_topology(config_home=str(active_topology.paths.config_home), inventory=str(active_topology.paths.inventory_file))
         errors = validate_topology(refreshed)
         if errors:
             raise TopologyError("invalid component update:\n" + "\n".join(errors))
@@ -478,9 +565,10 @@ def configure_component(component: Any, changes: dict[str, Any], *, apply: bool)
 
 
 def cmd_component_configure(args: argparse.Namespace) -> int:
-    component = CURRENT_TOPOLOGY.resolve_component(args.component)
+    topology = desired_topology(getattr(args, "config_home", None))
+    component = topology.resolve_component(args.component)
     changes = _component_changes(args)
-    payload = configure_component(component, changes, apply=False)
+    payload = configure_component(component, changes, apply=False, topology=topology)
     if not args.apply:
         emit(payload, json_output=args.json)
         return 0
@@ -490,7 +578,7 @@ def cmd_component_configure(args: argparse.Namespace) -> int:
         print(json.dumps(payload, indent=2, sort_keys=True))
         if input("Apply this component configuration? [y/N]: ").strip().lower() not in {"y", "yes"}:
             return 0
-    emit(configure_component(component, changes, apply=True), json_output=args.json)
+    emit(configure_component(component, changes, apply=True, topology=topology), json_output=args.json)
     return 0
 
 
@@ -529,7 +617,17 @@ def _status_components(selector: Optional[str], *, include_disabled: bool) -> li
 
 
 def _human_status(payload: list[dict[str, Any]]) -> None:
-    columns = ("status", "component", "host", "driver", "profile", "version", "drift")
+    columns = (
+        "condition",
+        "lifecycle",
+        "health",
+        "component",
+        "host",
+        "driver",
+        "component_version",
+        "toolkit_version",
+        "drift",
+    )
     widths = {
         column: max(len(column.upper()), *(len(str(item.get(column, ""))) for item in payload))
         for column in columns
@@ -540,20 +638,43 @@ def _human_status(payload: list[dict[str, Any]]) -> None:
         print("  ".join(str(item.get(column, "")).ljust(widths[column]) for column in columns))
     counts: dict[str, int] = {}
     for item in payload:
-        counts[item["status"]] = counts.get(item["status"], 0) + 1
+        counts[item["condition"]] = counts.get(item["condition"], 0) + 1
     print("\n" + "  ".join(f"{name}={counts[name]}" for name in sorted(counts)))
 
 
-def _status_state(*, enabled: bool, returncode: Optional[int], error: str = "") -> str:
-    if not enabled:
-        return "disabled"
-    if error:
+def _condition(*, lifecycle: str, health: str, observability: str, drift: str) -> str:
+    """Derive an operator condition without hiding lifecycle or health."""
+
+    if observability == "authority-only":
+        return "unobserved"
+    if observability == "unreachable" or lifecycle == "unknown":
         return "error"
-    if returncode == 0:
-        return "running"
-    if returncode == 255:
-        return "unreachable"
-    return "not-running"
+    if lifecycle == "disabled":
+        return "ok"
+    if lifecycle == "stopped":
+        return "error"
+    if health in {"degraded", "unhealthy"} or drift not in {"", "none"}:
+        return "attention"
+    return "ok"
+
+
+def _component_version(component: Any, result: Any) -> str:
+    """Return the observed component release or an adapter-provided profile version."""
+
+    text = "\n".join(
+        str(value)
+        for value in (result.command, result.stdout, result.stderr)
+        if value
+    )
+    matches = re.findall(r"(?:^|/)(?:releases|versions)/([^/\s'\"]+)", text)
+    if matches:
+        return matches[-1]
+    try:
+        profile = load_profile(CURRENT_TOPOLOGY.paths, component)
+    except TopologyError:
+        return ""
+    value = profile.get("version", "")
+    return str(value) if isinstance(value, (str, int, float)) else ""
 
 
 def _inspect_status(components: list[Any], args: argparse.Namespace) -> list[dict[str, Any]]:
@@ -562,7 +683,7 @@ def _inspect_status(components: list[Any], args: argparse.Namespace) -> list[dic
     workers = min(max(1, args.workers), max(1, len(enabled)))
     def inspect(component: Any) -> tuple[str, Any, str]:
         try:
-            return component.qualified_id, runner.status(component), ""
+            return component.qualified_id, runner.inspect(component), ""
         except (DriverError, OSError) as exc:
             return component.qualified_id, None, str(exc)
 
@@ -573,20 +694,40 @@ def _inspect_status(components: list[Any], args: argparse.Namespace) -> list[dic
     metadata = _runtime_metadata()
     include_detail = args.verbose or (bool(args.selector) and len(components) == 1)
     for component in components:
-        result, error = by_component.get(component.qualified_id, (None, ""))
-        status = _status_state(
-            enabled=component.enabled,
-            returncode=None if result is None else result.returncode,
-            error=error,
+        observation, error = by_component.get(component.qualified_id, (None, ""))
+        if not component.enabled:
+            lifecycle = "disabled"
+            health = "not-applicable"
+            observability = "observed"
+            result = None
+        elif observation is None:
+            lifecycle = "unknown"
+            health = "unknown"
+            observability = "unreachable" if "timed out" in error.casefold() else "observed"
+            result = None
+        else:
+            lifecycle = observation.lifecycle
+            health = observation.health
+            observability = observation.observability
+            result = observation.lifecycle_result
+        condition = _condition(
+            lifecycle=lifecycle,
+            health=health,
+            observability=observability,
+            drift=metadata["drift"],
         )
         item = {
-            "status": status,
+            "lifecycle": lifecycle,
+            "health": health,
+            "condition": condition,
+            "observability": observability,
             "component": component.qualified_id,
             "host": component.host,
             "driver": component.driver,
             "profile": component.profile,
             "tags": list(component.tags),
             "returncode": None if result is None else result.returncode,
+            "component_version": "" if result is None else _component_version(component, result),
             **metadata,
         }
         if error:
@@ -627,7 +768,7 @@ def _runtime_metadata() -> dict[str, Any]:
     except OSError:
         last_sync = ""
     return {
-        "version": version,
+        "toolkit_version": version,
         "catalog_hash": catalog_hash,
         "config_hash": config_hash,
         "authority": authority,
@@ -677,6 +818,7 @@ def _validate_host_operation(operation: list[str]) -> None:
         "doctor": None,
         "component": {"list", "plan", "start", "stop", "restart", "status", "logs"},
         "stack": {"list", "plan", "start", "stop", "restart", "status"},
+        "topology": {"show"},
     }
     command = operation[0]
     if command not in allowed:
@@ -966,28 +1108,59 @@ def _catalog_status(args: argparse.Namespace, catalog: dict[str, Any]) -> list[d
             payload.extend(items)
             continue
         for component in by_host[host_name]:
-            if error == "authority-only":
+            if component.get("enabled", True) is False:
                 payload.append(
                     {
-                        "status": "authority-only",
+                        "lifecycle": "disabled",
+                        "health": "not-applicable",
+                        "condition": "ok",
+                        "observability": "observed",
                         "component": component.get("id", ""),
                         "host": host_name,
                         "driver": component.get("driver", ""),
                         "profile": component.get("profile", ""),
                         "tags": component.get("tags", []),
                         "returncode": None,
+                        "component_version": "",
+                        "toolkit_version": "",
+                        "drift": "unknown",
+                    }
+                )
+                continue
+            if error == "authority-only":
+                payload.append(
+                    {
+                        "lifecycle": "unknown",
+                        "health": "unknown",
+                        "condition": "unobserved",
+                        "observability": "authority-only",
+                        "component": component.get("id", ""),
+                        "host": host_name,
+                        "driver": component.get("driver", ""),
+                        "profile": component.get("profile", ""),
+                        "tags": component.get("tags", []),
+                        "returncode": None,
+                        "component_version": "",
+                        "toolkit_version": "",
+                        "drift": "unknown",
                     }
                 )
                 continue
             payload.append(
                 {
-                    "status": "unreachable",
+                    "lifecycle": "unknown",
+                    "health": "unknown",
+                    "condition": "error",
+                    "observability": "unreachable",
                     "component": component.get("id", ""),
                     "host": host_name,
                     "driver": component.get("driver", ""),
                     "profile": component.get("profile", ""),
                     "tags": component.get("tags", []),
                     "returncode": 255,
+                    "component_version": "",
+                    "toolkit_version": "",
+                    "drift": "unknown",
                     "error": error,
                 }
             )
@@ -1018,20 +1191,30 @@ def cmd_status(args: argparse.Namespace) -> int:
             detail = payload[0].get("stdout", "") or payload[0].get("stderr", "")
             if detail:
                 print(f"\n{detail}")
-    return 0 if all(item["status"] in {"running", "disabled", "authority-only"} for item in payload) else 1
+    return _status_exit_code(payload)
+
+
+def _status_exit_code(payload: list[dict[str, Any]]) -> int:
+    """Return stable status severity for CLI and automation."""
+
+    conditions = {str(item.get("condition", "error")) for item in payload}
+    if "error" in conditions:
+        return 2
+    if "attention" in conditions:
+        return 1
+    return 0
 
 
 def cmd_component_mutate(args: argparse.Namespace) -> int:
     component = CURRENT_TOPOLOGY.resolve_component(args.component)
     executor = Executor(CURRENT_TOPOLOGY)
-    if args.action == "stop" and not args.cascade:
-        dependents = executor.active_dependents(component)
-        if dependents and not args.force:
-            names = ", ".join(item.qualified_id for item in dependents)
-            raise ExecutionError(
-                f"{component.qualified_id}: active dependents: {names}; use --force or --cascade"
-            )
-    results = executor.execute(component_operations(args))
+    results = executor.execute_component(
+        component,
+        args.action,
+        cascade=args.cascade,
+        no_deps=args.no_deps,
+        force=args.force,
+    )
     emit([result.as_dict() for result in results], json_output=args.json)
     return 0
 
@@ -1069,9 +1252,28 @@ def cmd_stack_plan(args: argparse.Namespace) -> int:
 
 
 def cmd_stack_run(args: argparse.Namespace) -> int:
+    if args.action == "status":
+        stack_name = args.stack
+        if stack_name is None:
+            if len(CURRENT_TOPOLOGY.stacks) != 1:
+                choices = ", ".join(sorted(CURRENT_TOPOLOGY.stacks)) or "none configured"
+                raise TopologyError(f"stack name is required; available stacks: {choices}")
+            stack_name = next(iter(CURRENT_TOPOLOGY.stacks))
+        status_args = argparse.Namespace(
+            selector=stack_name,
+            all=True,
+            verbose=False,
+            workers=8,
+            host_timeout=20,
+            status_host=None,
+            local=True,
+        )
+        payload = _collect_status(status_args)
+        emit(payload, json_output=args.json)
+        return _status_exit_code(payload)
     executor = Executor(CURRENT_TOPOLOGY)
     operations = stack_operations(args)
-    results = executor.inspect(operations) if args.action == "status" else executor.execute(operations)
+    results = executor.execute(operations)
     emit([result.as_dict() for result in results], json_output=args.json)
     return 0 if all(result.ok for result in results) else 1
 
@@ -1166,6 +1368,14 @@ def build_parser() -> argparse.ArgumentParser:
     config_show.set_defaults(func=cmd_config_show)
     config_hash = config_sub.add_parser("hash")
     config_hash.set_defaults(func=cmd_config_hash)
+    config_display = config_sub.add_parser("display")
+    config_display.add_argument("--organization")
+    config_display.add_argument("--site")
+    display_action = config_display.add_mutually_exclusive_group()
+    display_action.add_argument("--plan", action="store_true")
+    display_action.add_argument("--apply", action="store_true")
+    config_display.add_argument("--yes", action="store_true")
+    config_display.set_defaults(func=cmd_config_display)
     config_reconcile = config_sub.add_parser("reconcile")
     reconcile_action = config_reconcile.add_mutually_exclusive_group()
     reconcile_action.add_argument("--plan", action="store_true")
@@ -1184,6 +1394,16 @@ def build_parser() -> argparse.ArgumentParser:
     adapter_show.set_defaults(func=cmd_adapter, topology_required=False)
     adapter_doctor = adapter_sub.add_parser("doctor")
     adapter_doctor.set_defaults(func=cmd_adapter, topology_required=False)
+
+    topology_parser = sub.add_parser("topology")
+    topology_sub = topology_parser.add_subparsers(dest="topology_command", required=True)
+    topology_show = topology_sub.add_parser("show")
+    topology_show.add_argument("--component")
+    topology_show.add_argument("--host", dest="topology_host")
+    topology_show.add_argument("--stack")
+    topology_show.add_argument("--adapter")
+    topology_show.add_argument("--format", choices=("table", "json", "mermaid", "dot"), default="table")
+    topology_show.set_defaults(func=cmd_topology_show)
 
     component = sub.add_parser("component")
     component_sub = component.add_subparsers(dest="component_command", required=True)

@@ -4,6 +4,12 @@
 
 ### Beta release readiness
 
+- Replaced the ambiguous status field with independent lifecycle, health, condition, and observability fields, plus distinct toolkit and observed component versions.
+- Corrected model-proxy observation so a live proxy with an unavailable upstream is reported as running and degraded rather than stopped.
+- Centralized component mutation preparation so CLI and Textual operations enforce the same active-dependent stop policy.
+- Added immediate keyboard-driven detail updates, selection preservation, high-contrast status styling, contextual help, local automatic-refresh settings, and shared organization/site labels to the Textual console.
+- Added bounded host-grouped topology projections with table, JSON, Mermaid, and DOT CLI output and a filterable collapsible Textual view.
+- Added optional adapter update and relocation capability contracts without enabling unsafe generic mutation behavior.
 - Packaged the control library in a conventional `src/llmops_kit` layout with one authoritative version, console entry point, locked dependencies, built-in resources, and optional Textual dependency metadata.
 - Added a checksummed release wheelhouse containing the project, Jinja2, Textual, and transitive dependencies for offline installation.
 - Reworked installation around one UV-managed Python runtime and one application environment per immutable release; installed commands no longer depend on system Python, Conda activation, virtual environments, or shell startup files.
