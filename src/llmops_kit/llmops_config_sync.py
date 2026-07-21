@@ -63,9 +63,20 @@ def snapshot_hash(root: Path) -> tuple[str, bool, list[str]]:
 def _remote_command(host: Any, command: str, timeout: int = 120) -> subprocess.CompletedProcess[str]:
     if host.transport == "local":
         argv = ["/bin/sh", "-c", command]
+        environment = dict(os.environ)
+        environment.pop("LLMOPS_CONFIG_HOME", None)
+        environment.pop("LLMOPS_AUTHORITY_CONFIG_HOME", None)
     else:
         argv = host.ssh_base() + [command]
-    return subprocess.run(argv, capture_output=True, text=True, check=False, timeout=timeout)
+        environment = None
+    return subprocess.run(
+        argv,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=timeout,
+        env=environment,
+    )
 
 
 def _remote_llmops(host: Any) -> str:

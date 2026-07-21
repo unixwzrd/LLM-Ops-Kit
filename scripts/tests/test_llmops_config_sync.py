@@ -14,6 +14,7 @@ from unittest import mock
 
 from llmops_kit.llmops_config import load_config
 from llmops_kit.llmops_config_sync import reconcile_plan, remote_snapshot_status, snapshot_hash
+from llmops_kit.llmops_config_sync import _remote_command
 from llmops_kit.llmops_init import initialize
 from llmops_kit.llmops_inventory import load_inventory
 from llmops_kit.llmops_paths import resolve_paths
@@ -84,6 +85,23 @@ class ConfigSyncTests(unittest.TestCase):
         self.assertTrue(result["reachable"])
         self.assertFalse(result["valid"])
         self.assertEqual(result["config_hash"], "declared")
+
+    def test_local_target_observation_does_not_inherit_authority_overrides(self) -> None:
+        host = mock.Mock(transport="local")
+        with mock.patch.dict(
+            "os.environ",
+            {
+                "LLMOPS_CONFIG_HOME": "/authority",
+                "LLMOPS_AUTHORITY_CONFIG_HOME": "/authority",
+                "KEEP_ME": "yes",
+            },
+        ), mock.patch("subprocess.run") as run:
+            run.return_value = subprocess.CompletedProcess([], 0, "", "")
+            _remote_command(host, "/usr/bin/true")
+        environment = run.call_args.kwargs["env"]
+        self.assertNotIn("LLMOPS_CONFIG_HOME", environment)
+        self.assertNotIn("LLMOPS_AUTHORITY_CONFIG_HOME", environment)
+        self.assertEqual(environment["KEEP_ME"], "yes")
 
     def test_reconcile_plan_refuses_conflict_unreachable_and_error_states(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
