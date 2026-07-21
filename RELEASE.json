@@ -1,4 +1,5 @@
 {
   "git_commit": "$Format:%H$",
+  "git_timestamp": "$Format:%ct$",
   "schema_version": 1
 }

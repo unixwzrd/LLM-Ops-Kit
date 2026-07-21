@@ -119,6 +119,36 @@ def run_git(source: Path, *args: str) -> str:
     return completed.stdout.strip()
 
 
+def git_checkout(source: Path) -> bool:
+    """Return whether source is inside a Git work tree."""
+
+    completed = subprocess.run(
+        ["git", "-C", str(source), "rev-parse", "--is-inside-work-tree"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return completed.returncode == 0 and completed.stdout.strip() == "true"
+
+
+def exported_release_metadata(source: Path) -> tuple[str, int]:
+    """Read commit metadata substituted by ``git archive``."""
+
+    try:
+        metadata = json.loads((source / "RELEASE.json").read_text(encoding="utf-8"))
+        commit = str(metadata["git_commit"])
+        timestamp_text = str(metadata["git_timestamp"])
+    except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise ReleaseBuildError(
+            "non-checkout release source requires exported RELEASE.json metadata"
+        ) from exc
+    if not re.fullmatch(r"[0-9a-f]{40}", commit) or not timestamp_text.isdigit():
+        raise ReleaseBuildError(
+            "RELEASE.json metadata was not expanded; create source with git archive"
+        )
+    return commit, int(timestamp_text)
+
+
 def project_version(source: Path) -> str:
     """Read the package version from the authoritative project metadata."""
 
@@ -145,14 +175,22 @@ def sha256(path: Path) -> str:
 def tracked_runtime_files(source: Path) -> list[Path]:
     """Return tracked files allowed in the public runtime artifact."""
 
-    raw = subprocess.run(
-        ["git", "-C", str(source), "ls-files", "-z", "--", "scripts", *PUBLIC_FILES],
-        capture_output=True,
-        check=False,
-    )
-    if raw.returncode != 0:
-        raise ReleaseBuildError("release source must be a Git checkout")
-    files = [Path(item.decode()) for item in raw.stdout.split(b"\0") if item]
+    if git_checkout(source):
+        raw = subprocess.run(
+            ["git", "-C", str(source), "ls-files", "-z", "--", "scripts", *PUBLIC_FILES],
+            capture_output=True,
+            check=False,
+        )
+        if raw.returncode != 0:
+            raise ReleaseBuildError("could not enumerate tracked runtime files")
+        files = [Path(item.decode()) for item in raw.stdout.split(b"\0") if item]
+    else:
+        files = [Path(name) for name in PUBLIC_FILES if (source / name).is_file()]
+        files.extend(
+            path.relative_to(source)
+            for path in (source / "scripts").rglob("*")
+            if path.is_file()
+        )
     selected = [
         path
         for path in files
@@ -215,15 +253,18 @@ def build_release(
     """Build and return archive, checksum, and manifest paths."""
 
     source = source.expanduser().resolve()
-    status = run_git(source, "status", "--porcelain")
-    if status and not allow_dirty:
-        raise ReleaseBuildError("release build refuses a dirty source tree")
-    commit = run_git(source, "rev-parse", "HEAD")
+    if git_checkout(source):
+        status = run_git(source, "status", "--porcelain")
+        if status and not allow_dirty:
+            raise ReleaseBuildError("release build refuses a dirty source tree")
+        commit = run_git(source, "rev-parse", "HEAD")
+        timestamp = int(run_git(source, "show", "-s", "--format=%ct", "HEAD"))
+    else:
+        status = ""
+        commit, timestamp = exported_release_metadata(source)
     resolved_version = version or project_version(source)
     if not VERSION_RE.fullmatch(resolved_version):
         raise ReleaseBuildError(f"invalid release version: {resolved_version}")
-    timestamp_text = run_git(source, "show", "-s", "--format=%ct", "HEAD")
-    timestamp = int(timestamp_text)
     files = tracked_runtime_files(source)
     output_dir.mkdir(parents=True, exist_ok=True)
     archive_name = f"{ARCHIVE_ROOT_PREFIX}-{resolved_version}.tar.xz"

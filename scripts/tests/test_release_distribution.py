@@ -79,12 +79,29 @@ class ReleaseDistributionTests(unittest.TestCase):
         )
         return source
 
+    def archived_source(self, root: Path) -> Path:
+        """Extract HEAD exactly as a release consumer receives it."""
+
+        source = root / "archived-source"
+        source.mkdir()
+        archive = root / "head-only.tar"
+        with archive.open("wb") as stream:
+            subprocess.run(
+                ["git", "-C", str(REPO_ROOT), "archive", "HEAD"],
+                stdout=stream,
+                check=True,
+            )
+        with tarfile.open(archive) as bundle:
+            bundle.extractall(source, filter="data")
+        self.assertFalse((source / ".git").exists())
+        return source
+
     def test_runtime_artifact_installs_without_checkout(self) -> None:
         """Build, inspect, and install one release artifact."""
 
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            source = self.committed_source(root)
+            source = self.archived_source(root)
             output = root / "output"
             env = {**os.environ, "HOME": str(root / "home")}
             self.run_command(
