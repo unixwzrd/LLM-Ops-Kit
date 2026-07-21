@@ -22,6 +22,7 @@ models/*.json
 agents/*.json
 services/*.json
 stacks/*.json
+templates/*.json
 ```
 
 Optional organization and site labels are canonical display metadata:
@@ -48,7 +49,7 @@ Textual refresh and theme preferences live separately in `ui.json`. That host-lo
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "defaults": {
     "user": "operator",
     "port": 22,
@@ -68,6 +69,19 @@ Textual refresh and theme preferences live separately in `ui.json`. That host-lo
 }
 ```
 
+`config.json` designates exactly one desired-state authority by inventory alias:
+
+```json
+{
+  "schema_version": 2,
+  "control": {
+    "authority_host": "model-host"
+  }
+}
+```
+
+The authority host must have `trusted_control: true`. Trusted peers receive the complete secret-free catalog, but independently edited revisions are rejected rather than merged.
+
 Supported roles are `admin`, `llm`, `agent`, and `hybrid`. Supported transports are `local` and `ssh`.
 
 `host` is the address used by the deployment authority. `control_host` is the routable address placed in the shared observer catalog for peer-to-peer status checks and defaults to `host`. Set `control_host` explicitly when `host` is `localhost`, a loopback address, or otherwise meaningful only to the deployment authority.
@@ -83,11 +97,13 @@ Set `peer_observable` to `false` when components run in a local desktop login do
   "id": "chat",
   "host": "model-host",
   "driver": "modelctl",
+  "template_id": "llama-cpp",
   "profile": "chat",
   "enabled": false,
   "tags": ["model", "chat"],
   "depends_on": [],
   "ownership": "managed",
+  "restart_policy": "never",
   "health": {
     "type": "http",
     "target": "http://127.0.0.1:11434/health",
@@ -108,6 +124,46 @@ Drivers are `modelctl`, `process`, `launchd`, `model-proxy`, `tts-bridge`, `ssh-
 Tags are optional operator-defined subsystem labels used by `llmops status <tag>`. Libraries embedded inside another process are not independently manageable components unless a process, service, or health adapter is configured for them.
 
 Lifecycle command timeouts are seconds in the range 1 through 86400. A timed-out command returns code 124 and is recorded as a failed operation; the detached worker remains independent of the TUI process.
+
+`restart_policy` is `never` or `on-failure`. It is adapter supervision metadata, not permission to override desired state. An explicit stop records desired `stopped`; a supervised adapter must not recover that process until the operator starts it again.
+
+## Schema-Driven Operations
+
+Inspect templates and current fields before changing desired state:
+
+```bash
+llmops template list
+llmops template show llama-cpp
+llmops template fields llama-cpp
+llmops component fields local-ai:chat
+llmops component details local-ai:chat
+```
+
+Mutate typed fields as one validated candidate:
+
+```bash
+llmops component configure local-ai:chat \
+  --set profile.llama.ctx_size=65536 \
+  --set profile.server.spec_type=ngram \
+  --unset profile.server.draft_model \
+  --plan
+
+llmops component configure local-ai:chat \
+  --set profile.llama.ctx_size=65536 \
+  --apply --yes
+```
+
+`--unset` restores a schema default when one exists. Arrays and objects use JSON literals. Unknown paths, invalid values, read-only fields, and cross-field constraint violations fail before any file is replaced.
+
+Create reusable profiles and disabled components without editing JSON:
+
+```bash
+llmops profile create worker --template standalone --values worker.json --plan
+llmops component add worker --template standalone --profile worker \
+  --stack local-ai --host agent-host --plan
+```
+
+Use `--connect upstream=local-ai:chat@openai` for typed endpoint references. Required endpoint connections imply lifecycle dependencies unless the template opts out. Cloning, retirement, and restoration preserve reusable profiles; restored components remain disabled until explicitly enabled.
 
 Inspect the exact effective non-secret profile, host, execution identity, dependencies, probes, timeouts, endpoints, template, and log settings with:
 

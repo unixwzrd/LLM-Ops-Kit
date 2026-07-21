@@ -91,7 +91,7 @@ def _normalize_model(path: Path) -> ModelCandidate:
         raise InitError(f"cannot read model profile {path}: {exc}") from exc
     if not isinstance(raw, dict):
         raise InitError(f"model profile must be an object: {path}")
-    if raw.get("schema_version", 1) != 1:
+    if raw.get("schema_version", 1) not in {1, 2}:
         raise InitError(f"unsupported model profile schema in {path}: {raw.get('schema_version')}")
     name = str(raw.get("name") or path.stem)
     if not PROFILE_NAME.fullmatch(name):
@@ -107,7 +107,8 @@ def _normalize_model(path: Path) -> ModelCandidate:
     normalized = dict(raw)
     normalized.pop("env", None)
     normalized.pop("sources", None)
-    normalized["schema_version"] = 1
+    normalized["schema_version"] = 2
+    normalized["template_id"] = "llama-cpp"
     normalized["name"] = name
     normalized["type"] = model_type
     if explicit is not None:
@@ -222,14 +223,14 @@ def initialize(
         "config_profile": "default",
     }
     if preset == "single-host":
-        hosts = [{"name": "local", "role": "hybrid", "host": "localhost", "transport": "local", **common}]
+        hosts = [{"name": "local", "role": "hybrid", "host": "localhost", "transport": "local", "trusted_control": True, **common}]
         model_name = agent_name = "local"
         model_port = 11433
         proxy_upstream = "http://127.0.0.1:11433"
     else:
         hosts = [
-            {"name": "model-host", "role": "llm", "host": model_host, **common},
-            {"name": "agent-host", "role": "agent", "host": agent_host, **common},
+            {"name": "model-host", "role": "llm", "host": model_host, "trusted_control": True, **common},
+            {"name": "agent-host", "role": "agent", "host": agent_host, "trusted_control": True, **common},
         ]
         model_name, agent_name = "model-host", "agent-host"
         model_port = 11434
@@ -237,10 +238,15 @@ def initialize(
 
     chat_profile = default_chat or ("starter-chat" if "chat" in selected_names else "chat")
     documents: dict[Path, dict[str, Any]] = {
-        paths.config_file: {"schema_version": 1, "runtime": {"allow_command_driver": False}},
-        paths.inventory_file: {"schema_version": 1, "hosts": hosts},
+        paths.config_file: {
+            "schema_version": 2,
+            "runtime": {"allow_command_driver": False},
+            "control": {"authority_host": model_name},
+        },
+        paths.inventory_file: {"schema_version": 2, "hosts": hosts},
         paths.services_dir / "model-proxy.json": {
-            "schema_version": 1,
+            "schema_version": 2,
+            "template_id": "model-proxy",
             "name": "model-proxy",
             "runtime": {
                 "listen_host": "127.0.0.1",
@@ -250,13 +256,16 @@ def initialize(
             },
         },
         paths.agents_dir / "example-agent.json": {
-            "schema_version": 1,
+            "schema_version": 2,
+            "template_id": "generic-agent",
+            "name": "example-agent",
             "actions": {action: ["/path/to/agent", action] for action in ("start", "stop", "restart", "status")},
         },
     }
     if default_chat is None:
         documents[paths.models_dir / f"{chat_profile}.json"] = {
-            "schema_version": 1,
+            "schema_version": 2,
+            "template_id": "llama-cpp",
             "name": chat_profile,
             "type": "llm",
             "model_path": "/path/to/model.gguf",
@@ -268,19 +277,19 @@ def initialize(
         documents[paths.models_dir / f"{name}.json"] = candidates[name].profile
 
     components: list[dict[str, Any]] = [
-        {"id": "chat", "host": model_name, "driver": "modelctl", "profile": chat_profile, "enabled": False},
+        {"id": "chat", "host": model_name, "driver": "modelctl", "template_id": "llama-cpp", "profile": chat_profile, "enabled": False},
     ]
     if default_embedding:
-        components.append({"id": "embedding", "host": model_name, "driver": "modelctl", "profile": default_embedding, "enabled": False})
+        components.append({"id": "embedding", "host": model_name, "driver": "modelctl", "template_id": "llama-cpp", "profile": default_embedding, "enabled": False})
     if default_tts:
-        components.append({"id": "tts", "host": model_name, "driver": "modelctl", "profile": default_tts, "enabled": False})
+        components.append({"id": "tts", "host": model_name, "driver": "modelctl", "template_id": "llama-cpp", "profile": default_tts, "enabled": False})
     components.extend(
         [
-            {"id": "model-proxy", "host": agent_name, "driver": "model-proxy", "profile": "model-proxy", "enabled": False, "depends_on": ["chat"]},
-            {"id": "agent", "host": agent_name, "driver": "agent", "profile": "example-agent", "enabled": False, "depends_on": ["model-proxy"]},
+            {"id": "model-proxy", "host": agent_name, "driver": "model-proxy", "template_id": "model-proxy", "profile": "model-proxy", "enabled": False, "depends_on": ["chat"], "connections": {"upstream": {"component": "starter:chat", "endpoint": "openai"}}},
+            {"id": "agent", "host": agent_name, "driver": "agent", "template_id": "generic-agent", "profile": "example-agent", "enabled": False, "depends_on": ["model-proxy"]},
         ]
     )
-    documents[paths.stacks_dir / "starter.json"] = {"schema_version": 1, "name": "starter", "components": components}
+    documents[paths.stacks_dir / "starter.json"] = {"schema_version": 2, "name": "starter", "components": components}
     _write_documents(paths.config_home, documents, force=force)
     converted = tuple(
         f"{name}:{field}"

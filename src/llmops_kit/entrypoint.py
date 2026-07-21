@@ -4,11 +4,44 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 from typing import Optional
 
 from . import __version__, llmops_cli, llmops_update
+
+
+def tui_authority_command(config_home: Path, arguments: list[str]) -> Optional[list[str]]:
+    """Return an SSH command that runs the TUI on its designated authority."""
+
+    if os.environ.get("LLMOPS_TUI_AUTHORITY_ROUTED") == "1":
+        return None
+    try:
+        catalog = json.loads((config_home / "catalog.json").read_text(encoding="utf-8"))
+        resolved = json.loads((config_home / "resolved.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    current_host = str(resolved.get("host", ""))
+    authority_host = str(catalog.get("authority_host", ""))
+    trusted = set(catalog.get("trusted_control_hosts", []))
+    if not authority_host or authority_host == current_host:
+        return None
+    if current_host not in trusted or authority_host not in trusted:
+        raise RuntimeError("TUI authority routing requires trusted current and authority hosts")
+    hosts = {
+        str(item.get("name", "")): item
+        for item in catalog.get("hosts", [])
+        if isinstance(item, dict) and item.get("name")
+    }
+    target = hosts.get(authority_host)
+    if target is None:
+        raise RuntimeError(f"TUI authority host is absent from the catalog: {authority_host}")
+    operation = ["tui", *arguments]
+    command = llmops_cli._host_command(target, operation, json_output=False)
+    command.insert(1, "-t")
+    command[-1] = f"LLMOPS_TUI_AUTHORITY_ROUTED=1 {command[-1]}"
+    return command
 
 
 def main(argv: Optional[list[str]] = None) -> int:
@@ -43,6 +76,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     if command == "update":
         return llmops_update.main(arguments[1:])
     if command == "tui":
+        authority_command = tui_authority_command(deployed_config, arguments[1:])
+        if authority_command is not None:
+            return subprocess.run(authority_command, check=False).returncode
         from .llmops_tui import main as tui_main
 
         return tui_main(arguments[1:])

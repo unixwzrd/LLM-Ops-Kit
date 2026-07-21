@@ -4,6 +4,12 @@
 
 ### Beta release readiness
 
+- Added canonical configuration schema version 2 with versioned JSON Schema 2020-12 service templates, constrained UI metadata, one-time v1 migration, and no runtime v1 compatibility reads.
+- Added built-in templates for llama.cpp, model-proxy, tts-bridge, standalone processes, user and external launchd, SSH tunnels, generic agents, external HTTP services, RTK, and experimental user systemd.
+- Added schema-aware template, profile, and component inspection, typed multi-field `--set` and `--unset`, transactional profile creation/editing/cloning, component add/clone/retire/restore, stale-authority-hash refusal, and endpoint-derived dependencies.
+- Added a Textual Service Catalog, generated profile forms, full component Details, stack membership/dependency inspection, dynamic host/profile/endpoint choices, and llama.cpp speculation conflict handling.
+- Added one designated desired-state authority to the observer catalog. Schema mutations invoked on another trusted host are forwarded to the authority, and `llmops tui` launched on a trusted peer runs on the authority through SSH.
+- Added RTK as a non-service tool template with version, telemetry, verification, gain, and Hermes dry-run actions. Live evidence confirms telemetry disabled and leaves hook installation behind an explicit canary approval gate.
 - Replaced inherited Textual accent states with one explicit blue-gray high-contrast palette across Settings, forms, select overlays, buttons, cursors, and scrollbars.
 - Made topology filters apply immediately, replaced Apply with Reset, restored semantic host/component colors, exposed Settings in the primary action bar, and made the visible Quit button exit directly.
 - Moved the TUI's clickable lifecycle action bar above the component table so primary controls remain immediately accessible.

@@ -1,10 +1,9 @@
 # LLM-Ops-Kit Engineering Evidence
 
 - **Evidence updated:** 2026-07-21
-- **Accepted live candidate:** `0.9.0b16`
-- **Current source candidate:** `0.9.0b16`
-- **Candidate runtime artifact source commit:** `546bbc2`
-- **Candidate release archive SHA-256:** `505530aeb4772890897ce97e08f2e1ca7c4912c82f11af0e472c0bf623589cc6`
+- **Accepted live candidate:** `0.9.0b17`
+- **Current source candidate:** `0.9.0b18`
+- **Current source artifact:** pending clean-archive acceptance
 
 ## Purpose
 
@@ -21,6 +20,8 @@ The full two-host and protocol acceptance baseline was collected against `0.9.0b
 Accepted runtime baseline `0.9.0b5` added a shared catalog-aware status collector and was installed on both live macOS hosts through coordinated update. Its shared catalog and host-specific configuration hashes remained unchanged, and all observable services remained running.
 
 Candidate `0.9.0b16` separates lifecycle, health, condition, and observability; separates toolkit, component, desired-runtime, and observed-runtime identities; reports the configured execution identity; centralizes dependent-impact enforcement across CLI and TUI; and adds the high-contrast, keyboard-accessible, configurable TUI and bounded topology projection. It also adds host-qualified log inspection, effective configuration inspection, configurable lifecycle timeouts, persistent detached operations, authority-backed reconciliation, structurally pruned historical media decode/save calls, model start-runtime provenance, a top-positioned clickable action bar, reactive topology filters with Reset, semantic topology colors, visible Settings, and a direct Quit action. The exact candidate archive was installed on both live hosts without restarting the intentionally stopped chat model. Live rollback acceptance exposed three updater defects that narrower tests missed; each received a focused regression before the successful coordinated b14 to b13 to b14 cycle.
+
+Source candidate `0.9.0b18` adds canonical schema version 2, reviewed service templates, typed transactional configuration, reusable profile and component management, endpoint-derived dependencies, generated Textual forms, one designated mutation authority, and RTK tool inspection. Its 159 source tests and maintainer precheck pass. Exact-artifact and two-host schema-migration acceptance remain pending and are not represented as completed live evidence.
 
 ## Topology And Trust Boundary
 
@@ -56,6 +57,8 @@ This arrangement is correct for a small trusted LAN control plane because it avo
 | Invariant | Enforcement mechanism | Acceptance evidence | Failure prevented |
 |---|---|---|---|
 | One desired-state authority | Canonical configuration is rendered into checksummed host revisions; remote edits are never merged | A deliberate remote edit produced `conflict`; reconciliation refused replacement; restoring the backup returned validation to clean | Split-brain configuration and silent loss of an operator change |
+| Trusted peers cannot become accidental authorities | The catalog names one authority host; schema mutations and the TUI invoked on another trusted controller route to that host; every request carries an observed authority hash | Regressions verify peer-to-authority routing and stale-hash refusal while source and deployed roots differ | Mutating a role-filtered snapshot or silently overwriting a concurrent desired-state edit |
+| One schema drives every operator interface | Versioned JSON Schema templates define typed profile fields, constraints, endpoints, lifecycle metadata, and UI hints; CLI and Textual forms consume the same records | Tests cover field listing, typed conversion, atomic speculation replacement, generated forms, local-template import, and component provisioning without core changes | CLI/TUI validation drift and product-specific parser branches |
 | Plans precede mutations | CLI and TUI use the same mutation preparation service; active-dependent impact and equivalent CLI commands are resolved before confirmation | Headless TUI tests verify equivalent commands, cancellation, and mandatory dependent-impact choice | A UI-specific orchestration path bypassing lifecycle safety |
 | Dependencies determine order | Start uses topological order; stop uses reverse topological order; cycles are rejected during validation | Unit tests verify dependency-first start and reverse stop; live cold-cycle acceptance stopped and started the complete stack in the expected order | Starting consumers before providers or stopping providers under active consumers |
 | Failure cleanup is bounded | The executor records components started by the current invocation and only stops that set on failure | Regression injects a failed start while a pre-existing service remains running | A failed operation taking down unrelated healthy services |
@@ -188,7 +191,9 @@ This distinction prevents readiness and policy from being misreported as lifecyc
 
 | Evidence | Result |
 |---|---|
-| Candidate source regression | Commit `546bbc2` passed 146 tests, shell syntax, ShellCheck, Python compilation, adapter checks, archive audits, and maintainer precheck |
+| Current source regression | Source candidate `0.9.0b18` passes 159 tests, shell syntax, ShellCheck, Python compilation, template/schema validation, and maintainer precheck; clean-artifact rerun is pending |
+| Schema and template behavior | Tests cover one-time v1 migration, no field loss, typed set/unset, atomic mutually exclusive replacement, shared profiles, endpoint wiring, retirement/restore, stale-hash refusal, local-template safety, and generated TUI forms |
+| RTK review gate | Live read-only evidence reports RTK 0.43.0, telemetry disabled, 154/154 RTK verification tests, gain metrics, and a Hermes dry run that wrote nothing; hook enablement remains unapproved |
 | Candidate clean distribution | Runtime-only `0.9.0b16` archive built from `git archive HEAD` and installed on both live hosts; the preceding b14 artifact passed isolated minimal installation, version, adapter doctor, uninstall, and purge |
 | Candidate installed-wheel tests | Six Textual tests and 42 control-plane tests passed with repository source removed from `PYTHONPATH` |
 | Clean distribution | Runtime-only archive built from clean commit `6989f97` |
@@ -215,9 +220,9 @@ No single layer is treated as conclusive. The evidence chain is configuration id
 - macOS is the supported beta platform. Linux and systemd work remain experimental and are not publication claims.
 - LLM-Ops-Kit is not a high-availability consensus system. It intentionally uses one desired-state authority and conflict refusal.
 - `authority-only` does not prove that the component is running; it states that the current peer is not an authorized observer. The authority must inspect that component.
-- The current beta does not download models, install arbitrary engines, edit raw secrets, or autonomously remediate failures.
+- The current beta does not download models, install arbitrary engines, edit raw secrets, or autonomously remediate failures. It can create configuration and lifecycle integration from reviewed templates.
 - The Textual TUI is an on-demand client, not a daemon. A future WebUI must use the same control interfaces rather than create a second executor.
-- The `0.9.0b16` candidate remains local and unpublished. Publication is gated on the remaining release checklist, explicit maintainer approval, and green macOS CI.
+- The `0.9.0b18` source candidate remains local and unpublished. Publication is gated on clean-artifact and two-host migration acceptance, the remaining release checklist, explicit maintainer approval, and green macOS CI.
 
 ## Reproduction Outline
 

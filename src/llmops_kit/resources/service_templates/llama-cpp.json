@@ -1,0 +1,72 @@
+{
+  "template_version": 1,
+  "id": "llama-cpp",
+  "version": "1.0.0",
+  "adapter": "llama-cpp",
+  "profile_kind": "model",
+  "component_kind": "model",
+  "platforms": ["darwin", "linux"],
+  "lifecycle": "standalone",
+  "profile_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": true,
+    "required": ["schema_version", "name", "type", "model_path", "runtime"],
+    "properties": {
+      "schema_version": {"type": "integer", "const": 2, "default": 2},
+      "template_id": {"type": "string", "const": "llama-cpp", "default": "llama-cpp"},
+      "name": {"type": "string", "minLength": 1, "x-llmops-ui": {"group": "Identity", "order": 10}},
+      "type": {"type": "string", "enum": ["llm", "embedding"], "default": "llm", "x-llmops-ui": {"group": "Identity", "order": 20, "widget": "select"}},
+      "model_path": {"type": "string", "minLength": 1, "x-llmops-ui": {"group": "Model", "order": 10, "widget": "path"}},
+      "runtime": {
+        "type": "object",
+        "required": ["host", "port"],
+        "properties": {
+          "binary": {"type": "string", "default": "llama-server", "x-llmops-ui": {"group": "Runtime", "order": 10, "widget": "path"}},
+          "host": {"type": "string", "default": "127.0.0.1", "x-llmops-ui": {"group": "Runtime", "order": 20}},
+          "port": {"type": "integer", "minimum": 1, "maximum": 65535, "default": 11434, "x-llmops-ui": {"group": "Runtime", "order": 30, "widget": "number"}},
+          "threads": {"type": ["integer", "string"], "default": "auto", "x-llmops-ui": {"group": "Runtime", "order": 40}}
+        }
+      },
+      "llama": {
+        "type": "object",
+        "properties": {
+          "ctx_size": {"type": "integer", "minimum": 512, "default": 32768, "x-llmops-ui": {"group": "Inference", "order": 10, "widget": "number"}},
+          "gpu_layers": {"type": ["integer", "string"], "default": "auto", "x-llmops-ui": {"group": "Inference", "order": 20}},
+          "batch_size": {"type": "integer", "minimum": 1, "default": 2048, "x-llmops-ui": {"group": "Inference", "order": 30, "widget": "number"}},
+          "ubatch_size": {"type": "integer", "minimum": 1, "default": 512, "x-llmops-ui": {"group": "Inference", "order": 40, "widget": "number"}}
+        }
+      },
+      "template": {
+        "type": "object",
+        "properties": {
+          "enabled": {"type": "boolean", "default": false, "x-llmops-ui": {"group": "Prompt", "order": 10, "widget": "checkbox"}},
+          "path": {"type": "string", "x-llmops-ui": {"group": "Prompt", "order": 20, "widget": "path"}}
+        }
+      },
+      "server": {
+        "type": "object",
+        "properties": {
+          "cache_prompt": {"type": "boolean", "default": true, "x-llmops-ui": {"group": "Server", "order": 10, "widget": "checkbox"}},
+          "spec_type": {"type": "string", "enum": ["none", "ngram", "mtp", "draft-model"], "default": "none", "x-llmops-ui": {"group": "Speculation", "order": 10, "widget": "select"}},
+          "spec_ngram_size_n": {"type": "integer", "minimum": 0, "x-llmops-ui": {"group": "Speculation", "order": 20, "widget": "number"}},
+          "spec_ngram_size_m": {"type": "integer", "minimum": 0, "x-llmops-ui": {"group": "Speculation", "order": 30, "widget": "number"}},
+          "draft_model": {"type": "string", "x-llmops-ui": {"group": "Speculation", "order": 40, "widget": "path"}},
+          "mtp_model": {"type": "string", "x-llmops-ui": {"group": "Speculation", "order": 50, "widget": "path"}},
+          "extra_flags": {"type": "array", "items": {"type": "string"}, "default": [], "x-llmops-ui": {"group": "Advanced", "order": 100, "widget": "argv", "advanced": true}}
+        },
+        "allOf": [
+          {"if": {"properties": {"spec_type": {"const": "ngram"}}, "required": ["spec_type"]}, "then": {"not": {"anyOf": [{"required": ["draft_model"]}, {"required": ["mtp_model"]}]}}},
+          {"if": {"properties": {"spec_type": {"const": "mtp"}}, "required": ["spec_type"]}, "then": {"required": ["mtp_model"], "not": {"anyOf": [{"required": ["draft_model"]}, {"required": ["spec_ngram_size_n"]}, {"required": ["spec_ngram_size_m"]}]}}},
+          {"if": {"properties": {"spec_type": {"const": "draft-model"}}, "required": ["spec_type"]}, "then": {"required": ["draft_model"], "not": {"anyOf": [{"required": ["mtp_model"]}, {"required": ["spec_ngram_size_n"]}, {"required": ["spec_ngram_size_m"]}]}}}
+        ]
+      },
+      "sampling": {"type": "object", "additionalProperties": true}
+    }
+  },
+  "defaults": {"schema_version": 2, "template_id": "llama-cpp", "name": "model", "type": "llm", "model_path": "/path/to/model.gguf", "runtime": {"binary": "llama-server", "host": "127.0.0.1", "port": 11434, "threads": "auto"}, "llama": {"ctx_size": 32768, "gpu_layers": "auto", "batch_size": 2048, "ubatch_size": 512}, "template": {"enabled": false}, "server": {"cache_prompt": true, "spec_type": "none", "extra_flags": []}},
+  "bindings": {"resolver": "modelctl"},
+  "endpoints": {"provides": {"openai": {"scheme": "http", "host_path": "runtime.host", "port_path": "runtime.port"}}},
+  "logs": {"service": {"path": "state:logs/llama-server-{profile}.log"}},
+  "actions": {}
+}

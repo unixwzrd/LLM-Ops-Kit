@@ -42,7 +42,10 @@ class ConfigSyncTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             config = root / "config.json"
-            config.write_text('{"schema_version": 1}\n', encoding="utf-8")
+            config.write_text(
+                '{"schema_version": 2, "display": {"site": "changed"}}\n',
+                encoding="utf-8",
+            )
             record = {"path": "config.json", "sha256": hashlib.sha256(config.read_bytes()).hexdigest()}
             (root / "resolved.json").write_text(json.dumps({"files": [record]}), encoding="utf-8")
             first, valid, errors = snapshot_hash(root)
@@ -57,13 +60,13 @@ class ConfigSyncTests(unittest.TestCase):
     def test_canonical_config_without_manifest_has_stable_hash(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            (root / "config.json").write_text('{"schema_version": 1}\n', encoding="utf-8")
+            (root / "config.json").write_text('{"schema_version": 2}\n', encoding="utf-8")
             self.assertEqual(snapshot_hash(root), snapshot_hash(root))
 
     def test_local_ui_preferences_do_not_change_configuration_hash(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            (root / "config.json").write_text('{"schema_version": 1}\n', encoding="utf-8")
+            (root / "config.json").write_text('{"schema_version": 2}\n', encoding="utf-8")
             before = snapshot_hash(root)[0]
             (root / "ui.json").write_text('{"refresh_seconds": 30}\n', encoding="utf-8")
             self.assertEqual(snapshot_hash(root)[0], before)

@@ -16,7 +16,7 @@ class LlmOpsConfigTests(unittest.TestCase):
             paths = resolve_paths({"HOME": str(Path(tmp) / "home")})
             config = load_config(paths=paths)
             self.assertFalse(config.exists)
-            self.assertEqual(config.schema_version, 1)
+            self.assertEqual(config.schema_version, 2)
             self.assertEqual(config.data["secrets"]["provider"], "env")
 
     def test_valid_config_is_loaded(self) -> None:
@@ -26,7 +26,7 @@ class LlmOpsConfigTests(unittest.TestCase):
             config_path.write_text(
                 json.dumps(
                     {
-                        "schema_version": 1,
+                        "schema_version": 2,
                         "secrets": {
                             "provider": "none",
                         },
@@ -52,7 +52,7 @@ class LlmOpsConfigTests(unittest.TestCase):
             config_path.write_text(
                 json.dumps(
                     {
-                        "schema_version": 1,
+                        "schema_version": 2,
                         "secrets": {
                             "provider": "required-seckit",
                         },
@@ -66,10 +66,17 @@ class LlmOpsConfigTests(unittest.TestCase):
     def test_display_metadata_is_transactional_and_validated(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             config_path = Path(tmp) / "config.json"
-            config_path.write_text('{"schema_version": 1}\n', encoding="utf-8")
+            config_path.write_text('{"schema_version": 2}\n', encoding="utf-8")
             backup = update_display(config_path, organization="Example", site="Lab")
             self.assertTrue(backup.is_file())
             self.assertEqual(load_config(config_path).data["display"], {"organization": "Example", "site": "Lab"})
+
+    def test_version_one_runtime_configuration_requires_migration(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "config.json"
+            config_path.write_text('{"schema_version": 1}\n', encoding="utf-8")
+            with self.assertRaisesRegex(ConfigError, "unsupported schema_version: 1"):
+                load_config(config_path)
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 # Quickstart
 
 **Created**: 2026-07-16
-**Updated**: 2026-07-20
+**Updated**: 2026-07-21
 
 Back: [Documentation index](./INDEX.md)
 
@@ -42,6 +42,17 @@ llmops init --preset local-lan --model-defaults-from ~/.config/llm-ops --import-
 
 Non-interactive and JSON execution never prompt.
 
+Create additional services through reviewed templates rather than editing JSON:
+
+```bash
+llmops template list
+llmops template fields standalone
+llmops profile create worker --template standalone --values worker.json --plan
+llmops component add worker --template standalone --profile worker --stack starter --host local --plan
+```
+
+The Textual Service Catalog provides the same generated fields and validation through `llmops tui`. New components remain disabled until explicitly enabled and started.
+
 ## Validate And Operate
 
 ```bash
@@ -61,7 +72,7 @@ Use `<stack>:<component>` when a short ID is ambiguous. `llmops stack status` ma
 
 ## Synchronize A LAN
 
-From the desired-state authority:
+From the desired-state authority or another trusted controller:
 
 ```bash
 llmops config reconcile --all-hosts --plan --json
@@ -70,4 +81,4 @@ llmops update --all-hosts --plan --version <version>
 llmops update --all-hosts --apply --version <version>
 ```
 
-The configuration operation sends complete secret-free snapshots to trusted controllers and role-filtered snapshots to component-only hosts. The update operation sends the same verified release to every observable managed host. Neither command depends on remote login-shell initialization.
+Schema mutations requested from a trusted peer are forwarded to the configured `control.authority_host`. The configuration operation sends complete secret-free snapshots to trusted controllers and role-filtered snapshots to component-only hosts. The update operation sends the same verified release to every observable managed host. Neither command depends on remote login-shell initialization.

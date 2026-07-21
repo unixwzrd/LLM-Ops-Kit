@@ -1,0 +1,17 @@
+{
+  "template_version": 1,
+  "id": "systemd-user",
+  "version": "0.1.0",
+  "adapter": "systemd-user",
+  "profile_kind": "service",
+  "component_kind": "service",
+  "platforms": ["linux"],
+  "lifecycle": "systemd-user",
+  "experimental": true,
+  "profile_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "additionalProperties": true, "required": ["schema_version", "name", "unit", "exec_start"], "properties": {"schema_version": {"type": "integer", "const": 2, "default": 2}, "template_id": {"type": "string", "const": "systemd-user", "default": "systemd-user"}, "name": {"type": "string", "minLength": 1}, "unit": {"type": "string", "pattern": "^[A-Za-z0-9@_.-]+\\.service$"}, "exec_start": {"type": "array", "minItems": 1, "items": {"type": "string"}, "x-llmops-ui": {"widget": "argv"}}, "working_directory": {"type": "string", "x-llmops-ui": {"widget": "path"}}, "restart": {"type": "string", "enum": ["no", "on-failure"], "default": "no"}, "environment": {"type": "object", "additionalProperties": {"type": "string"}, "default": {}}}},
+  "defaults": {"schema_version": 2, "template_id": "systemd-user", "name": "service", "unit": "example.service", "exec_start": ["/usr/bin/true"], "restart": "no", "environment": {}},
+  "bindings": {"resolver": "systemd-user"},
+  "endpoints": {},
+  "logs": {"service": {"provider": "journalctl-user-unit"}},
+  "actions": {}
+}

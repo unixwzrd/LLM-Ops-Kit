@@ -57,7 +57,7 @@ def load_profile(
         raise ProfileError(f"{source}: invalid JSON: {exc}") from exc
     if not isinstance(raw, dict):
         raise ProfileError(f"{source}: profile must be a JSON object")
-    if raw.get("schema_version", 1) != 1:
+    if raw.get("schema_version") != 2:
         raise ProfileError(f"{source}: unsupported schema_version: {raw.get('schema_version')}")
     return source, raw
 

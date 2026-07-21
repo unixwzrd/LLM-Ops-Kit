@@ -103,7 +103,7 @@ def load_inventory(path: Path) -> dict[str, HostRecord]:
         raise InventoryError(f"{path}: invalid JSON: {exc}") from exc
     if not isinstance(raw, dict):
         raise InventoryError(f"{path}: top-level inventory must be an object")
-    if raw.get("schema_version", 1) != 1:
+    if raw.get("schema_version") != 2:
         raise InventoryError(f"{path}: unsupported schema_version: {raw.get('schema_version')}")
     defaults = raw.get("defaults", {})
     if not isinstance(defaults, dict):

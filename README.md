@@ -51,7 +51,10 @@ Status reports lifecycle, health, operator condition, observability, owning host
 Canonical desired state lives under `~/.config/llm-ops/`. Trusted control hosts consume complete secret-free topology revisions so they can plan and operate the full system; component-only hosts consume role-filtered revisions. Each host selects its revision through an atomic `current-config` link.
 
 ```bash
-llmops component configure <component> --profile <profile> --plan
+llmops template list
+llmops component fields <component>
+llmops component configure <component> --set profile.<field>=<value> --plan
+llmops component add <id> --template <template> --profile <profile> --stack <stack> --host <host> --plan
 llmops config reconcile --all-hosts --plan --json
 llmops config reconcile --all-hosts --apply --yes
 llmops update --all-hosts --plan --version <version>
@@ -60,6 +63,8 @@ llmops rollback
 ```
 
 Independent remote edits are reported as drift and are never merged automatically. Runtime updates stage and verify the same artifact on every selected host and roll back hosts changed by the invocation if a later host fails.
+
+Versioned JSON Schema service templates drive CLI validation and Textual forms. A trusted peer forwards schema mutations and the TUI to the designated desired-state authority rather than editing a deployed snapshot.
 
 ## Documentation
 
@@ -70,6 +75,8 @@ Independent remote edits are reported as drift and are never merged automaticall
 - [Topology views](docs/TOPOLOGY.md)
 - [Adapters](docs/ADAPTERS.md)
 - [Configuration](docs/CONFIGURATION.md)
+- [Service template authoring](docs/TEMPLATE_AUTHORING.md)
+- [RTK integration](docs/RTK.md)
 - [Migration](docs/MIGRATION.md)
 - [Remote operation](docs/DEPLOYMENT_OVERVIEW.md)
 - [Upgrade and rollback](docs/UPGRADE_AND_ROLLBACK.md)

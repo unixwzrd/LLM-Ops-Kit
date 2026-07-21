@@ -27,7 +27,7 @@ class TuiContractTests(unittest.TestCase):
 
     def test_shared_status_preserves_authority_only_semantics(self) -> None:
         catalog = {
-            "schema_version": 1,
+            "schema_version": 2,
             "trusted_control_hosts": ["control-host"],
             "hosts": [
                 {"name": "desktop-host", "user": "operator", "peer_observable": False}
@@ -150,6 +150,26 @@ class TuiApplicationTests(unittest.IsolatedAsyncioTestCase):
                     await pilot.click("#action-help")
                     await pilot.pause()
                     self.assertIsNotNone(app.screen.query_one("#help-dialog"))
+                    await pilot.press("escape")
+                    await pilot.pause()
+                    await pilot.click("#action-details")
+                    await pilot.pause()
+                    self.assertIsNotNone(app.screen.query_one("#details-dialog"))
+                    self.assertIn("effective_configuration", str(app.screen.query_one(".details-body").render()))
+                    await pilot.press("escape")
+                    await pilot.pause()
+                    await pilot.click("#action-configure")
+                    await pilot.pause()
+                    self.assertIsNotNone(app.screen.query_one("#schema-edit-dialog"))
+                    self.assertIsNotNone(app.screen.query_one("#schema-fields"))
+                    await pilot.press("escape")
+                    await pilot.pause()
+                    await pilot.click("#action-catalog")
+                    await pilot.pause()
+                    self.assertIsNotNone(app.screen.query_one("#catalog-dialog"))
+                    await pilot.click("#add")
+                    await pilot.pause()
+                    self.assertIsNotNone(app.screen.query_one("#add-component-dialog"))
                     await pilot.press("escape")
                     await pilot.pause()
                     with mock.patch.object(app, "exit") as exit_app:

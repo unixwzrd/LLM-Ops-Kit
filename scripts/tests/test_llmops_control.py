@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import io
 import subprocess
@@ -14,6 +15,7 @@ from typing import Optional
 from unittest import mock
 
 from llmops_kit import __version__, entrypoint, llmops_cli
+from llmops_kit.entrypoint import tui_authority_command
 from llmops_kit.llmops_cli import _host_command as host_command
 from llmops_kit.llmops_cli import _remote_status as remote_status
 from llmops_kit.llmops_cli import _status_components as status_components
@@ -89,12 +91,16 @@ class ControlFixture(unittest.TestCase):
         )
         self.write_json(
             self.paths.config_file,
-            {"schema_version": 1, "runtime": {"allow_command_driver": False}},
+            {
+                "schema_version": 2,
+                "runtime": {"allow_command_driver": False},
+                "control": {"authority_host": "model-host"},
+            },
         )
         self.write_json(
             self.paths.inventory_file,
             {
-                "schema_version": 1,
+                "schema_version": 2,
                 "defaults": {
                     "user": "operator",
                     "port": 22,
@@ -113,7 +119,8 @@ class ControlFixture(unittest.TestCase):
         self.write_json(
             self.paths.models_dir / "chat.json",
             {
-                "schema_version": 1,
+                "schema_version": 2,
+                "template_id": "llama-cpp",
                 "name": "chat",
                 "type": "llm",
                 "model_path": "/models/chat.gguf",
@@ -124,7 +131,8 @@ class ControlFixture(unittest.TestCase):
         self.write_json(
             self.paths.models_dir / "embedding.json",
             {
-                "schema_version": 1,
+                "schema_version": 2,
+                "template_id": "llama-cpp",
                 "name": "embedding",
                 "type": "embedding",
                 "model_path": "/models/embedding.gguf",
@@ -135,22 +143,23 @@ class ControlFixture(unittest.TestCase):
         )
         self.write_json(
             self.paths.services_dir / "proxy.json",
-            {"schema_version": 1, "runtime": {"listen_host": "127.0.0.1", "listen_port": 11434, "upstream_host": "127.0.0.1", "upstream_port": 11433}},
+            {"schema_version": 2, "template_id": "model-proxy", "name": "proxy", "runtime": {"listen_host": "127.0.0.1", "listen_port": 11434, "upstream_host": "127.0.0.1", "upstream_port": 11433}},
         )
         self.write_json(
             self.paths.agents_dir / "sample-agent.json",
-            {"schema_version": 1, "actions": {action: ["/usr/bin/true"] for action in ("start", "stop", "restart", "status")}},
+            {"schema_version": 2, "template_id": "generic-agent", "name": "sample-agent", "actions": {action: ["/usr/bin/true"] for action in ("start", "stop", "restart", "status")}, "environment": {}},
         )
         self.write_json(
             self.paths.stacks_dir / "sample.json",
             {
-                "schema_version": 1,
+                "schema_version": 2,
                 "name": "sample",
                 "components": [
                     {
                         "id": "chat",
                         "host": "model-host",
                         "driver": "modelctl",
+                        "template_id": "llama-cpp",
                         "profile": "chat",
                         "tags": ["model", "chat"],
                     },
@@ -158,12 +167,14 @@ class ControlFixture(unittest.TestCase):
                         "id": "embedding",
                         "host": "model-host",
                         "driver": "modelctl",
+                        "template_id": "llama-cpp",
                         "profile": "embedding",
                     },
                     {
                         "id": "proxy",
                         "host": "agent-host",
                         "driver": "model-proxy",
+                        "template_id": "model-proxy",
                         "profile": "proxy",
                         "depends_on": ["chat"],
                     },
@@ -171,6 +182,7 @@ class ControlFixture(unittest.TestCase):
                         "id": "agent",
                         "host": "agent-host",
                         "driver": "agent",
+                        "template_id": "generic-agent",
                         "profile": "sample-agent",
                         "depends_on": ["proxy", "embedding"],
                     },
@@ -199,6 +211,35 @@ class InventoryTests(ControlFixture):
         with redirect_stdout(output):
             self.assertEqual(entrypoint.main(["--version"]), 0)
         self.assertEqual(output.getvalue().strip(), __version__)
+
+    def test_tui_routes_from_trusted_peer_to_authority(self) -> None:
+        catalog = {
+            "schema_version": 1,
+            "authority_host": "model-host",
+            "trusted_control_hosts": ["agent-host", "model-host"],
+            "hosts": [
+                {
+                    "name": "model-host",
+                    "host": "model.local",
+                    "user": "operator",
+                    "port": 22,
+                    "public_bin_dir": "~/.local/bin",
+                }
+            ],
+            "components": [],
+        }
+        self.write_json(self.paths.config_home / "catalog.json", catalog)
+        self.write_json(
+            self.paths.config_home / "resolved.json",
+            {"schema_version": 1, "host": "agent-host", "files": []},
+        )
+        command = tui_authority_command(self.paths.config_home, [])
+        self.assertIsNotNone(command)
+        assert command is not None
+        self.assertEqual(command[:2], ["ssh", "-t"])
+        self.assertIn("operator@model.local", command)
+        self.assertIn("LLMOPS_TUI_AUTHORITY_ROUTED=1", command[-1])
+        self.assertIn("llmops tui", command[-1])
 
     def test_load_inventory_supports_local_and_ssh_hosts(self) -> None:
         hosts = load_inventory(self.paths.inventory_file)
@@ -282,6 +323,47 @@ class TopologyTests(ControlFixture):
         self.assertIn("operator@agent.local", command)
         self.assertIn("component restart sample:proxy --json", command[-1])
 
+    def test_schema_mutation_routes_to_designated_authority(self) -> None:
+        catalog = {
+            "schema_version": 1,
+            "authority_host": "model-host",
+            "trusted_control_hosts": ["agent-host", "model-host"],
+            "hosts": [
+                {
+                    "name": "model-host",
+                    "host": "model.local",
+                    "user": "operator",
+                    "port": 22,
+                    "public_bin_dir": "~/.local/bin",
+                }
+            ],
+            "components": [],
+        }
+        args = type(
+            "Args",
+            (),
+            {
+                "command": "component",
+                "component_command": "configure",
+                "json": False,
+            },
+        )()
+        with (
+            mock.patch.object(llmops_cli, "_load_observer_catalog", return_value=catalog),
+            mock.patch.object(llmops_cli, "_current_snapshot_host", return_value="agent-host"),
+            mock.patch.object(llmops_cli, "_execute_host_operation", return_value=0) as execute,
+        ):
+            result = llmops_cli._route_authority_operation(
+                args,
+                ["component", "configure", "sample:chat", "--plan"],
+                config_home=self.paths.config_home,
+            )
+        self.assertEqual(result, 0)
+        host_name, command = execute.call_args.args
+        self.assertEqual(host_name, "model-host")
+        self.assertIn("operator@model.local", command)
+        self.assertIn("component configure sample:chat --plan", command[-1])
+
     def test_component_tags_are_loaded(self) -> None:
         self.assertEqual(self.topology.resolve_component("chat").tags, ("model", "chat"))
 
@@ -309,6 +391,35 @@ class TopologyTests(ControlFixture):
         ):
             self.assertEqual(llmops_cli.cmd_config_reconcile(args), 0)
         plan.assert_called_once_with(authority, ["model-host"])
+
+    def test_profile_creation_plans_against_mutable_authority(self) -> None:
+        llmops_cli.CURRENT_TOPOLOGY = self.topology
+        args = argparse.Namespace(
+            profile_action="create",
+            profile="worker",
+            template="standalone",
+            values=None,
+            expected_hash=None,
+            plan=True,
+            apply=False,
+            yes=False,
+            json=True,
+        )
+        output = io.StringIO()
+        with (
+            mock.patch.object(
+                llmops_cli,
+                "resolve_authority_config_home",
+                return_value=self.paths.config_home,
+            ),
+            redirect_stdout(output),
+        ):
+            self.assertEqual(llmops_cli.cmd_profile(args), 0)
+        payload = json.loads(output.getvalue())
+        self.assertEqual(
+            Path(payload["path"]).parent,
+            self.paths.services_dir,
+        )
 
     def test_model_proxy_log_channels_resolve_on_component_host(self) -> None:
         component = self.topology.resolve_component("proxy")
@@ -466,12 +577,13 @@ class TopologyTests(ControlFixture):
                 "id": "custom",
                 "host": "agent-host",
                 "driver": "command",
+                "template_id": "standalone",
                 "profile": "custom",
             }
         )
         self.write_json(
             self.paths.services_dir / "custom.json",
-            {"schema_version": 1, "actions": {action: ["/usr/bin/true"] for action in ("start", "stop", "restart", "status")}},
+            {"schema_version": 2, "template_id": "standalone", "name": "custom", "actions": {action: ["/usr/bin/true"] for action in ("start", "stop", "restart", "status")}, "environment": {}},
         )
         self.write_json(self.paths.stacks_dir / "sample.json", stack)
         topology = Topology(
@@ -483,7 +595,10 @@ class TopologyTests(ControlFixture):
         self.assertTrue(any("allow_command_driver" in error for error in validate_topology(topology)))
 
     def test_profile_runtime_contract_is_validated(self) -> None:
-        self.write_json(self.paths.models_dir / "chat.json", {"schema_version": 1, "name": "chat", "type": "llm"})
+        self.write_json(
+            self.paths.models_dir / "chat.json",
+            {"schema_version": 2, "template_id": "llama-cpp", "name": "chat", "type": "llm"},
+        )
         errors = validate_topology(self.topology)
         self.assertTrue(any("missing required runtime value: MODEL" in error for error in errors))
 
@@ -541,6 +656,9 @@ class TopologyTests(ControlFixture):
         inventory = json.loads(self.paths.inventory_file.read_text(encoding="utf-8"))
         inventory["hosts"][0]["trusted_control"] = False
         self.write_json(self.paths.inventory_file, inventory)
+        config = json.loads(self.paths.config_file.read_text(encoding="utf-8"))
+        config["control"]["authority_host"] = "agent-host"
+        self.write_json(self.paths.config_file, config)
         topology = Topology(
             stacks=load_stacks(self.paths),
             hosts=load_inventory(self.paths.inventory_file),
@@ -582,6 +700,7 @@ class TopologyTests(ControlFixture):
             {"agent-host": "agent.local", "model-host": "model.local"},
         )
         self.assertNotIn("ssh_key", (model / "catalog.json").read_text(encoding="utf-8"))
+        self.assertEqual(catalog["authority_host"], "model-host")
         self.assertEqual(catalog["trusted_control_hosts"], ["agent-host", "model-host"])
         self.assertTrue(all(item["peer_observable"] for item in catalog["hosts"]))
 

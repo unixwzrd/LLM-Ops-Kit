@@ -140,7 +140,7 @@ def _json_inventory(path: Path) -> dict[str, Any]:
     raw = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
         raise MigrationError(f"legacy inventory must be an object: {path}")
-    raw["schema_version"] = 1
+    raw["schema_version"] = 2
     return raw
 
 
@@ -187,7 +187,7 @@ def _simple_yaml_inventory(path: Path) -> dict[str, Any]:
             current[key] = _yaml_scalar(value)
             continue
         raise MigrationError(f"{path}:{number}: unsupported legacy inventory syntax")
-    return {"schema_version": 1, "defaults": defaults, "hosts": hosts}
+    return {"schema_version": 2, "defaults": defaults, "hosts": hosts}
 
 
 def _classify(path: Path, values: dict[str, str]) -> Optional[str]:
@@ -253,15 +253,15 @@ def _documents(legacy_home: Path, paths: LlmOpsPaths, digest: str) -> tuple[dict
         if kind == "model":
             values = _normalize_model_values(local_values, global_values)
             model_type = values.get("MODEL_TYPE", "tts" if "TTS_SERVER_MODULE" in values else "llm").lower()
-            payload = {"schema_version": 1, "name": path.stem, "type": model_type, "environment": values}
+            payload = {"schema_version": 2, "template_id": "llama-cpp", "name": path.stem, "type": model_type, "environment": values}
             destination = paths.models_dir / f"{path.stem}.json"
         elif kind == "service":
             values = local_values
             service_name = "tts-bridge" if "tts" in path.stem.lower() or any(key.startswith("TTS_BRIDGE_") for key in values) else "model-proxy"
-            payload = {"schema_version": 1, "name": service_name, "environment": values}
+            payload = {"schema_version": 2, "template_id": service_name, "name": service_name, "environment": values}
             destination = paths.services_dir / f"{service_name}.json"
         else:
-            payload = {"schema_version": 1, "name": path.stem, "enabled": False, "environment": local_values, "actions": {}}
+            payload = {"schema_version": 2, "template_id": "generic-agent", "name": path.stem, "enabled": False, "environment": local_values, "actions": {}}
             destination = paths.agents_dir / f"{path.stem}.json"
             warnings.append(f"agent lifecycle actions require review: {path}")
         if destination in documents:
@@ -281,7 +281,7 @@ def _documents(legacy_home: Path, paths: LlmOpsPaths, digest: str) -> tuple[dict
             destination = paths.services_dir / f"{service_name}.json"
             existing = documents.get(destination)
             if existing is None:
-                payload: dict[str, Any] = {"schema_version": 1, "name": service_name, "environment": values}
+                payload: dict[str, Any] = {"schema_version": 2, "template_id": service_name, "name": service_name, "environment": values}
             else:
                 payload = dict(existing)
                 payload["environment"] = {**values, **dict(existing.get("environment", {}))}
@@ -317,7 +317,7 @@ def migrate(legacy_home: Path, paths: LlmOpsPaths, *, dry_run: bool = False, for
     documents, mappings, warnings, skipped = _documents(legacy_home, paths, digest)
     if skipped and not allow_partial and not dry_run:
         raise MigrationError("migration found unclassified inputs; review the dry-run and rerun with --allow-partial: " + ", ".join(skipped))
-    documents[marker] = {"schema_version": 1, "source_hash": digest}
+    documents[marker] = {"schema_version": 2, "source_hash": digest}
     conflicts = [path for path in documents if path.exists()]
     if conflicts and not force:
         raise MigrationError("destination exists; use --force after backup: " + ", ".join(map(str, conflicts)))

@@ -1,0 +1,38 @@
+{
+  "template_version": 1,
+  "id": "tts-bridge",
+  "version": "1.0.0",
+  "adapter": "tts-bridge",
+  "profile_kind": "service",
+  "component_kind": "bridge",
+  "platforms": ["darwin", "linux"],
+  "lifecycle": "standalone",
+  "profile_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": true,
+    "required": ["schema_version", "name", "runtime"],
+    "properties": {
+      "schema_version": {"type": "integer", "const": 2, "default": 2},
+      "template_id": {"type": "string", "const": "tts-bridge", "default": "tts-bridge"},
+      "name": {"type": "string", "minLength": 1, "x-llmops-ui": {"group": "Identity", "order": 10}},
+      "runtime": {"type": "object", "required": ["host", "port", "upstream_base"], "properties": {
+        "python_bin": {"type": "string", "x-llmops-ui": {"group": "Runtime", "order": 10, "widget": "path"}},
+        "host": {"type": "string", "default": "127.0.0.1", "x-llmops-ui": {"group": "Listener", "order": 10}},
+        "port": {"type": "integer", "minimum": 1, "maximum": 65535, "default": 11436, "x-llmops-ui": {"group": "Listener", "order": 20, "widget": "number"}},
+        "upstream_base": {"type": "string", "format": "uri", "default": "http://127.0.0.1:11437/v1", "x-llmops-ui": {"group": "Upstream", "order": 10}}
+      }},
+      "paths": {"type": "object", "properties": {
+        "config_dir": {"type": "string", "x-llmops-ui": {"group": "Voice Configuration", "order": 10, "widget": "path"}},
+        "voice_map_config": {"type": "string", "x-llmops-ui": {"group": "Voice Configuration", "order": 20, "widget": "path"}},
+        "samples_dir": {"type": "string", "x-llmops-ui": {"group": "Voice Configuration", "order": 30, "widget": "path"}}
+      }},
+      "logging": {"type": "object", "properties": {"rotate_seconds": {"type": "integer", "minimum": 60, "default": 86400}, "rotate_keep": {"type": "integer", "minimum": 1, "default": 5}}}
+    }
+  },
+  "defaults": {"schema_version": 2, "template_id": "tts-bridge", "name": "tts-bridge", "runtime": {"host": "127.0.0.1", "port": 11436, "upstream_base": "http://127.0.0.1:11437/v1"}, "paths": {}, "logging": {"rotate_seconds": 86400, "rotate_keep": 5}},
+  "bindings": {"resolver": "tts-bridge"},
+  "endpoints": {"provides": {"openai-tts": {"scheme": "http", "host_path": "runtime.host", "port_path": "runtime.port"}}, "requires": {"tts": {"protocol": "openai-tts", "url_path": "runtime.upstream_base", "lifecycle_dependency": true}}},
+  "logs": {"service": {}},
+  "actions": {}
+}

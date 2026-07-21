@@ -11,6 +11,8 @@ Back: [Documentation index](./INDEX.md)
 - [ ] Run the installer and confirm `~/.local/bin/llmops --help`.
 - [ ] Confirm `~/.local/llm-ops/current` and the managed Python environment exist.
 - [ ] Run `llmops init` or review migrated canonical configuration.
+- [ ] Confirm `control.authority_host` names a trusted inventory host.
+- [ ] Use `llmops template list` and the Service Catalog to create any missing profiles and disabled components; do not hand-edit JSON for ordinary setup.
 - [ ] Run `llmops doctor --probe` and `llmops adapter doctor`.
 
 ## Operate
@@ -23,6 +25,7 @@ Back: [Documentation index](./INDEX.md)
 - [ ] Confirm the equivalent command shown by `llmops tui` before mutation.
 - [ ] Review component logs after restart using the appropriate channel and verify the reported host, execution user, path, and readiness.
 - [ ] Use `llmops operation list` and `llmops operation show <operation-id>` for lifecycle work dispatched from the TUI.
+- [ ] For tool components, run their read-only Verify, telemetry, version, or metrics actions before approving any integration mutation.
 
 ## Synchronize
 

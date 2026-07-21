@@ -21,6 +21,10 @@ Back: [Documentation index](./INDEX.md)
 
 - [x] Confirm `0.9.0b16` status records contain lifecycle, health, condition, observability, execution user, component version, desired/observed runtime, and toolkit version without the removed legacy status alias on both trusted hosts. The chat model was intentionally left stopped for separate MLXForge testing after the UI-only update.
 - [x] Confirm prompt replay through the installed media-history template retains exactly one historical image-bearing tool response and proxy forwarding remains byte-preserving. The authoritative replay retained one image result and one PNG marker, removed every assistant decode/copy call, and preserved the known truncation marker.
+- [ ] Build `0.9.0b18` from a clean committed archive and confirm its wheel contains all built-in service templates plus JSON Schema and Textual dependencies.
+- [ ] Migrate checksummed copies of both live canonical configurations to schema version 2 with no profile, component, stack, execution user, endpoint, lifecycle, or log-channel loss.
+- [ ] Verify schema mutation and `llmops tui` route from the non-authority trusted host to the designated authority and stale hashes are refused.
+- [ ] Complete the RTK Hermes canary backup/enable/disable/rollback acceptance only after explicit operator approval. The current dry run is non-mutating and is not canary acceptance.
 - [ ] Confirm CLI and TUI both refuse a target-only stop with active dependents unless cascade or force is explicitly selected.
 - [x] Pass keyboard navigation, high-contrast rendering, help, settings, branding, automatic-refresh pause, and bounded topology acceptance using the installed Textual wheel. Six artifact-boundary TUI tests passed on 2026-07-21 with repository source removed from `PYTHONPATH`.
 - [x] Build the candidate directly from a committed `git archive HEAD` without adding a synthetic `.git` directory, then install and inspect the resulting checksummed artifact in isolated roots.

@@ -26,7 +26,7 @@ class ProfileTests(unittest.TestCase):
     def test_structured_model_profile_resolves_runtime_values(self) -> None:
         values = model_values(
             {
-                "schema_version": 1,
+                "schema_version": 2,
                 "name": "chat",
                 "type": "llm",
                 "model_path": "/models/chat.gguf",

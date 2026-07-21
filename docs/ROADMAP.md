@@ -23,6 +23,8 @@ The beta is deliberately narrow. It should make the existing operator-v1 capabil
 
 The application-owned UV runtime, standard Python package, dual-architecture offline wheelhouse, adapter registry, core Textual dashboard, version/drift status, remote update implementation, and configuration reconciliation implementation are complete and covered by local regression tests. They remain release candidates until the final host acceptance sequence passes.
 
+Canonical configuration schema version 2, reviewed service templates, typed CLI mutation, generated Textual forms, reusable profile management, endpoint wiring, reversible component retirement, and authority-routed edits are implemented. Fresh operators can create a topology through the CLI or Service Catalog without hand-editing JSON. RTK inspection is implemented as a tool component; the mutating Hermes canary remains an explicit acceptance gate.
+
 The runtime completed its 48-hour soak with continuous successful hourly health checks. Scheduler defects discovered during the window were repaired and their jobs rerun successfully. Installer and TUI development may proceed; publication still requires the missing standardized daily report artifacts or an explicit replacement acceptance record.
 
 ### Beta TUI
@@ -31,7 +33,7 @@ The runtime completed its 48-hour soak with continuous successful hourly health 
 - High-contrast keyboard and mouse navigation, automatic-refresh settings, shared display labels, contextual help, and recent logs.
 - Component and stack start, stop, restart, plan, and explicitly toolkit-scoped update-check actions.
 - Equivalent `llmops` command shown before mutation.
-- Guided editing for stable existing-component fields, dependencies, ownership, and readiness timeout.
+- Schema-generated service creation and editing for reviewed templates, reusable profiles, endpoint connections, dependencies, ownership, and readiness timeouts.
 - Read-only bounded topology grouped by host with host, stack, driver, and condition filters.
 - No daemon, autonomous changes, model downloads, or secret-value editor.
 - Detached short-lived workers persist accepted long-running operations and survive TUI exit without creating a resident privileged service.
@@ -42,8 +44,8 @@ The TUI should begin as a compact operational dashboard. Configuration screens a
 
 1. **P0 - TUI interaction correctness:** Keep the visible Quit action equivalent to `q`, expose Settings in the primary action bar, apply topology filters immediately, provide one Reset action, and retain semantic condition colors in topology groups and components.
 2. **P1 - Remote log operations:** Add CLI list/read/follow operations for every adapter-declared log channel, resolving host and execution user through the catalog. Add a full-screen scrollable TUI viewer with channel selection, host/path identity, refresh, and follow controls.
-3. **P1 - Guided first installation and configuration:** Extend `llmops init` into an adapter-driven wizard that discovers hosts and executables, imports validated existing profiles when available, creates new model/service/agent profiles from adapter schemas, and previews the generated topology before writing it. Fresh users must not be required to author JSON manually.
-4. **P1 - Extensible profile configuration:** Let adapter manifests provide typed fields, defaults, validation, help, secret-reference handling, and advanced JSON fallback. Initial forms cover llama.cpp, model-proxy, TTS model/bridge, SSH tunnels, launchd, and generic agents. The same schemas must serve CLI, TUI, future WebUI, recipes, and third-party adapters.
+3. **P1 - Guided discovery:** Build optional host, executable, and port discovery over the completed schema-driven creation flow. Fresh users can already create validated profiles and components without manual JSON editing.
+4. **P1 - Template refinement:** Expand reviewed product-specific fields and dynamic option providers using the completed shared JSON Schema contract. The same schemas serve CLI, TUI, future WebUI, recipes, and third-party adapters.
 5. **P2 - Lifecycle ownership and restart policy:** Model standalone, manual, launchd, and later systemd ownership explicitly. Separate crash recovery from an operator-requested stop, and expose install/remove/enable/disable plus bounded restart policy without adding a privileged daemon.
 6. **P2 - Stack and host management:** Distinguish catalog host aliases from network hostnames, add full-screen stack membership and dependency views, support stack creation/editing and logical grouping, and keep desired-state reassignment separate from provisioning or stateful relocation.
 
@@ -86,7 +88,7 @@ The following are adapter or recipe candidates, not core dependencies:
 | Hermes Agent | Generic service profile plus optional guided recipe | Beta fixture |
 | OpenClaw | Generic service profile plus optional guided recipe | Post-beta |
 | Mnemosyne | Install/configure/health/update recipe for supported agents | Nice-to-have V1 |
-| RTK | Install, telemetry check, agent plugin canary, gain metrics, and rollback | Nice-to-have V1 |
+| RTK | Tool status, telemetry check, verification, gain, and Hermes dry-run are implemented; enable and rollback await canary approval | Beta gated |
 | Headroom | Install, health, metrics, routing canary, and rollback | Nice-to-have V1 |
 | MLXForge | Model engine lifecycle and health | Early-alpha V1 |
 | mlx-audio | External OpenAI-compatible TTS endpoint through TTS Bridge | Community/experimental |

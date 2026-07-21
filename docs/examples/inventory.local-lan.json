@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "defaults": {
     "user": "operator",
     "port": 22,
@@ -12,12 +12,14 @@
     {
       "name": "model-host",
       "role": "llm",
-      "host": "model-host.local"
+      "host": "model-host.local",
+      "trusted_control": true
     },
     {
       "name": "agent-host",
       "role": "agent",
-      "host": "agent-host.local"
+      "host": "agent-host.local",
+      "trusted_control": true
     }
   ]
 }

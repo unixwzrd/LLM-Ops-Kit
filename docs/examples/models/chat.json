@@ -1,5 +1,6 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
+  "template_id": "llama-cpp",
   "name": "chat",
   "type": "llm",
   "model_path": "/path/to/chat-model.gguf",

@@ -77,6 +77,18 @@ relocation_preflight -> relocation_cutover -> relocation_rollback
 observe -> metrics -> drift -> corrective_actions
 ```
 
+## Service Templates And Schema
+
+Canonical schema version 2 binds every component and reusable profile to a versioned service template. Templates use JSON Schema 2020-12 plus a constrained `x-llmops-ui` vocabulary for presentation only. They declare typed parameters, constraints, lifecycle ownership, argument arrays, endpoint contracts, readiness, timeouts, restart policy, logs, and reviewed adapter-owned actions.
+
+The CLI and TUI consume the same field model. Typed `--set` and `--unset`, generated forms, local-template import, endpoint wiring, and validation therefore cannot diverge into interface-specific configuration behavior. Local templates may select only registered adapters, argument arrays, and approved option sources; Python callbacks and shell strings are rejected.
+
+Connections reference typed provider endpoints. A required endpoint implies a lifecycle dependency unless the template explicitly opts out. Address resolution occurs when target-specific snapshots are reconciled, so reusable profiles are not rewritten with one host's resolved address.
+
+One host named by `control.authority_host` owns mutable desired state. Trusted peers carry the same secret-free catalog and may request a mutation, but the operation is forwarded to the authority with the observed authority hash. Stale hashes are refused and independent edits are never merged.
+
+Tool components represent installed command-line integrations that do not have start or stop semantics. RTK is the first built-in tool template: status checks installation, while version, telemetry, verification, gain, and Hermes dry-run are explicit actions. Mutating canary retention remains gated by backup and rollback acceptance.
+
 Update capability metadata distinguishes check, plan, apply, backup, rollback, and post-update health support. Relocation capability metadata distinguishes stateless ownership, preflight, cutover, and rollback. Built-in adapters do not advertise mutating update or relocation capabilities until their native implementations pass failure and rollback acceptance.
 
 All mutating methods receive an approved plan and argument arrays. Adapters must not accept unvalidated shell strings, embed secrets in returned plans, silently install dependencies, or mutate unrelated component state. Corrective actions are deterministic rules with evidence and an equivalent CLI plan; LLM-Ops-Kit does not act as an agent.
@@ -122,7 +134,7 @@ The first graphical interface is a Textual TUI that runs on demand and requires 
 - Global and per-host lifecycle, health, condition, observability, version, drift, and authority.
 - Component and stack drill-down.
 - Start, stop, restart, logs, plans, and update checks.
-- Guided editing of stable desired-state component fields with validation.
+- Schema-generated creation and editing for reviewed templates, reusable profiles, endpoint connections, and component lifecycle metadata.
 - High-contrast keyboard and mouse navigation, local refresh settings, shared display labels, and contextual help.
 - A bounded host-grouped topology view with immediate dependency relationships and filters.
 - Equivalent CLI display before every mutation.

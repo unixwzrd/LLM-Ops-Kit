@@ -1,17 +1,19 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "name": "local-lan",
   "components": [
     {
       "id": "chat",
       "host": "model-host",
       "driver": "modelctl",
+      "template_id": "llama-cpp",
       "profile": "chat"
     },
     {
       "id": "model-proxy",
       "host": "agent-host",
       "driver": "model-proxy",
+      "template_id": "model-proxy",
       "profile": "model-proxy",
       "depends_on": ["chat"]
     },
@@ -19,6 +21,7 @@
       "id": "agent",
       "host": "agent-host",
       "driver": "agent",
+      "template_id": "generic-agent",
       "profile": "generic",
       "depends_on": ["model-proxy"]
     }

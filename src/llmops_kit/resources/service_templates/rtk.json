@@ -1,0 +1,40 @@
+{
+  "template_version": 1,
+  "id": "rtk",
+  "version": "1.0.0",
+  "adapter": "standalone",
+  "profile_kind": "service",
+  "component_kind": "tool",
+  "platforms": ["darwin", "linux"],
+  "lifecycle": "tool",
+  "profile_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": true,
+    "required": ["schema_version", "name", "executable", "telemetry_required"],
+    "properties": {
+      "schema_version": {"type": "integer", "const": 2, "default": 2},
+      "template_id": {"type": "string", "const": "rtk", "default": "rtk"},
+      "name": {"type": "string", "const": "rtk", "default": "rtk"},
+      "executable": {"type": "string", "default": "~/.local/bin/rtk", "x-llmops-ui": {"group": "Runtime", "order": 10, "widget": "path"}},
+      "telemetry_required": {"type": "string", "const": "disabled", "default": "disabled", "x-llmops-ui": {"group": "Privacy", "order": 10, "widget": "select"}},
+      "integration": {"type": "object", "properties": {
+        "agent": {"type": "string", "enum": ["none", "hermes"], "default": "none", "x-llmops-ui": {"group": "Canary", "order": 10, "widget": "select"}},
+        "mode": {"type": "string", "enum": ["disabled", "canary"], "default": "disabled", "x-llmops-ui": {"group": "Canary", "order": 20, "widget": "select"}}
+      }}
+    }
+  },
+  "defaults": {"schema_version": 2, "template_id": "rtk", "name": "rtk", "executable": "~/.local/bin/rtk", "telemetry_required": "disabled", "integration": {"agent": "none", "mode": "disabled"}},
+  "bindings": {"resolver": "tool"},
+  "endpoints": {},
+  "logs": {},
+  "actions": {
+    "version": {"argv": ["{profile.executable}", "--version"], "mutating": false},
+    "verify": {"argv": ["{profile.executable}", "verify"], "mutating": false},
+    "telemetry": {"argv": ["{profile.executable}", "telemetry", "status"], "mutating": false},
+    "metrics": {"argv": ["{profile.executable}", "gain"], "mutating": false},
+    "configure": {"argv": ["{profile.executable}", "init", "--agent", "hermes", "--global", "--show"], "mutating": false},
+    "enable-canary-plan": {"argv": ["{profile.executable}", "init", "--agent", "hermes", "--global", "--dry-run"], "mutating": false},
+    "disable-canary-plan": {"argv": ["{profile.executable}", "init", "--agent", "hermes", "--global", "--uninstall", "--dry-run"], "mutating": false}
+  }
+}

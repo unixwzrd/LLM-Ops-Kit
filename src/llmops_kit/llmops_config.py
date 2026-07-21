@@ -17,7 +17,8 @@ except ModuleNotFoundError:  # pragma: no cover - direct source execution
     from .llmops_paths import LlmOpsPaths, resolve_paths
 
 
-SUPPORTED_SCHEMA_VERSION = 1
+SUPPORTED_SCHEMA_VERSION = 2
+READABLE_SCHEMA_VERSIONS = {2}
 OBJECT_SECTIONS = {
     "runtime",
     "models",
@@ -27,6 +28,7 @@ OBJECT_SECTIONS = {
     "deployment",
     "secrets",
     "display",
+    "control",
 }
 
 
@@ -49,7 +51,7 @@ class LlmOpsConfig:
 
 
 def default_config() -> dict[str, Any]:
-    """Return the minimum valid v1 config document."""
+    """Return the minimum valid version-two config document."""
 
     return {
         "schema_version": SUPPORTED_SCHEMA_VERSION,
@@ -60,6 +62,7 @@ def default_config() -> dict[str, Any]:
         "services": {},
         "deployment": {},
         "display": {},
+        "control": {"authority_host": ""},
         "secrets": {
             "provider": "env",
         },
@@ -72,7 +75,7 @@ def validate_config(data: dict[str, Any]) -> None:
     raw_version = data.get("schema_version", SUPPORTED_SCHEMA_VERSION)
     if not isinstance(raw_version, int):
         raise ConfigError("schema_version must be an integer")
-    if raw_version != SUPPORTED_SCHEMA_VERSION:
+    if raw_version not in READABLE_SCHEMA_VERSIONS:
         raise ConfigError(f"unsupported schema_version: {raw_version}")
     for section in OBJECT_SECTIONS:
         if section in data and not isinstance(data[section], dict):
@@ -86,6 +89,10 @@ def validate_config(data: dict[str, Any]) -> None:
         value = display.get(field, "") if isinstance(display, dict) else ""
         if not isinstance(value, str):
             raise ConfigError(f"display.{field} must be a string")
+    control = data.get("control", {})
+    authority_host = control.get("authority_host", "") if isinstance(control, dict) else ""
+    if not isinstance(authority_host, str):
+        raise ConfigError("control.authority_host must be a string")
 
 
 def load_config(path: Path | None = None, *, paths: LlmOpsPaths | None = None) -> LlmOpsConfig:

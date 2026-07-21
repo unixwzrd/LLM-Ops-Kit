@@ -1,6 +1,9 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "runtime": {
     "allow_command_driver": false
+  },
+  "control": {
+    "authority_host": "model-host"
   }
 }

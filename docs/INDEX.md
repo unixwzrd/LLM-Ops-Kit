@@ -13,6 +13,8 @@
 - [Status semantics](./STATUS.md)
 - [Topology views](./TOPOLOGY.md)
 - [Adapters](./ADAPTERS.md)
+- [Service template authoring](./TEMPLATE_AUTHORING.md)
+- [RTK integration](./RTK.md)
 - [Model profiles](./MODELCTL_GUIDE.md)
 - [Model proxy](./PROXY_TAP_RUNBOOK.md)
 - [Troubleshooting](./TROUBLESHOOTING.md)

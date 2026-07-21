@@ -14,6 +14,7 @@ COMPONENT_FIELD_SCHEMA: dict[str, dict[str, Any]] = {
     "host": {"label": "Host", "group": "Placement", "order": 10, "type": "string", "required": True},
     "profile": {"label": "Profile", "group": "Configuration", "order": 20, "type": "string", "required": True},
     "ownership": {"label": "Ownership", "group": "Lifecycle", "order": 30, "type": "enum", "choices": ["managed", "external"]},
+    "restart_policy": {"label": "Restart policy", "group": "Lifecycle", "order": 40, "type": "enum", "choices": ["never", "on-failure"]},
     "enabled": {"label": "Enabled", "group": "Lifecycle", "order": 40, "type": "boolean"},
     "depends_on": {"label": "Dependencies", "group": "Topology", "order": 50, "type": "string-list"},
     "health_timeout": {"label": "Health timeout", "group": "Readiness", "order": 60, "type": "integer", "minimum": 1, "maximum": 3600},
@@ -98,6 +99,7 @@ def register_builtin_adapters() -> list[AdapterManifest]:
         AdapterManifest("llama-cpp", "1.0.0", drivers=("modelctl",), schema={"profile_kind": "model", "component_fields": COMPONENT_FIELD_SCHEMA}),
         AdapterManifest("model-proxy", "1.0.0", drivers=("model-proxy",), schema={"profile_kind": "service", "component_fields": COMPONENT_FIELD_SCHEMA}),
         AdapterManifest("tts-bridge", "1.0.0", drivers=("tts-bridge",), schema={"profile_kind": "service", "component_fields": COMPONENT_FIELD_SCHEMA}),
+        AdapterManifest("systemd-user", "0.1.0", drivers=("systemd",), required_executables=("systemctl",), platforms=("linux",), schema={"profile_kind": "service", "component_fields": COMPONENT_FIELD_SCHEMA}),
     ]
 
 
@@ -143,7 +145,7 @@ def validate_adapters(registry: dict[str, AdapterManifest], drivers: Iterable[st
     current = platform.system().lower()
     claimed: dict[str, str] = {}
     for adapter_id, manifest in sorted(registry.items()):
-        if current not in manifest.platforms:
+        if current not in manifest.platforms and any(driver in set(drivers) for driver in manifest.drivers):
             errors.append(f"{adapter_id}: unsupported platform {current}")
         for driver in manifest.drivers:
             if driver in claimed:

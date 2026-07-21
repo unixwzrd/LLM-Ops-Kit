@@ -8,7 +8,7 @@ import re
 import shlex
 import subprocess
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Optional
 
@@ -128,6 +128,18 @@ def _launchd_command(profile: dict[str, Any], component: Component, action: str)
     raise DriverError(f"{component.qualified_id}: unsupported launchd action: {action}")
 
 
+def _systemd_command(profile: dict[str, Any], component: Component, action: str) -> str:
+    unit = profile.get("unit")
+    if not isinstance(unit, str) or not unit.endswith(".service"):
+        raise DriverError(f"{component.qualified_id}: systemd profile requires a .service unit")
+    verbs = {"start": "start", "stop": "stop", "restart": "restart", "status": "status"}
+    if action == "logs":
+        return f"journalctl --user -u {shlex.quote(unit)} -n 100 --no-pager"
+    if action not in verbs:
+        raise DriverError(f"{component.qualified_id}: unsupported systemd action: {action}")
+    return f"systemctl --user {verbs[action]} {shlex.quote(unit)}"
+
+
 def _log_path(topology: Topology, component: Component, profile: dict[str, Any], channel: str) -> str:
     """Resolve a component log channel on the component host."""
 
@@ -201,6 +213,14 @@ def build_component_command(
             return f"tail -n 100 {shlex.quote(log_path)}"
         return _launchd_command(profile, component, action)
     if component.driver in {"process", "command"}:
+        if profile.get("template_id") == "rtk":
+            executable = profile.get("executable")
+            if not isinstance(executable, str) or not executable:
+                raise DriverError(f"{component.qualified_id}: RTK profile requires executable")
+            if action == "status":
+                resolved = _remote_root(executable)
+                return f"test -x {resolved} && {resolved} --version"
+            raise DriverError(f"{component.qualified_id}: tool lifecycle action is not applicable: {action}")
         actions = _require_actions(profile, component)
         argv = actions.get(action)
         if argv is None:
@@ -210,6 +230,8 @@ def build_component_command(
                     return f"tail -n 100 {shlex.quote(log_path)}"
             raise DriverError(f"{component.qualified_id}: profile does not define action: {action}")
         return shlex.join(argv)
+    if component.driver == "systemd":
+        return _systemd_command(profile, component, action)
     raise DriverError(f"{component.qualified_id}: unsupported driver: {component.driver}")
 
 
@@ -218,6 +240,10 @@ class ComponentRunner:
 
     def __init__(self, topology: Topology) -> None:
         self.topology = topology
+
+    def _host(self, component: Component) -> HostRecord:
+        host = self.topology.hosts[component.host]
+        return replace(host, user=component.execution_user) if component.execution_user else host
 
     def run(
         self,
@@ -236,7 +262,7 @@ class ComponentRunner:
             action,
             log_channel=log_channel,
         )
-        host = self.topology.hosts[component.host]
+        host = self._host(component)
         command = ["/bin/sh", "-c", script] if host.transport == "local" else host.ssh_base() + [script]
         try:
             completed = subprocess.run(
@@ -264,6 +290,46 @@ class ComponentRunner:
             stderr=completed.stderr.strip(),
         )
 
+    def run_argv(
+        self,
+        component: Component,
+        action: str,
+        argv: list[str],
+        *,
+        timeout: Optional[int] = None,
+    ) -> CommandResult:
+        """Run a validated adapter-owned argv action without a shell locally."""
+
+        if not argv or any(not isinstance(token, str) or not token for token in argv):
+            raise DriverError(f"{component.qualified_id}: invalid argv for action {action}")
+        host = self._host(component)
+        command = argv if host.transport == "local" else host.ssh_base() + [shlex.join(argv)]
+        try:
+            completed = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=timeout or component.timeouts.status,
+            )
+        except subprocess.TimeoutExpired as exc:
+            return CommandResult(
+                component=component.qualified_id,
+                action=action,
+                command=shlex.join(command),
+                returncode=124,
+                stdout=(exc.stdout or "") if isinstance(exc.stdout, str) else "",
+                stderr=f"{action} timed out after {timeout or component.timeouts.status} seconds",
+            )
+        return CommandResult(
+            component=component.qualified_id,
+            action=action,
+            command=shlex.join(command),
+            returncode=completed.returncode,
+            stdout=completed.stdout.strip(),
+            stderr=completed.stderr.strip(),
+        )
+
     def status(self, component: Component) -> CommandResult:
         """Return the component's driver status result."""
 
@@ -280,7 +346,7 @@ class ComponentRunner:
         match = re.search(r"(?:^|\s)pid=(\d+)(?:\s|$)", result.stdout)
         if match is None:
             return None
-        host = self.topology.hosts[component.host]
+        host = self._host(component)
         script = f"ps -p {int(match.group(1))} -o command="
         command = ["/bin/sh", "-c", script] if host.transport == "local" else host.ssh_base() + [script]
         completed = subprocess.run(command, capture_output=True, text=True, check=False)
@@ -321,11 +387,38 @@ class ComponentRunner:
         """Run one configured readiness probe without retries."""
 
         health = component.health
+        profile = load_profile(self.topology.paths, component)
+        if profile.get("template_id") == "rtk":
+            executable = profile.get("executable")
+            if not isinstance(executable, str) or not executable:
+                raise DriverError(f"{component.qualified_id}: RTK profile requires executable")
+            resolved = _remote_root(executable)
+            script = (
+                f"output=$({resolved} telemetry status 2>&1); rc=$?; "
+                'printf "%s\\n" "$output"; '
+                'test "$rc" -eq 0 && printf "%s\\n" "$output" | '
+                'grep -Eq "enabled:[[:space:]]+no"'
+            )
+            host = self._host(component)
+            command = (
+                ["/bin/sh", "-c", script]
+                if host.transport == "local"
+                else host.ssh_base() + [script]
+            )
+            completed = subprocess.run(command, capture_output=True, text=True, check=False)
+            return CommandResult(
+                component.qualified_id,
+                "health",
+                " ".join(shlex.quote(token) for token in command),
+                completed.returncode,
+                completed.stdout.strip(),
+                completed.stderr.strip(),
+            )
         if health.kind == "none":
             return None
         if health.kind == "driver":
             return driver_result or self.status(component)
-        host = self.topology.hosts[component.host]
+        host = self._host(component)
         if health.kind == "http":
             script = f"curl -fsS --max-time 3 {shlex.quote(health.target)} >/dev/null"
         else:

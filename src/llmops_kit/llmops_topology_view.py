@@ -46,6 +46,7 @@ def project_topology(
             "profile": item.profile,
             "enabled": item.enabled,
             "ownership": item.ownership,
+            "restart_policy": item.restart_policy,
             "tags": list(item.tags),
             "depends_on": list(item.depends_on),
             "dependents": sorted(

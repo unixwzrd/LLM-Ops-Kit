@@ -1,0 +1,34 @@
+{
+  "template_version": 1,
+  "id": "generic-agent",
+  "version": "1.0.0",
+  "adapter": "standalone",
+  "profile_kind": "agent",
+  "component_kind": "agent",
+  "platforms": ["darwin", "linux"],
+  "lifecycle": "standalone",
+  "profile_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": true,
+    "required": ["schema_version", "name", "actions"],
+    "properties": {
+      "schema_version": {"type": "integer", "const": 2, "default": 2},
+      "template_id": {"type": "string", "const": "generic-agent", "default": "generic-agent"},
+      "name": {"type": "string", "minLength": 1},
+      "actions": {"type": "object", "required": ["start", "stop", "status"], "properties": {
+        "start": {"type": "array", "minItems": 1, "items": {"type": "string"}, "x-llmops-ui": {"group": "Lifecycle", "order": 10, "widget": "argv"}},
+        "stop": {"type": "array", "minItems": 1, "items": {"type": "string"}, "x-llmops-ui": {"group": "Lifecycle", "order": 20, "widget": "argv"}},
+        "restart": {"type": "array", "minItems": 1, "items": {"type": "string"}, "x-llmops-ui": {"group": "Lifecycle", "order": 30, "widget": "argv"}},
+        "status": {"type": "array", "minItems": 1, "items": {"type": "string"}, "x-llmops-ui": {"group": "Lifecycle", "order": 40, "widget": "argv"}}
+      }},
+      "environment": {"type": "object", "additionalProperties": {"type": "string"}, "default": {}},
+      "log_path": {"type": "string", "x-llmops-ui": {"group": "Logging", "order": 10, "widget": "path"}}
+    }
+  },
+  "defaults": {"schema_version": 2, "template_id": "generic-agent", "name": "agent", "actions": {"start": ["/usr/bin/true"], "stop": ["/usr/bin/true"], "restart": ["/usr/bin/true"], "status": ["/usr/bin/true"]}, "environment": {}},
+  "bindings": {"resolver": "actions"},
+  "endpoints": {},
+  "logs": {"service": {"path_field": "log_path"}},
+  "actions": {}
+}

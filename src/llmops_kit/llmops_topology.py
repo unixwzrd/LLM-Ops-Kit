@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 import hashlib
 import shutil
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Optional
 from urllib.parse import urlparse
@@ -31,6 +31,7 @@ SUPPORTED_DRIVERS = {
     "modelctl",
     "process",
     "ssh-tunnel",
+    "systemd",
     "tts-bridge",
 }
 PROFILE_DIR_BY_DRIVER = {
@@ -41,6 +42,7 @@ PROFILE_DIR_BY_DRIVER = {
     "modelctl": "models",
     "process": "services",
     "ssh-tunnel": "services",
+    "systemd": "services",
     "tts-bridge": "services",
 }
 
@@ -81,9 +83,14 @@ class Component:
     enabled: bool
     depends_on: tuple[str, ...]
     ownership: str
+    restart_policy: str
     tags: tuple[str, ...]
     health: HealthCheck
     timeouts: LifecycleTimeouts
+    template_id: str = ""
+    execution_user: str = ""
+    retired: bool = False
+    connections: dict[str, dict[str, str]] = field(default_factory=dict)
 
     @property
     def qualified_id(self) -> str:
@@ -148,7 +155,7 @@ def _load_json_object(path: Path, *, label: str) -> dict[str, Any]:
         raise TopologyError(f"{path}: invalid {label} JSON: {exc}") from exc
     if not isinstance(raw, dict):
         raise TopologyError(f"{path}: {label} must be a JSON object")
-    if raw.get("schema_version", 1) != 1:
+    if raw.get("schema_version") != 2:
         raise TopologyError(f"{path}: unsupported schema_version: {raw.get('schema_version')}")
     return raw
 
@@ -225,6 +232,9 @@ def _parse_component(stack_name: str, raw: Any) -> Component:
     ownership = str(raw.get("ownership", "managed"))
     if ownership not in {"managed", "external"}:
         raise TopologyError(f"{reference}: ownership must be managed or external")
+    restart_policy = str(raw.get("restart_policy", "never"))
+    if restart_policy not in {"never", "on-failure"}:
+        raise TopologyError(f"{reference}: restart_policy must be never or on-failure")
     enabled = raw.get("enabled", True)
     if not isinstance(enabled, bool):
         raise TopologyError(f"{reference}: enabled must be boolean")
@@ -236,6 +246,17 @@ def _parse_component(stack_name: str, raw: Any) -> Component:
     normalized_dependencies = tuple(
         item if ":" in item else f"{stack_name}:{item}" for item in depends
     )
+    retired = raw.get("retired", False)
+    if not isinstance(retired, bool):
+        raise TopologyError(f"{reference}: retired must be boolean")
+    connections = raw.get("connections", {})
+    if not isinstance(connections, dict):
+        raise TopologyError(f"{reference}: connections must be an object")
+    for name, connection in connections.items():
+        if not isinstance(name, str) or not isinstance(connection, dict):
+            raise TopologyError(f"{reference}: invalid connection {name!r}")
+        if not isinstance(connection.get("component"), str) or not isinstance(connection.get("endpoint"), str):
+            raise TopologyError(f"{reference}: connection {name} requires component and endpoint")
     return Component(
         stack=stack_name,
         component_id=component_id,
@@ -245,9 +266,14 @@ def _parse_component(stack_name: str, raw: Any) -> Component:
         enabled=enabled,
         depends_on=normalized_dependencies,
         ownership=ownership,
+        restart_policy=restart_policy,
         tags=tuple(dict.fromkeys(tag.strip() for tag in tags)),
         health=_parse_health(raw.get("health"), component_ref=reference),
         timeouts=_parse_timeouts(raw.get("timeouts"), component_ref=reference),
+        template_id=str(raw.get("template_id", "")),
+        execution_user=str(raw.get("execution_user", "")),
+        retired=retired,
+        connections=connections,
     )
 
 
@@ -417,6 +443,12 @@ def _validate_profile(component: Component, profile: dict[str, Any]) -> tuple[li
             if "plist" in profile and (not isinstance(profile["plist"], str) or not profile["plist"]):
                 errors.append(f"{component.qualified_id}: launchd plist must be a path string")
         elif component.driver in {"agent", "process", "command"}:
+            if profile.get("template_id") == "rtk":
+                if not isinstance(profile.get("executable"), str) or not profile.get("executable"):
+                    errors.append(f"{component.qualified_id}: RTK profile requires executable")
+                if profile.get("telemetry_required") != "disabled":
+                    errors.append(f"{component.qualified_id}: RTK telemetry must be disabled")
+                return errors, values
             actions = profile.get("actions")
             if not isinstance(actions, dict):
                 errors.append(f"{component.qualified_id}: profile actions must be an object")
@@ -427,6 +459,10 @@ def _validate_profile(component: Component, profile: dict[str, Any]) -> tuple[li
                         errors.append(
                             f"{component.qualified_id}: action {action} must be a nonempty argv array"
                         )
+        elif component.driver == "systemd":
+            unit = profile.get("unit")
+            if not isinstance(unit, str) or not unit.endswith(".service"):
+                errors.append(f"{component.qualified_id}: systemd profile requires a .service unit")
     except ProfileError as exc:
         errors.append(f"{component.qualified_id}: {exc}")
     return errors, values
@@ -436,6 +472,15 @@ def validate_topology(topology: Topology) -> list[str]:
     """Validate all host, profile, driver, dependency, and port contracts."""
 
     errors: list[str] = []
+    authority_host = str(
+        topology.config.data.get("control", {}).get("authority_host", "")
+    )
+    if authority_host:
+        authority = topology.hosts.get(authority_host)
+        if authority is None:
+            errors.append(f"control.authority_host is not in inventory: {authority_host}")
+        elif not authority.trusted_control:
+            errors.append(f"control.authority_host is not a trusted control host: {authority_host}")
     if not topology.stacks:
         return [f"no stack definitions found under {topology.paths.stacks_dir}"]
     allow_command = bool(
@@ -462,6 +507,8 @@ def validate_topology(topology: Topology) -> list[str]:
                 continue
             profile_errors, values = _validate_profile(component, profile)
             errors.extend(profile_errors)
+            if not component.enabled or component.retired:
+                continue
             for bind_host, port in _profile_bindings(profile, values):
                 key = (component.host, bind_host, port)
                 if key in bound and bound[key] != component.qualified_id:
@@ -506,6 +553,9 @@ def write_topology_catalog(topology: Topology, destination: Path) -> Path:
 
     catalog = {
         "schema_version": 1,
+        "authority_host": str(
+            topology.config.data.get("control", {}).get("authority_host", "")
+        ),
         "trusted_control_hosts": sorted(
             host.name for host in topology.hosts.values() if host.trusted_control
         ),
@@ -530,10 +580,15 @@ def write_topology_catalog(topology: Topology, destination: Path) -> Path:
                 "host": component.host,
                 "driver": component.driver,
                 "profile": component.profile,
+                "template_id": component.template_id,
+                "execution_user": component.execution_user,
                 "enabled": component.enabled,
+                "retired": component.retired,
                 "ownership": component.ownership,
+                "restart_policy": component.restart_policy,
                 "tags": list(component.tags),
                 "depends_on": list(component.depends_on),
+                "connections": component.connections,
                 "timeouts": {
                     "start": component.timeouts.start,
                     "stop": component.timeouts.stop,
@@ -566,8 +621,8 @@ def write_host_snapshot(topology: Topology, *, host_name: str, destination: Path
     host = topology.hosts[host_name]
     available = [
         item
-        for item in topology.all_components(enabled_only=True)
-        if host.trusted_control or item.host == host_name
+        for item in topology.all_components()
+        if host.trusted_control or (item.host == host_name and item.enabled)
     ]
     if not available:
         raise TopologyError(f"host {host_name} has no enabled components")
@@ -601,9 +656,16 @@ def write_host_snapshot(topology: Topology, *, host_name: str, destination: Path
     config_path.write_text(json.dumps(config_data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     copied.append({"path": "config.json", "sha256": _sha256(config_path)})
 
+    if topology.paths.templates_dir.is_dir():
+        for source in sorted(topology.paths.templates_dir.glob("*.json")):
+            target = destination / "templates" / source.name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
+            copied.append({"path": str(target.relative_to(destination)), "sha256": _sha256(target)})
+
     inventory_hosts = sorted(topology.hosts.values(), key=lambda item: item.name) if host.trusted_control else [host]
     inventory_data = {
-        "schema_version": 1,
+        "schema_version": 2,
         "hosts": [
             {
                 "name": item.name,
@@ -652,10 +714,15 @@ def write_host_snapshot(topology: Topology, *, host_name: str, destination: Path
                     "id": item.component_id,
                     "host": item.host,
                     "driver": item.driver,
+                    "template_id": item.template_id,
                     "profile": item.profile,
+                    "execution_user": item.execution_user,
                     "enabled": item.enabled,
+                    "retired": item.retired,
                     "depends_on": local_dependencies,
+                    "connections": item.connections,
                     "ownership": item.ownership,
+                    "restart_policy": item.restart_policy,
                     "tags": list(item.tags),
                     "health": {
                         "type": item.health.kind,
@@ -668,7 +735,7 @@ def write_host_snapshot(topology: Topology, *, host_name: str, destination: Path
         stack_path.parent.mkdir(parents=True, exist_ok=True)
         stack_path.write_text(
             json.dumps(
-                {"schema_version": 1, "name": stack_name, "components": serialized},
+                {"schema_version": 2, "name": stack_name, "components": serialized},
                 indent=2,
                 sort_keys=True,
             )
@@ -687,6 +754,7 @@ def write_host_snapshot(topology: Topology, *, host_name: str, destination: Path
                 "driver": item.driver,
                 "profile": item.profile,
                 "ownership": item.ownership,
+                "restart_policy": item.restart_policy,
                 "tags": list(item.tags),
             }
             for item in available

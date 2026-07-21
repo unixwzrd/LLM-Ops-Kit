@@ -23,11 +23,15 @@ Back: [Documentation index](./INDEX.md)
 - [x] Add the media-history template, preserving one final image-bearing tool response while pruning earlier payloads and duplicate assistant-side copies without changing proxy transport bytes.
 - [x] Add effective configuration, host-qualified log channels, component runtime/version inspection, lifecycle timeouts, and persistent detached operation inspection.
 - [x] Make TUI lifecycle/update actions non-blocking and add progress states, Escape-safe modals, clickable actions, populated topology filters, and accessible colors.
+- [x] Add canonical schema version 2, reviewed JSON Schema service templates, typed field inspection and mutation, transactional profile/component creation, endpoint wiring, reversible retirement, and stale-authority-hash refusal.
+- [x] Add the Textual Service Catalog, generated profile forms, full Details, stack membership/dependency inspection, and dynamic host/profile/endpoint choices.
+- [x] Route schema operations and the Textual console from trusted peers to one designated desired-state authority.
+- [x] Add RTK as a tool component with installation status, version, telemetry, verification, gain, and Hermes integration dry-run actions.
 
 ## Beta Release Gates
 
 - [x] Replay the current Hermes request through the installed media-history template and confirm one final historical image-bearing tool response, no earlier payloads, and no duplicate assistant base64 copies. The installed `0.9.0b14` replay retained one image result and one PNG marker, with zero assistant decode/copy calls.
-- [x] Pass the dependency-complete source suite and precheck in the packaged UV environment. Commit `546bbc2` passed 146 tests and precheck on 2026-07-21.
+- [x] Pass the dependency-complete source suite and precheck in the packaged UV environment. Source candidate `0.9.0b18` passes 159 tests and precheck on 2026-07-21; exact clean-artifact repetition remains a separate gate.
 - [x] Pass normal clean installation from a verified archive on isolated Apple Silicon and Intel macOS users.
 - [ ] Repeat normal installation from the final committed release artifact on both macOS users after documentation and acceptance fixes stop changing the package.
 - [x] Pass `--minimal` installation on isolated Apple Silicon and Intel macOS users and confirm the CLI works while `llmops tui` reports the omitted optional dependency cleanly.
@@ -47,11 +51,10 @@ Back: [Documentation index](./INDEX.md)
 ## Deferred From Beta
 
 - [ ] Add catalog-wide `component logs list/read/follow` commands and a full-screen scrollable TUI log viewer with adapter-declared channels, remote host/user resolution, path identity, refresh, and follow controls.
-- [ ] Add an adapter-driven fresh-install wizard that discovers local/LAN capabilities, imports existing profiles when present, creates validated new profiles, and previews the generated topology without requiring manual JSON authoring.
-- [ ] Add shared adapter-schema profile forms for llama.cpp, model-proxy, TTS model/bridge, tunnels, launchd, and generic agents, with transactional writes and advanced canonical JSON fallback.
+- [ ] Extend guided initialization with optional host and executable discovery. Fresh topology creation is now available through templates in the CLI and TUI without manual JSON editing.
+- [ ] Expand schema coverage for product-specific fields discovered during beta operation; unknown extension fields remain preserved and available through advanced CLI file input.
 - [ ] Add explicit manual/standalone/launchd lifecycle ownership and crash-only restart policies that never override an intentional operator stop.
-- [ ] Add full-screen stack membership/dependency management and clarify catalog host aliases versus network hostnames throughout configuration and help.
-- [ ] Add adapter-specific and arbitrary-profile schema forms after the schema contract stabilizes. Unknown fields remain canonical JSON in beta.
+- [ ] Add mutating stack creation and membership editing. Full-screen membership, dependencies, and connection inspection are complete.
 - [ ] Add deterministic corrective suggestions from active probes to the TUI. The beta TUI shows configuration validation only.
 - [ ] Add a correlated model-proxy diagnostic exchange browser. The beta exposes component logs without modifying proxy traffic.
 - [ ] Package an agent-neutral operational skill using `doctor`, `plan`, `status`, and JSON output with explicit approval for mutations and SSH provisioning.
@@ -60,6 +63,7 @@ Back: [Documentation index](./INDEX.md)
 - [ ] Add the loopback static WebUI over the same control library after the TUI stabilizes.
 - [ ] Add stateless component relocation with adapter preflight, cutover, dependent endpoint update, and rollback. Do not treat a desired-state host edit as provisioning.
 - [ ] Add component-native update check/plan/apply commands after provider backup, rollback, and post-update health contracts pass acceptance.
+- [ ] Run the bounded Hermes RTK canary after explicit approval, capture owned-file backups, compare diagnostics and token reduction, and prove disable/rollback before retaining the hook.
 
 ## Integration Roadmap
 

@@ -12,11 +12,21 @@ from typing import Any, Optional
 
 from . import llmops_cli, llmops_update
 from .llmops_config import update_display
+from .llmops_config_ops import (
+    ConfigOperationError,
+    clone_component,
+    component_field_records,
+    configure_component_schema,
+    field_records,
+    provision_component,
+    retire_component,
+)
 from .llmops_drivers import ComponentRunner
 from .llmops_executor import ExecutionError, Executor
 from .llmops_operations import ACTIVE_STATES, dispatch, list_records
 from .llmops_topology import TopologyError
 from .llmops_topology_view import project_topology
+from .llmops_templates import load_template_registry, parse_schema_value, schema_node, set_dotted
 from .llmops_ui import UiPreferences, load_ui_preferences, resolve_ui_path, save_ui_preferences
 
 
@@ -46,23 +56,32 @@ def equivalent_command(
     return shlex.join(argv)
 
 
-def configure_command(component: str, changes: dict[str, Any]) -> str:
-    """Render a reproducible component configuration command."""
+def schema_configure_command(
+    component: str,
+    assignments: list[str],
+    unsets: list[str],
+) -> str:
+    """Render one schema-aware component mutation for review and automation."""
 
     argv = ["llmops", "component", "configure", component]
-    for key in ("host", "profile", "ownership"):
-        if key in changes:
-            argv.extend((f"--{key}", str(changes[key])))
-    if "enabled" in changes:
-        argv.append("--enable" if changes["enabled"] else "--disable")
-    for dependency in changes.get("depends_on", []):
-        argv.extend(("--depends-on", dependency))
-    if "health_timeout" in changes:
-        argv.extend(("--health-timeout", str(changes["health_timeout"])))
-    for action, timeout in changes.get("timeouts", {}).items():
-        argv.extend((f"--{action}-timeout", str(timeout)))
+    for assignment in assignments:
+        argv.extend(("--set", assignment))
+    for path in unsets:
+        argv.extend(("--unset", path))
     argv.extend(("--apply", "--yes"))
     return shlex.join(argv)
+
+
+def _flatten_values(value: dict[str, Any], prefix: str = "profile") -> list[str]:
+    assignments: list[str] = []
+    for key, child in sorted(value.items()):
+        path = f"{prefix}.{key}"
+        if isinstance(child, dict):
+            assignments.extend(_flatten_values(child, path))
+        else:
+            encoded = json.dumps(child, separators=(",", ":")) if isinstance(child, (list, dict)) else str(child).lower() if isinstance(child, bool) else str(child)
+            assignments.append(f"{path}={encoded}")
+    return assignments
 
 
 def _textual_types() -> tuple[Any, ...]:
@@ -173,8 +192,350 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
         def action_cancel(self) -> None:
             self.dismiss("cancel")
 
-    class EditComponent(ModalScreen[Optional[dict[str, Any]]]):
-        """Guided editor for stable desired-state component fields."""
+    class SchemaEditComponent(ModalScreen[Optional[dict[str, list[str]]]]):
+        """Generate a component/profile editor from the shared JSON schemas."""
+
+        BINDINGS = [("escape", "cancel", "Cancel")]
+
+        def __init__(self, topology: Any, component: Any) -> None:
+            super().__init__()
+            self.topology = topology
+            self.component = component
+            self.rows = [
+                row
+                for row in component_field_records(topology, component.qualified_id)
+                if not row.get("read_only")
+            ]
+            registry = load_template_registry(topology.paths)
+            template = registry[component.template_id]
+            profile_root = {
+                "model": topology.paths.models_dir,
+                "agent": topology.paths.agents_dir,
+            }.get(template.profile_kind, topology.paths.services_dir)
+            compatible_profiles = []
+            for path in sorted(profile_root.glob("*.json")) if profile_root.is_dir() else []:
+                try:
+                    document = json.loads(path.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    continue
+                if document.get("template_id") == component.template_id:
+                    compatible_profiles.append(path.stem)
+            components = [item.qualified_id for item in topology.all_components()]
+            for row in self.rows:
+                if row["path"] == "component.host":
+                    row["allowed"] = sorted(topology.hosts)
+                elif row["path"] == "component.profile":
+                    row["allowed"] = compatible_profiles
+                elif row["path"].startswith("connections.") and row["path"].endswith(".component"):
+                    row["allowed"] = components
+                elif row["path"].startswith("connections.") and row["path"].endswith(".endpoint"):
+                    connection_name = row["path"].split(".")[1]
+                    target_ref = component.connections.get(connection_name, {}).get("component", "")
+                    try:
+                        provider = topology.resolve_component(target_ref)
+                    except TopologyError:
+                        continue
+                    provider_template = registry.get(provider.template_id)
+                    if provider_template is not None:
+                        row["allowed"] = sorted(provider_template.endpoints.get("provides", {}))
+
+        @staticmethod
+        def _display_value(row: dict[str, Any]) -> str:
+            value = row.get("current")
+            if value is None:
+                value = row.get("default")
+            if value is None:
+                return ""
+            if isinstance(value, (dict, list)):
+                return json.dumps(value, sort_keys=True)
+            return str(value)
+
+        def compose(self) -> ComposeResult:
+            with Vertical(classes="dialog schema-dialog", id="schema-edit-dialog"):
+                yield Label(f"Configure {self.component.qualified_id}", classes="dialog-title")
+                yield Static(
+                    "Desired-state edit only. Host changes do not relocate executables, models, or data.",
+                    classes="warning",
+                )
+                with Vertical(id="schema-fields"):
+                    for index, row in enumerate(self.rows):
+                        label = row["path"] + (" *" if row.get("required") else "")
+                        yield Label(label)
+                        if row.get("description"):
+                            yield Static(str(row["description"]), classes="field-help")
+                        widget_id = f"schema-field-{index}"
+                        value = row.get("current")
+                        if value is None:
+                            value = row.get("default")
+                        if row.get("type") == "boolean":
+                            yield Checkbox("Enabled", value=bool(value), id=widget_id)
+                        elif row.get("allowed"):
+                            options = tuple((str(item), item) for item in row["allowed"])
+                            selected = value if value in row["allowed"] else row["allowed"][0]
+                            yield Select(options, value=selected, id=widget_id)
+                        else:
+                            input_type = "integer" if row.get("type") == "integer" else "text"
+                            yield Input(value=self._display_value(row), type=input_type, id=widget_id)
+                        if row.get("exclusions"):
+                            yield Static("This field participates in a mutually exclusive constraint.", classes="constraint-help")
+                with Horizontal(classes="dialog-actions"):
+                    yield Button("Cancel", id="cancel")
+                    yield Button("Review", id="review", variant="primary")
+
+        def on_select_changed(self, event: Any) -> None:
+            try:
+                index = int(str(event.select.id).removeprefix("schema-field-"))
+            except ValueError:
+                return
+            if not 0 <= index < len(self.rows):
+                return
+            if self.rows[index]["path"] != "profile.server.spec_type":
+                return
+            disabled_by_mode = {
+                "ngram": {"profile.server.draft_model", "profile.server.mtp_model"},
+                "mtp": {
+                    "profile.server.draft_model",
+                    "profile.server.spec_ngram_size_n",
+                    "profile.server.spec_ngram_size_m",
+                },
+                "draft-model": {
+                    "profile.server.mtp_model",
+                    "profile.server.spec_ngram_size_n",
+                    "profile.server.spec_ngram_size_m",
+                },
+                "none": set(),
+            }
+            disabled = disabled_by_mode.get(str(event.value), set())
+            managed = set().union(*disabled_by_mode.values())
+            for row_index, row in enumerate(self.rows):
+                if row["path"] not in managed:
+                    continue
+                widget = self.query_one(f"#schema-field-{row_index}")
+                widget.disabled = row["path"] in disabled
+                if widget.disabled and isinstance(widget, Input):
+                    widget.value = ""
+
+        def on_button_pressed(self, event: Any) -> None:
+            if event.button.id == "cancel":
+                self.dismiss(None)
+                return
+            assignments: list[str] = []
+            unsets: list[str] = []
+            for index, row in enumerate(self.rows):
+                widget_id = f"#schema-field-{index}"
+                if row.get("type") == "boolean":
+                    raw = "true" if self.query_one(widget_id, Checkbox).value else "false"
+                elif row.get("allowed"):
+                    raw = str(self.query_one(widget_id, Select).value)
+                else:
+                    raw = self.query_one(widget_id, Input).value.strip()
+                current = row.get("current")
+                if not raw and current is not None and not row.get("required"):
+                    unsets.append(row["path"])
+                    continue
+                if not raw:
+                    continue
+                if row["path"].startswith("connections."):
+                    parsed = parse_schema_value({"type": "string", "minLength": 1}, raw)
+                else:
+                    node_schema = (
+                        llmops_cli.COMPONENT_SCHEMA
+                        if row["path"].startswith("component.")
+                        else load_template_registry(self.topology.paths)[self.component.template_id].profile_schema
+                    )
+                    relative = row["path"].split(".", 1)[1]
+                    parsed = parse_schema_value(schema_node(node_schema, relative), raw)
+                if parsed != current:
+                    encoded = json.dumps(parsed, separators=(",", ":")) if isinstance(parsed, (dict, list)) else str(parsed).lower() if isinstance(parsed, bool) else str(parsed)
+                    assignments.append(f"{row['path']}={encoded}")
+            self.dismiss({"assignments": assignments, "unsets": unsets})
+
+        def action_cancel(self) -> None:
+            self.dismiss(None)
+
+    class DetailsScreen(ModalScreen[Optional[str]]):
+        """Show complete status, effective configuration, and schema sources."""
+
+        BINDINGS = [("escape", "close", "Close")]
+
+        def __init__(self, topology: Any, component: Any, status: dict[str, Any]) -> None:
+            super().__init__()
+            self.topology = topology
+            self.component = component
+            self.status = status
+            self.template = load_template_registry(topology.paths).get(component.template_id)
+
+        def compose(self) -> ComposeResult:
+            effective = llmops_cli._effective_component(self.component, topology=self.topology)
+            fields = component_field_records(self.topology, self.component.qualified_id)
+            field_text = "\n".join(
+                f"{row['path']} = {json.dumps(row.get('current'), sort_keys=True)} "
+                f"[{row.get('source', 'unknown')}]"
+                for row in fields
+            )
+            with Vertical(classes="dialog details-dialog", id="details-dialog"):
+                yield Label(f"Details: {self.component.qualified_id}", classes="dialog-title")
+                yield Static(
+                    json.dumps(
+                        {
+                            "status": self.status,
+                            "effective_configuration": effective,
+                            "template": self.component.template_id,
+                            "connections": self.component.connections,
+                        },
+                        indent=2,
+                        sort_keys=True,
+                    )
+                    + "\n\nFields and value sources\n"
+                    + field_text,
+                    classes="dialog-body details-body",
+                )
+                with Horizontal(classes="dialog-actions"):
+                    yield Button("Close", id="close")
+                    if self.template is not None:
+                        for action in sorted(self.template.actions):
+                            yield Button(action.replace("-", " ").title(), id=f"tool-action-{action}")
+
+        def on_button_pressed(self, event: Any) -> None:
+            if event.button.id == "close":
+                self.dismiss(None)
+            elif str(event.button.id).startswith("tool-action-"):
+                self.dismiss(str(event.button.id).removeprefix("tool-action-"))
+
+        def action_close(self) -> None:
+            self.dismiss(None)
+
+    class StackDetailsScreen(ModalScreen[Optional[str]]):
+        """Show complete stack membership and dependency relationships."""
+
+        BINDINGS = [("escape", "close", "Close")]
+
+        def __init__(self, stack: Any) -> None:
+            super().__init__()
+            self.stack = stack
+            self.component_ids = sorted(stack.components)
+
+        def compose(self) -> ComposeResult:
+            with Vertical(classes="dialog details-dialog", id="stack-details-dialog"):
+                yield Label(f"Stack: {self.stack.name}", classes="dialog-title")
+                yield Static(
+                    "Stacks are lifecycle groups. Membership is changed through Add, Clone, Retire, and Restore; dependencies are edited on the selected component.",
+                    classes="field-help",
+                )
+                yield DataTable(id="stack-members", cursor_type="row")
+                yield Static("Select a member to inspect dependencies.", id="stack-member-detail")
+                with Horizontal(classes="dialog-actions"):
+                    yield Button("Close", id="close")
+                    yield Button("Configure member", id="configure", variant="primary")
+
+        def on_mount(self) -> None:
+            table = self.query_one("#stack-members", DataTable)
+            table.add_columns("Component", "Host", "Template", "Enabled", "Dependencies")
+            for component_id in self.component_ids:
+                component = self.stack.components[component_id]
+                table.add_row(
+                    component.qualified_id,
+                    component.host,
+                    component.template_id,
+                    str(component.enabled),
+                    ", ".join(component.depends_on) or "none",
+                )
+            if self.component_ids:
+                table.move_cursor(row=0)
+                self._show(0)
+
+        def _show(self, row: int) -> None:
+            if not 0 <= row < len(self.component_ids):
+                return
+            component = self.stack.components[self.component_ids[row]]
+            self.query_one("#stack-member-detail", Static).update(
+                f"{component.qualified_id}\n"
+                f"Depends on: {', '.join(component.depends_on) or 'none'}\n"
+                f"Connections: {json.dumps(component.connections, sort_keys=True)}"
+            )
+
+        def on_data_table_row_highlighted(self, event: Any) -> None:
+            self._show(event.cursor_row)
+
+        def on_button_pressed(self, event: Any) -> None:
+            if event.button.id == "close":
+                self.dismiss(None)
+                return
+            row = self.query_one("#stack-members", DataTable).cursor_row
+            if 0 <= row < len(self.component_ids):
+                self.dismiss(self.stack.components[self.component_ids[row]].qualified_id)
+
+        def action_close(self) -> None:
+            self.dismiss(None)
+
+    class ServiceCatalogScreen(ModalScreen[Optional[tuple[str, str]]]):
+        """List audited templates and initiate schema-driven component creation."""
+
+        BINDINGS = [("escape", "close", "Close")]
+
+        def __init__(self, topology: Any, component: Optional[Any] = None) -> None:
+            super().__init__()
+            self.registry = load_template_registry(topology.paths)
+            self.template_ids = sorted(self.registry)
+            self.component = component
+
+        def compose(self) -> ComposeResult:
+            with Vertical(classes="dialog catalog-dialog", id="catalog-dialog"):
+                yield Label("Service Catalog", classes="dialog-title")
+                yield DataTable(id="catalog-table", cursor_type="row")
+                yield Static("Select a template to inspect or add.", id="catalog-detail")
+                with Horizontal(classes="dialog-actions"):
+                    yield Button("Close", id="close")
+                    yield Button("Edit selected", id="edit", disabled=self.component is None)
+                    yield Button("Clone selected", id="clone", disabled=self.component is None)
+                    yield Button(
+                        "Restore selected" if self.component is not None and self.component.retired else "Retire selected",
+                        id="restore" if self.component is not None and self.component.retired else "retire",
+                        disabled=self.component is None,
+                    )
+                    yield Button("Add component", id="add", variant="primary")
+
+        def on_mount(self) -> None:
+            table = self.query_one("#catalog-table", DataTable)
+            table.add_columns("Template", "Kind", "Lifecycle", "Adapter", "Platforms")
+            for template_id in self.template_ids:
+                item = self.registry[template_id]
+                table.add_row(template_id, item.component_kind, item.lifecycle, item.adapter, ", ".join(item.platforms))
+            if self.template_ids:
+                table.move_cursor(row=0)
+                self._show(0)
+
+        def _show(self, row: int) -> None:
+            if not 0 <= row < len(self.template_ids):
+                return
+            item = self.registry[self.template_ids[row]]
+            self.query_one("#catalog-detail", Static).update(
+                f"{item.template_id} {item.version}\n"
+                f"Source: {item.source}\n"
+                f"Provides: {', '.join(item.endpoints.get('provides', {})) or 'none'}  "
+                f"Requires: {', '.join(item.endpoints.get('requires', {})) or 'none'}\n"
+                f"Actions: {', '.join(item.actions) or 'standard lifecycle'}"
+            )
+
+        def on_data_table_row_highlighted(self, event: Any) -> None:
+            self._show(event.cursor_row)
+
+        def on_button_pressed(self, event: Any) -> None:
+            if event.button.id == "close":
+                self.dismiss(None)
+                return
+            if event.button.id in {"edit", "clone", "retire", "restore"}:
+                self.dismiss((str(event.button.id), self.component.qualified_id))
+                return
+            row = self.query_one("#catalog-table", DataTable).cursor_row
+            if 0 <= row < len(self.template_ids):
+                self.dismiss(("add", self.template_ids[row]))
+
+        def action_close(self) -> None:
+            self.dismiss(None)
+
+    class CloneComponentScreen(ModalScreen[Optional[dict[str, Any]]]):
+        """Collect the stable identity and profile policy for a component clone."""
 
         BINDINGS = [("escape", "cancel", "Cancel")]
 
@@ -183,36 +544,11 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
             self.component = component
 
         def compose(self) -> ComposeResult:
-            with Vertical(classes="dialog", id="edit-dialog"):
-                yield Label(f"Configure {self.component.qualified_id}", classes="dialog-title")
-                yield Static(
-                    "This changes desired state only; changing Host does not move files or services.",
-                    classes="warning",
-                )
-                yield Label("Host")
-                yield Input(value=self.component.host, id="edit-host")
-                yield Label("Profile")
-                yield Input(value=self.component.profile, id="edit-profile")
-                yield Label("Ownership")
-                yield Select(
-                    (("Managed", "managed"), ("External", "external")),
-                    value=self.component.ownership,
-                    id="edit-ownership",
-                )
-                yield Checkbox("Enabled", value=self.component.enabled, id="edit-enabled")
-                yield Label("Dependencies (comma-separated component IDs)")
-                yield Input(value=", ".join(self.component.depends_on), id="edit-dependencies")
-                yield Label("Health timeout seconds")
-                yield Input(
-                    value=str(self.component.health.timeout_seconds),
-                    type="integer",
-                    id="edit-timeout",
-                )
-                yield Label("Start / stop / restart timeout seconds")
-                with Horizontal():
-                    yield Input(value=str(self.component.timeouts.start), type="integer", id="edit-start-timeout")
-                    yield Input(value=str(self.component.timeouts.stop), type="integer", id="edit-stop-timeout")
-                    yield Input(value=str(self.component.timeouts.restart), type="integer", id="edit-restart-timeout")
+            with Vertical(classes="dialog", id="clone-component-dialog"):
+                yield Label(f"Clone {self.component.qualified_id}", classes="dialog-title")
+                yield Label("New component ID")
+                yield Input(id="clone-id")
+                yield Checkbox("Share existing reusable profile", value=True, id="clone-share-profile")
                 with Horizontal(classes="dialog-actions"):
                     yield Button("Cancel", id="cancel")
                     yield Button("Review", id="review", variant="primary")
@@ -221,24 +557,137 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
             if event.button.id == "cancel":
                 self.dismiss(None)
                 return
-            dependencies = [
-                item.strip()
-                for item in self.query_one("#edit-dependencies", Input).value.split(",")
-                if item.strip()
-            ]
             self.dismiss(
                 {
-                    "host": self.query_one("#edit-host", Input).value.strip(),
-                    "profile": self.query_one("#edit-profile", Input).value.strip(),
-                    "ownership": self.query_one("#edit-ownership", Select).value,
-                    "enabled": self.query_one("#edit-enabled", Checkbox).value,
-                    "depends_on": dependencies,
-                    "health_timeout": int(self.query_one("#edit-timeout", Input).value),
-                    "timeouts": {
-                        "start": int(self.query_one("#edit-start-timeout", Input).value),
-                        "stop": int(self.query_one("#edit-stop-timeout", Input).value),
-                        "restart": int(self.query_one("#edit-restart-timeout", Input).value),
-                    },
+                    "new_id": self.query_one("#clone-id", Input).value.strip(),
+                    "share_profile": self.query_one("#clone-share-profile", Checkbox).value,
+                }
+            )
+
+        def action_cancel(self) -> None:
+            self.dismiss(None)
+
+    class AddComponentScreen(ModalScreen[Optional[dict[str, Any]]]):
+        """Create one disabled component and optionally a new profile."""
+
+        BINDINGS = [("escape", "cancel", "Cancel")]
+
+        def __init__(self, topology: Any, template: Any) -> None:
+            super().__init__()
+            self.topology = topology
+            self.template = template
+            directory = {
+                "model": topology.paths.models_dir,
+                "agent": topology.paths.agents_dir,
+            }.get(template.profile_kind, topology.paths.services_dir)
+            self.profiles = []
+            for path in sorted(directory.glob("*.json")) if directory.is_dir() else []:
+                try:
+                    document = json.loads(path.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    continue
+                if document.get("template_id") == template.template_id:
+                    self.profiles.append(path.stem)
+            self.rows = [
+                row
+                for row in field_records(template, current=template.defaults)
+                if not row.get("read_only") and row["path"] != "profile.name"
+            ]
+            registry = load_template_registry(topology.paths)
+            self.connection_options: dict[str, tuple[tuple[str, str], ...]] = {}
+            for name, requirement in template.endpoints.get("requires", {}).items():
+                protocol = str(requirement.get("protocol", ""))
+                options: list[tuple[str, str]] = []
+                for component in topology.all_components():
+                    provider = registry.get(component.template_id)
+                    if provider is None:
+                        continue
+                    for endpoint in provider.endpoints.get("provides", {}):
+                        if not protocol or endpoint == protocol:
+                            value = f"{component.qualified_id}@{endpoint}"
+                            options.append((value, value))
+                self.connection_options[str(name)] = tuple(options)
+
+        def compose(self) -> ComposeResult:
+            profile_options = (("Create new profile", "__new__"),) + tuple((name, name) for name in self.profiles)
+            with Vertical(classes="dialog schema-dialog", id="add-component-dialog"):
+                yield Label(f"Add {self.template.template_id}", classes="dialog-title")
+                yield Label("Component ID")
+                yield Input(id="add-id")
+                yield Label("Stack")
+                yield Select(tuple((name, name) for name in sorted(self.topology.stacks)), value=sorted(self.topology.stacks)[0], id="add-stack")
+                yield Label("Host alias")
+                yield Select(tuple((name, name) for name in sorted(self.topology.hosts)), value=sorted(self.topology.hosts)[0], id="add-host")
+                yield Label("Execution user (blank uses inventory user)")
+                yield Input(id="add-user")
+                yield Label("Profile")
+                yield Select(profile_options, value="__new__", id="add-profile-mode")
+                yield Label("New profile name")
+                yield Input(id="add-profile-name")
+                for name, options in self.connection_options.items():
+                    yield Label(f"Required endpoint: {name}")
+                    if options:
+                        yield Select(options, value=options[0][1], id=f"add-connection-{name}")
+                    else:
+                        yield Static("No compatible provider is currently configured.", classes="warning")
+                with Vertical(id="add-profile-fields"):
+                    for index, row in enumerate(self.rows):
+                        yield Label(row["path"])
+                        value = row.get("current")
+                        if isinstance(value, (dict, list)):
+                            rendered = json.dumps(value, sort_keys=True)
+                        else:
+                            rendered = "" if value is None else str(value)
+                        if row.get("type") == "boolean":
+                            yield Checkbox("Enabled", value=bool(value), id=f"add-field-{index}")
+                        elif row.get("allowed"):
+                            yield Select(tuple((str(item), item) for item in row["allowed"]), value=value, id=f"add-field-{index}")
+                        else:
+                            yield Input(value=rendered, id=f"add-field-{index}")
+                with Horizontal(classes="dialog-actions"):
+                    yield Button("Cancel", id="cancel")
+                    yield Button("Review", id="review", variant="primary")
+
+        def on_select_changed(self, event: Any) -> None:
+            if event.select.id == "add-profile-mode" and event.value != "__new__":
+                self.query_one("#add-profile-name", Input).value = str(event.value)
+
+        def on_button_pressed(self, event: Any) -> None:
+            if event.button.id == "cancel":
+                self.dismiss(None)
+                return
+            mode = str(self.query_one("#add-profile-mode", Select).value)
+            values: dict[str, Any] = {}
+            if mode == "__new__":
+                for index, row in enumerate(self.rows):
+                    node = schema_node(self.template.profile_schema, row["path"].removeprefix("profile."))
+                    if row.get("type") == "boolean":
+                        raw = "true" if self.query_one(f"#add-field-{index}", Checkbox).value else "false"
+                    elif row.get("allowed"):
+                        raw = str(self.query_one(f"#add-field-{index}", Select).value)
+                    else:
+                        raw = self.query_one(f"#add-field-{index}", Input).value.strip()
+                    if raw:
+                        set_dotted(values, row["path"].removeprefix("profile."), parse_schema_value(node, raw))
+            profile_name = self.query_one("#add-profile-name", Input).value.strip()
+            connections: dict[str, dict[str, str]] = {}
+            for name, options in self.connection_options.items():
+                if not options:
+                    continue
+                selected = str(self.query_one(f"#add-connection-{name}", Select).value)
+                component_ref, _, endpoint = selected.rpartition("@")
+                connections[name] = {"component": component_ref, "endpoint": endpoint}
+            self.dismiss(
+                {
+                    "component_id": self.query_one("#add-id", Input).value.strip(),
+                    "stack_name": str(self.query_one("#add-stack", Select).value),
+                    "host": str(self.query_one("#add-host", Select).value),
+                    "execution_user": self.query_one("#add-user", Input).value.strip(),
+                    "profile_name": profile_name if mode == "__new__" else mode,
+                    "profile_values": values,
+                    "create_new_profile": mode == "__new__",
+                    "connections": connections,
+                    "dependencies": (),
                 }
             )
 
@@ -566,6 +1015,12 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
         #topology-filters Select { width: 1fr; margin-right: 1; }
         #topology-tree { height: 1fr; background: #0f151d; color: #f5f7fa; }
         #topology-detail { height: 8; border-top: solid #6f8ea3; padding: 1; }
+        .schema-dialog, .details-dialog, .catalog-dialog { width: 95%; height: 95%; max-height: 95%; }
+        #schema-fields, #add-profile-fields, .details-body { height: 1fr; overflow-y: auto; padding-right: 1; }
+        #catalog-table { height: 1fr; }
+        #catalog-detail { height: 7; border-top: solid #6f8ea3; padding: 1; }
+        .field-help { color: #b8c5d1; }
+        .constraint-help { color: #ffd166; margin-bottom: 1; }
         """
         BINDINGS = [
             ("r", "refresh", "Refresh"),
@@ -574,6 +1029,8 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
             ("b", "restart", "Restart"),
             ("l", "logs", "Logs"),
             ("e", "edit", "Configure"),
+            ("i", "details", "Details"),
+            ("a", "catalog", "Catalog"),
             ("v", "toggle_view", "Components/Stacks"),
             ("t", "topology", "Topology"),
             ("comma", "settings", "Settings"),
@@ -614,6 +1071,9 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                 yield Button("Stop", id="action-stop")
                 yield Button("Restart", id="action-restart")
                 yield Button("Logs", id="action-logs")
+                yield Button("Details", id="action-details")
+                yield Button("Configure", id="action-configure")
+                yield Button("Catalog", id="action-catalog")
                 yield Button("Topology", id="action-topology")
                 yield Button("Settings", id="action-settings")
                 yield Button("Help", id="action-help")
@@ -911,27 +1371,40 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                 self.run_worker(self.show_logs(component), exclusive=True)
 
         async def edit_component(self, component: Any) -> None:
-            changes = await self.push_screen_wait(EditComponent(component))
+            changes = await self.push_screen_wait(SchemaEditComponent(self.desired_topology, component))
             if changes is None:
                 return
-            llmops_cli.configure_component(
-                component,
-                changes,
+            if not changes["assignments"] and not changes["unsets"]:
+                self.query_one("#detail", Static).update("No configuration changes")
+                return
+            plan = configure_component_schema(
+                self.desired_topology,
+                component.qualified_id,
+                assignments=changes["assignments"],
+                unsets=changes["unsets"],
                 apply=False,
-                topology=self.desired_topology,
             )
-            command = configure_command(component.qualified_id, changes)
+            command = schema_configure_command(
+                component.qualified_id,
+                changes["assignments"],
+                changes["unsets"],
+            )
             approved = await self.push_screen_wait(
-                ConfirmOperation(command, [{"action": "configure", "component": component.qualified_id}])
+                ConfirmOperation(
+                    command,
+                    [{"action": "configure", "component": item} for item in plan["affected_components"]],
+                )
             )
             if not approved:
                 return
             result = await asyncio.to_thread(
-                llmops_cli.configure_component,
-                component,
-                changes,
+                configure_component_schema,
+                self.desired_topology,
+                component.qualified_id,
+                assignments=changes["assignments"],
+                unsets=changes["unsets"],
                 apply=True,
-                topology=self.desired_topology,
+                expected_hash=plan["authority_hash"],
             )
             self.query_one("#detail", Static).update(json.dumps(result, indent=2, sort_keys=True))
             self.desired_topology = llmops_cli.desired_topology()
@@ -942,6 +1415,212 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
             if component is not None and hasattr(component, "component_id"):
                 desired = self.desired_topology.resolve_component(component.qualified_id)
                 self.run_worker(self.edit_component(desired), exclusive=True)
+
+        def action_details(self) -> None:
+            selected = self.selected_component()
+            if selected is not None and hasattr(selected, "component_id"):
+                desired = self.desired_topology.resolve_component(selected.qualified_id)
+                self.run_worker(
+                    self.show_component_details(desired),
+                    exclusive=True,
+                )
+            elif selected is not None and hasattr(selected, "components"):
+                self.run_worker(self.show_stack_details(selected), exclusive=True)
+
+        async def show_component_details(self, component: Any) -> None:
+            action = await self.push_screen_wait(
+                DetailsScreen(
+                    self.desired_topology,
+                    component,
+                    self.status_by_id.get(component.qualified_id, {}),
+                )
+            )
+            if not action:
+                return
+            template, argv, mutating = llmops_cli.template_action_argv(
+                self.desired_topology,
+                component.qualified_id,
+                action,
+            )
+            command = shlex.join(
+                ["llmops", "component", "action", component.qualified_id, action]
+                + (["--apply", "--yes"] if mutating else ["--apply"])
+            )
+            approved = await self.push_screen_wait(
+                ConfirmOperation(
+                    command,
+                    [{"action": action, "component": component.qualified_id}],
+                )
+            )
+            if not approved:
+                return
+            result = await asyncio.to_thread(
+                ComponentRunner(self.desired_topology).run_argv,
+                component,
+                action,
+                argv,
+            )
+            self.query_one("#detail", Static).update(
+                f"{template.template_id}:{action}\n{result.stdout or result.stderr}"
+            )
+
+        async def show_stack_details(self, stack: Any) -> None:
+            reference = await self.push_screen_wait(StackDetailsScreen(stack))
+            if reference:
+                await self.edit_component(self.desired_topology.resolve_component(reference))
+
+        async def open_catalog(self) -> None:
+            selected = self.selected_component()
+            selected_component = None
+            if selected is not None and hasattr(selected, "qualified_id"):
+                selected_component = self.desired_topology.resolve_component(selected.qualified_id)
+            selection = await self.push_screen_wait(
+                ServiceCatalogScreen(self.desired_topology, selected_component)
+            )
+            if selection is None:
+                return
+            action, reference = selection
+            if action == "edit":
+                component = self.desired_topology.resolve_component(reference)
+                await self.edit_component(component)
+                return
+            if action == "clone":
+                component = self.desired_topology.resolve_component(reference)
+                values = await self.push_screen_wait(CloneComponentScreen(component))
+                if values is None:
+                    return
+                plan = clone_component(
+                    self.desired_topology,
+                    reference,
+                    values["new_id"],
+                    share_profile=values["share_profile"],
+                    apply=False,
+                )
+                command = shlex.join(
+                    [
+                        "llmops",
+                        "component",
+                        "clone",
+                        reference,
+                        values["new_id"],
+                        "--share-profile" if values["share_profile"] else "--clone-profile",
+                        "--apply",
+                        "--yes",
+                    ]
+                )
+                approved = await self.push_screen_wait(
+                    ConfirmOperation(command, [{"action": "clone", "component": plan["component"]}])
+                )
+                if not approved:
+                    return
+                result = await asyncio.to_thread(
+                    clone_component,
+                    self.desired_topology,
+                    reference,
+                    values["new_id"],
+                    share_profile=values["share_profile"],
+                    apply=True,
+                    expected_hash=plan["authority_hash"],
+                )
+                self.query_one("#detail", Static).update(json.dumps(result, indent=2, sort_keys=True))
+                self.desired_topology = llmops_cli.desired_topology()
+                await self.inspect()
+                return
+            if action in {"retire", "restore"}:
+                restore = action == "restore"
+                plan = retire_component(
+                    self.desired_topology,
+                    reference,
+                    restore=restore,
+                    apply=False,
+                )
+                command = f"llmops component {action} {shlex.quote(reference)} --apply --yes"
+                approved = await self.push_screen_wait(
+                    ConfirmOperation(command, [{"action": action, "component": reference}])
+                )
+                if not approved:
+                    return
+                component = self.desired_topology.resolve_component(reference)
+                if not restore and await asyncio.to_thread(
+                    ComponentRunner(self.desired_topology).is_running,
+                    component,
+                ):
+                    await asyncio.to_thread(
+                        Executor(self.desired_topology).execute_component,
+                        component,
+                        "stop",
+                    )
+                result = await asyncio.to_thread(
+                    retire_component,
+                    self.desired_topology,
+                    reference,
+                    restore=restore,
+                    apply=True,
+                    expected_hash=plan["authority_hash"],
+                )
+                self.query_one("#detail", Static).update(json.dumps(result, indent=2, sort_keys=True))
+                self.desired_topology = llmops_cli.desired_topology()
+                await self.inspect()
+                return
+            template_id = reference
+            template = load_template_registry(self.desired_topology.paths)[template_id]
+            values = await self.push_screen_wait(AddComponentScreen(self.desired_topology, template))
+            if values is None:
+                return
+            plan = provision_component(
+                self.desired_topology,
+                template_id=template_id,
+                apply=False,
+                **values,
+            )
+            command_argv = [
+                    "llmops",
+                    "component",
+                    "add",
+                    values["component_id"],
+                    "--template",
+                    template_id,
+                    "--profile",
+                    values["profile_name"],
+                    "--stack",
+                    values["stack_name"],
+                    "--host",
+                    values["host"],
+            ]
+            if values["execution_user"]:
+                command_argv.extend(("--execution-user", values["execution_user"]))
+            for name, connection in sorted(values["connections"].items()):
+                command_argv.extend(
+                    (
+                        "--connect",
+                        f"{name}={connection['component']}@{connection['endpoint']}",
+                    )
+                )
+            if values["create_new_profile"]:
+                command_argv.append("--create-profile")
+                for assignment in _flatten_values(values["profile_values"]):
+                    command_argv.extend(("--set-profile", assignment))
+            command_argv.extend(("--apply", "--yes"))
+            command = shlex.join(command_argv)
+            approved = await self.push_screen_wait(
+                ConfirmOperation(command, [{"action": "provision", "component": plan["component"]}])
+            )
+            if not approved:
+                return
+            result = await asyncio.to_thread(
+                provision_component,
+                self.desired_topology,
+                template_id=template_id,
+                apply=True,
+                expected_hash=plan["authority_hash"],
+                **values,
+            )
+            self.query_one("#detail", Static).update(json.dumps(result, indent=2, sort_keys=True))
+            self.desired_topology = llmops_cli.desired_topology()
+            await self.inspect()
+
+        def action_catalog(self) -> None:
+            self.run_worker(self.open_catalog(), exclusive=True)
 
         def action_toggle_view(self) -> None:
             self.view = "stacks" if self.view == "components" else "components"
@@ -1056,6 +1735,9 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                 "action-stop": self.action_stop,
                 "action-restart": self.action_restart,
                 "action-logs": self.action_logs,
+                "action-details": self.action_details,
+                "action-configure": self.action_edit,
+                "action-catalog": self.action_catalog,
                 "action-topology": self.action_topology,
                 "action-settings": self.action_settings,
                 "action-help": self.action_help,
