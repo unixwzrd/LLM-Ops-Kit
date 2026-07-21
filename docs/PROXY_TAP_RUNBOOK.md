@@ -8,9 +8,14 @@ The model proxy records request and response metadata, token usage, timings, raw
 
 ```bash
 llmops component status model-proxy
+llmops config effective component model-proxy
+llmops component version model-proxy
 llmops component start model-proxy
 llmops component restart model-proxy
-llmops component logs model-proxy
+llmops component logs model-proxy --channel service
+llmops component logs model-proxy --channel raw-request
+llmops component logs model-proxy --channel rendered-prompt
+llmops component logs model-proxy --channel raw-response
 llmops component stop model-proxy
 ```
 
@@ -36,7 +41,11 @@ This internal driver command writes the same raw and rendered diagnostic artifac
 
 ## Logs
 
-Default state is under `~/.local/state/llm-ops/logs/`. Use the profile to relocate logs or change rotation limits. `runtime-maintenance` applies toolkit retention settings without deleting model or agent state.
+Default state is under `~/.local/state/llm-ops/logs/`. Log commands execute on the component's configured host as its execution user and report that identity; a remote path is never presented as a local file. Use the profile to relocate logs or change rotation limits. `runtime-maintenance` applies toolkit retention settings without deleting model or agent state.
+
+## Media-History Template
+
+`Qwen-3_5-stock-template.jinja` is the unchanged reference. `Qwen-3_5-media-history-template.jinja` is an optional context-cost policy for textual media tool history. It preserves the final structurally identified image-bearing tool response, removes earlier payloads and assistant-side byte copies, and preserves native structured multimodal input. It does not validate base64 in Jinja.
 
 ## Validation
 

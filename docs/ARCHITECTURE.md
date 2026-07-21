@@ -32,7 +32,7 @@ canonical configuration -> schema validation -> topology -> dependency plan -> a
 
 Component start satisfies missing upstream dependencies. Component restart affects only the target by default. Component stop refuses active dependents unless `--force` or `--cascade` is used. CLI and TUI call the same mutation preparation service, so interface code cannot bypass dependent-impact checks. Stack operations start in dependency order and stop in the exact reverse of the selected startup order.
 
-The executor is idempotent. A failed start stops only components started by that invocation and leaves pre-existing services untouched. Mutations use a lifecycle lock; status, health, drift, plans, and logs are read-only.
+The executor is idempotent. A failed start stops only components started by that invocation and leaves pre-existing services untouched. Mutations use a lifecycle lock; status, health, drift, plans, effective configuration, and logs are read-only. Interactive clients dispatch long-running mutations to detached short-lived workers that persist an operation record. No privileged daemon is required, and closing a client does not cancel an accepted operation.
 
 ## Module Boundaries
 
@@ -47,6 +47,7 @@ The executor is idempotent. A failed start stops only components started by that
 | Transports | Local execution, SSH, and future constrained remote transports | Component-specific command construction |
 | Distribution and reconciliation | Checksummed release artifacts, immutable updates, role-filtered configuration revisions, drift, and rollback | Model weights, agent state, or secret values |
 | Observability | Status, health, drift, logs, model-proxy exchanges, and corrective-action rules | Prompt mutation or autonomous remediation |
+| Operation records | Persist accepted command, plan, target host, progress, bounded output, error, and result for detached work | Lifecycle planning or a resident daemon |
 | Interfaces | CLI, TUI, HTTP API, static WebUI, and agent skill | Independent planners or executors |
 
 ## Adapter Model
@@ -102,6 +103,8 @@ shipped defaults -> global configuration -> referenced profile -> host override 
 
 Configuration contains secret references, never resolved secret values in plans, topology catalogs, interface state, or logs. Existing environment injection remains transitional. Secrets-Kit may later implement a provider interface without becoming a hard dependency.
 
+Lifecycle, readiness, SSH, and log timeouts are explicit canonical component values. They are consumed identically by CLI and TUI operations and never inferred from an interactive shell environment.
+
 Model weights, agent databases, Vaults, conversation history, generated media, and voice samples remain owned by their respective systems. TTS Bridge may map operator-defined aliases to operator-provided reference material, but LLM-Ops-Kit does not ship voice samples.
 
 ## Remote Operation and Synchronization
@@ -126,6 +129,8 @@ The first graphical interface is a Textual TUI that runs on demand and requires 
 
 The status model keeps lifecycle, health, and observation policy independent. A process may be running while its readiness check is degraded. A component may be known but `authority-only`, which is unobserved rather than unreachable. Toolkit and component versions are separate fields.
 
+Configured and observed runtime identities are also independent. The desired runtime comes from the selected immutable release; the observed runtime is derived from the live process command or adapter probe. A live process from an older release is reported as stale and requires attention without being falsely described as stopped.
+
 Local TUI preferences live in `ui.json` and are excluded from desired-state hashes. Organization and site labels live in canonical configuration and reconcile normally.
 
 The optional WebUI is a separate loopback-only control process serving static HTML, CSS, and JavaScript through a small API layer. It uses the same control library and operation schema, remains available while models and agents are stopped, and uses SSH tunnels or an explicitly configured HTTPS endpoint for remote access. It is not required for CLI or TUI operation.
@@ -133,5 +138,11 @@ The optional WebUI is a separate loopback-only control process serving static HT
 ## Packaging
 
 The distribution is a standard `src/llmops_kit` Python package installed into an application-owned UV environment with locked CPython 3.12 dependencies and declared console entry points. Runtime shell scripts remain only for bootstrap and native service integration. Templates and service resources are versioned release assets. The installer reuses the audited Secrets-Kit bootstrap pattern where applicable, supports checksum verification and rollback, and does not require a Git checkout, system Python, Conda, or shell-profile activation.
+
+## Prompt Diagnostics And Media History
+
+Model-proxy is a passive transport and observability tap: the upstream request and downstream response bodies are forwarded unchanged. Optional Jinja rendering is diagnostic and supplies a model-engine chat template; it is not proxy rewriting.
+
+The unchanged stock Qwen template remains the reference. The optional media-history template uses message roles and explicit tool-response structure to remove costly historical image payloads and assistant calls that copy those bytes. It temporarily preserves the final image-bearing textual tool response and preserves native structured image and video parts. Portable Jinja does not validate base64; complete captured fixtures and offline diagnostics own that decision.
 
 The normal beta installation includes Textual. `--minimal` omits the TUI and its dependencies. Integration-specific dependencies remain optional. Release artifacts contain no private topology, model weights, voice samples, credentials, tests, or development history.

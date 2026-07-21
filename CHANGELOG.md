@@ -4,6 +4,11 @@
 
 ### Beta release readiness
 
+- Replaced the custom latest-image template with a structurally detected media-history template that preserves the final image-bearing tool response, removes earlier image payloads and assistant-side base64 copies, and leaves native structured multimodal content intact. The stock Qwen template remains unchanged.
+- Added `llmops config effective`, host-qualified component log channels, component runtime/version inspection, configurable lifecycle timeouts, and persisted detached operation records.
+- Added desired-versus-observed runtime reporting and stale-runtime detection based on live process commands and immutable release identities.
+- Made long-running TUI lifecycle and toolkit update actions continue through detached short-lived workers so exiting the TUI neither cancels nor waits for active work.
+- Added operation progress states, mouse-accessible actions, Escape-safe modals, populated topology filters, lower-intensity accessible colors, and explicit log host/channel display.
 - Replaced the ambiguous status field with independent lifecycle, health, condition, and observability fields, plus distinct toolkit and observed component versions.
 - Added the configured component execution identity as `execution_user` in JSON and `RUN_AS` in CLI and TUI status, distinguishing service ownership from the operator invoking LLM-Ops-Kit.
 - Persisted operator-requested lifecycle state so an intentional stop reports `lifecycle=stopped`, `desired_lifecycle=stopped`, and `condition=down` instead of a false error; unexpectedly stopped components remain errors.
@@ -83,7 +88,7 @@
 - Centralized model log rotation using copy-and-truncate so active log paths and inodes remain stable for monitoring tools.
 - Kept model-proxy strictly passive: diagnostic prompt rendering never changes the request forwarded upstream.
 - Added Hugging Face-compatible `raise_exception` support to model-proxy chat-template rendering, with regressions against the shipped Qwen template.
-- Added an optional Qwen template derived from the unchanged stock template that removes historical image, audio, and video payloads while retaining the latest payload of each media type.
+- Added an optional Qwen template derived from the unchanged stock template that prunes historical textual media tool responses while preserving the final structurally identified image result and native structured multimodal inputs.
 - Added focused regressions for historical tool exchanges, duplicate embedded payloads, and structured image and video content.
 
 ### Cleanup and documentation

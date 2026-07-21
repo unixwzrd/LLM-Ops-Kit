@@ -172,8 +172,8 @@ class ModelProxyStatsTests(unittest.TestCase):
         self.assertEqual(render_error, "TemplateRenderError: No messages provided.")
 
     @unittest.skipIf(model_proxy_tap.jinja2 is None, "Jinja is not installed")
-    def test_latest_image_template_omits_prior_base64_and_embedded_tool_payloads(self) -> None:
-        template_path = SCRIPTS_DIR / "templates" / "Qwen-3_5-latest-image-template.jinja"
+    def test_media_history_template_keeps_last_tool_image_and_omits_duplicates(self) -> None:
+        template_path = SCRIPTS_DIR / "templates" / "Qwen-3_5-media-history-template.jinja"
         loaded_path, renderer, load_error = model_proxy_tap.load_chat_template_renderer(
             str(template_path)
         )
@@ -255,8 +255,8 @@ class ModelProxyStatsTests(unittest.TestCase):
         self.assertIn("generate again", rendered)
 
     @unittest.skipIf(model_proxy_tap.jinja2 is None, "Jinja is not installed")
-    def test_latest_image_template_keeps_only_final_structured_image(self) -> None:
-        template_path = SCRIPTS_DIR / "templates" / "Qwen-3_5-latest-image-template.jinja"
+    def test_media_history_template_preserves_structured_images(self) -> None:
+        template_path = SCRIPTS_DIR / "templates" / "Qwen-3_5-media-history-template.jinja"
         loaded_path, renderer, load_error = model_proxy_tap.load_chat_template_renderer(
             str(template_path)
         )
@@ -288,19 +288,19 @@ class ModelProxyStatsTests(unittest.TestCase):
         )
 
         self.assertIsNone(render_error)
-        self.assertEqual(rendered.count("<|image_pad|>"), 1)
-        self.assertIn("[Earlier image omitted]", rendered)
+        self.assertEqual(rendered.count("<|image_pad|>"), 2)
+        self.assertNotIn("[Earlier image omitted]", rendered)
 
     @unittest.skipIf(model_proxy_tap.jinja2 is None, "Jinja is not installed")
-    def test_latest_image_template_keeps_only_latest_audio_and_video_payloads(self) -> None:
-        template_path = SCRIPTS_DIR / "templates" / "Qwen-3_5-latest-image-template.jinja"
+    def test_media_history_template_keeps_only_latest_explicit_audio_and_video_results(self) -> None:
+        template_path = SCRIPTS_DIR / "templates" / "Qwen-3_5-media-history-template.jinja"
         loaded_path, renderer, load_error = model_proxy_tap.load_chat_template_renderer(
             str(template_path)
         )
-        old_audio = "UklGROLDV0FWRQ" + ("A" * 5000)
-        latest_audio = "UklGRLATESTV0FWRQ" + ("B" * 5000)
-        old_video = "AAAAIGZ0eXBOLDVIDEO" + ("C" * 5000)
-        latest_video = "AAAAIGZ0eXBLATESTVIDEO" + ("D" * 5000)
+        old_audio = "data:audio/wav;base64,OLDV0FWRQ" + ("A" * 5000)
+        latest_audio = "data:audio/wav;base64,LATESTV0FWRQ" + ("B" * 5000)
+        old_video = "data:video/mp4;base64,OLDVIDEO" + ("C" * 5000)
+        latest_video = "data:video/mp4;base64,LATESTVIDEO" + ("D" * 5000)
         messages = [{"role": "user", "content": "make media"}]
         for label, payload in (
             ("old audio", old_audio),
@@ -323,7 +323,12 @@ class ModelProxyStatsTests(unittest.TestCase):
                             }
                         ],
                     },
-                    {"role": "tool", "content": json.dumps({"media": payload})},
+                    {
+                        "role": "tool",
+                        "content": json.dumps(
+                            {"audio" if "audio" in label else "video": payload}
+                        ),
+                    },
                 ]
             )
         messages.append({"role": "user", "content": "continue"})
@@ -346,8 +351,8 @@ class ModelProxyStatsTests(unittest.TestCase):
         self.assertIn("latest video generation call", rendered)
 
     @unittest.skipIf(model_proxy_tap.jinja2 is None, "Jinja is not installed")
-    def test_latest_image_template_keeps_only_latest_structured_video(self) -> None:
-        template_path = SCRIPTS_DIR / "templates" / "Qwen-3_5-latest-image-template.jinja"
+    def test_media_history_template_preserves_structured_video(self) -> None:
+        template_path = SCRIPTS_DIR / "templates" / "Qwen-3_5-media-history-template.jinja"
         loaded_path, renderer, load_error = model_proxy_tap.load_chat_template_renderer(
             str(template_path)
         )
@@ -377,9 +382,59 @@ class ModelProxyStatsTests(unittest.TestCase):
         )
 
         self.assertIsNone(render_error)
-        self.assertEqual(rendered.count("<|video_pad|>"), 1)
+        self.assertEqual(rendered.count("<|video_pad|>"), 2)
         self.assertIn("first video", rendered)
         self.assertIn("latest video", rendered)
+
+    @unittest.skipIf(model_proxy_tap.jinja2 is None, "Jinja is not installed")
+    def test_media_history_template_handles_truncated_real_request_shape(self) -> None:
+        template_path = SCRIPTS_DIR / "templates" / "Qwen-3_5-media-history-template.jinja"
+        loaded_path, renderer, load_error = model_proxy_tap.load_chat_template_renderer(
+            str(template_path)
+        )
+        old_image = (
+            'iVBORw0KGgoOLD\\n\\n... [OUTPUT TRUNCATED - 1099865 chars omitted '
+            'out of 1149865 total] ...\\n\\nSUQz' + ("A" * 5000)
+        )
+        latest_image = (
+            'iVBORw0KGgoLATEST\\n\\n... [OUTPUT TRUNCATED - 1099865 chars omitted '
+            'out of 1149865 total] ...\\n\\nTAIL' + ("B" * 5000)
+        )
+        payload = {
+            "messages": [
+                {"role": "user", "content": "generate images"},
+                {
+                    "role": "assistant",
+                    "content": "first generation",
+                    "tool_calls": [{"type": "function", "function": {"name": "terminal", "arguments": json.dumps({"command": "first"})}}],
+                },
+                {"role": "tool", "content": json.dumps({"output": json.dumps({"images": [old_image]})})},
+                {
+                    "role": "assistant",
+                    "content": "second generation",
+                    "tool_calls": [{"type": "function", "function": {"name": "terminal", "arguments": json.dumps({"command": "second"})}}],
+                },
+                {"role": "tool", "content": json.dumps({"output": json.dumps({"images": [latest_image]})})},
+                {"role": "user", "content": "continue"},
+            ],
+            "tools": [],
+            "add_generation_prompt": True,
+        }
+
+        rendered, render_error = model_proxy_tap.render_prompt_from_payload(
+            payload,
+            chat_template_renderer=renderer,
+            chat_template_path=loaded_path,
+            chat_template_error=load_error,
+            chat_template_max_chars=0,
+        )
+
+        self.assertIsNone(render_error)
+        self.assertNotIn("iVBORw0KGgoOLD", rendered)
+        self.assertNotIn("first generation", rendered)
+        self.assertIn("iVBORw0KGgoLATEST", rendered)
+        self.assertIn("second generation", rendered)
+        self.assertEqual(rendered.count("[OUTPUT TRUNCATED"), 1)
 
 class _CaptureHandler(BaseHTTPRequestHandler):
     received_bodies: list[bytes] = []

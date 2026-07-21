@@ -64,6 +64,7 @@ class ComponentObservation:
     observability: str
     lifecycle_result: CommandResult
     health_result: Optional[CommandResult] = None
+    runtime_result: Optional[CommandResult] = None
 
     @property
     def running(self) -> bool:
@@ -127,7 +128,39 @@ def _launchd_command(profile: dict[str, Any], component: Component, action: str)
     raise DriverError(f"{component.qualified_id}: unsupported launchd action: {action}")
 
 
-def build_component_command(topology: Topology, component: Component, action: str) -> str:
+def _log_path(topology: Topology, component: Component, profile: dict[str, Any], channel: str) -> str:
+    """Resolve a component log channel on the component host."""
+
+    logging = profile.get("logging", {})
+    if not isinstance(logging, dict):
+        raise DriverError(f"{component.qualified_id}: profile logging must be an object")
+    if component.driver == "model-proxy":
+        paths = {
+            "service": profile.get("log_path", profile.get("log")),
+            "raw-request": logging.get("raw_request_log", str(topology.paths.logs_dir / "model-proxy.raw.log")),
+            "rendered-prompt": logging.get("rendered_prompt_log", str(topology.paths.logs_dir / "model-proxy.rendered.log")),
+            "raw-response": logging.get("raw_response_log", str(topology.paths.logs_dir / "model-proxy.raw.log")),
+        }
+    else:
+        paths = {
+            "service": profile.get("log_path", profile.get("log", profile.get("stdout"))),
+        }
+    path = paths.get(channel)
+    if not isinstance(path, str) or not path:
+        choices = ", ".join(sorted(paths))
+        raise DriverError(
+            f"{component.qualified_id}: log channel {channel!r} is unavailable; choose: {choices}"
+        )
+    return path
+
+
+def build_component_command(
+    topology: Topology,
+    component: Component,
+    action: str,
+    *,
+    log_channel: str = "service",
+) -> str:
     """Build a safe remote shell command for one typed component action."""
 
     if action not in {"start", "stop", "restart", "status", "logs"}:
@@ -136,14 +169,15 @@ def build_component_command(topology: Topology, component: Component, action: st
     profile = load_profile(topology.paths, component)
     if component.driver == "modelctl":
         if action == "logs":
-            raise DriverError(f"{component.qualified_id}: model logs require a profile log_path")
+            log_path = profile.get("log_path")
+            if not isinstance(log_path, str) or not log_path:
+                log_path = str(topology.paths.logs_dir / f"llama-server-{component.profile.replace('.', '_')}.log")
+            return f"tail -n 100 {shlex.quote(log_path)}"
         binary = _managed_binary(host, "modelctl")
         return f"{binary} {shlex.quote(component.profile)} {shlex.quote(action)}"
     if component.driver in {"model-proxy", "tts-bridge"}:
         if action == "logs":
-            log_path = profile.get("log_path", profile.get("log"))
-            if not isinstance(log_path, str) or not log_path:
-                raise DriverError(f"{component.qualified_id}: profile does not define log_path")
+            log_path = _log_path(topology, component, profile, log_channel)
             return f"tail -n 100 {shlex.quote(log_path)}"
         binary = _managed_binary(host, component.driver)
         return f"{binary} {shlex.quote(action)}"
@@ -185,15 +219,42 @@ class ComponentRunner:
     def __init__(self, topology: Topology) -> None:
         self.topology = topology
 
-    def run(self, component: Component, action: str) -> CommandResult:
+    def run(
+        self,
+        component: Component,
+        action: str,
+        *,
+        log_channel: str = "service",
+    ) -> CommandResult:
         """Run one component action and capture output."""
 
         if component.ownership == "external" and action in {"start", "stop", "restart"}:
             raise DriverError(f"{component.qualified_id}: externally owned component is read-only")
-        script = build_component_command(self.topology, component, action)
+        script = build_component_command(
+            self.topology,
+            component,
+            action,
+            log_channel=log_channel,
+        )
         host = self.topology.hosts[component.host]
         command = ["/bin/sh", "-c", script] if host.transport == "local" else host.ssh_base() + [script]
-        completed = subprocess.run(command, capture_output=True, text=True, check=False)
+        try:
+            completed = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=getattr(component.timeouts, action),
+            )
+        except subprocess.TimeoutExpired as exc:
+            return CommandResult(
+                component=component.qualified_id,
+                action=action,
+                command=" ".join(shlex.quote(token) for token in command),
+                returncode=124,
+                stdout=(exc.stdout or "") if isinstance(exc.stdout, str) else "",
+                stderr=f"{action} timed out after {getattr(component.timeouts, action)} seconds",
+            )
         return CommandResult(
             component=component.qualified_id,
             action=action,
@@ -207,6 +268,30 @@ class ComponentRunner:
         """Return the component's driver status result."""
 
         return self.run(component, "status")
+
+    def logs(self, component: Component, *, channel: str = "service") -> CommandResult:
+        """Return recent output for one named log channel."""
+
+        return self.run(component, "logs", log_channel=channel)
+
+    def runtime_command(self, component: Component, result: CommandResult) -> Optional[CommandResult]:
+        """Inspect the command line of a live PID reported by a typed driver."""
+
+        match = re.search(r"(?:^|\s)pid=(\d+)(?:\s|$)", result.stdout)
+        if match is None:
+            return None
+        host = self.topology.hosts[component.host]
+        script = f"ps -p {int(match.group(1))} -o command="
+        command = ["/bin/sh", "-c", script] if host.transport == "local" else host.ssh_base() + [script]
+        completed = subprocess.run(command, capture_output=True, text=True, check=False)
+        return CommandResult(
+            component.qualified_id,
+            "runtime",
+            " ".join(shlex.quote(token) for token in command),
+            completed.returncode,
+            completed.stdout.strip(),
+            completed.stderr.strip(),
+        )
 
     @staticmethod
     def lifecycle_from_result(component: Component, result: CommandResult) -> str:
@@ -285,6 +370,7 @@ class ComponentRunner:
             observability,
             result,
             health_result,
+            self.runtime_command(component, result),
         )
 
     def wait_healthy(self, component: Component) -> CommandResult:

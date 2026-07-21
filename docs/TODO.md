@@ -20,9 +20,13 @@ Back: [Documentation index](./INDEX.md)
 - [x] Remove proof-of-concept repository synchronization, source-checkout deployment, runtime legacy reads, embedded Python shell blocks, and privileged Hermes/OpenClaw behavior.
 - [x] Preserve test-only legacy migration fixtures; they are not installed in release artifacts.
 - [x] Complete the prior operator-v1 48-hour live soak while retaining prior runtimes and checksummed backups.
+- [x] Add the media-history template, preserving one final image-bearing tool response while pruning earlier payloads and duplicate assistant-side copies without changing proxy transport bytes.
+- [x] Add effective configuration, host-qualified log channels, component runtime/version inspection, lifecycle timeouts, and persistent detached operation inspection.
+- [x] Make TUI lifecycle/update actions non-blocking and add progress states, Escape-safe modals, clickable actions, populated topology filters, and accessible colors.
 
 ## Beta Release Gates
 
+- [ ] Replay the current Hermes request through the installed media-history template and confirm one final historical image-bearing tool response, no earlier payloads, and no duplicate assistant base64 copies.
 - [x] Pass the dependency-complete source suite and precheck in the packaged UV environment. The final committed source passed 131 tests and precheck on 2026-07-21.
 - [x] Pass normal clean installation from a verified archive on isolated Apple Silicon and Intel macOS users.
 - [ ] Repeat normal installation from the final committed release artifact on both macOS users after documentation and acceptance fixes stop changing the package.
@@ -33,7 +37,7 @@ Back: [Documentation index](./INDEX.md)
 - [ ] Pass coordinated two-host update tests for unreachable preflight, interrupted transfer, old-peer bootstrap, apply failure, automatic rollback, and mixed-version refusal.
 - [x] Pass live configuration reconciliation plan/apply/idempotence and independently edited target conflict refusal.
 - [x] Confirm identical topology/catalog hashes and global status from both trusted live hosts.
-- [ ] Upgrade both live hosts from the preserved operator-v1 runtime to the final beta candidate, validate services, roll back once, and return to the candidate.
+- [ ] Upgrade both live hosts from the preserved operator-v1 runtime to `0.9.0b8`, reconcile template/profile changes, validate services, roll back once, and return to the candidate.
 - [ ] Re-run model, embedding, TTS, model-proxy, tts-bridge, gateway, dashboard, tunnel, dependency, cascade, individual restart, and cold-start acceptance against the final artifact. The `0.9.0b4` baseline passed; the documentation-and-test revision still requires final-artifact repetition.
 - [ ] Produce a clean local release commit and build exclusively from `git archive HEAD`; require clean status, documentation links, secret scan, private-path scan, archive audit, and ignored-file audit.
 - [x] Regenerate the two missing standardized operational reports from 48 hourly archived source records. The reports preserve transient migration and cold-cycle exceptions rather than describing the cycles as uninterrupted steady state.

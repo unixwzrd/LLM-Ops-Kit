@@ -15,11 +15,11 @@ The beta is deliberately narrow. It should make the existing operator-v1 capabil
 
 ### Release blockers
 
-1. Complete final-artifact install, minimal install, repair, upgrade, rollback, uninstall, and purge acceptance on the ARM and Intel macOS test users.
-2. Complete coordinated two-host update, old-peer bootstrap, failure rollback, configuration reconciliation, and conflict-refusal acceptance.
-3. Repeat live-host upgrade and global-status validation without restarting unaffected services.
-4. Reconcile current documentation and produce a clean committed archive with release-hygiene evidence.
-5. Obtain a green macOS CI run and close the standardized operational-report evidence gap before publication.
+1. Replay the authoritative Hermes prompt through the revised media-history template and prove exactly one historical image-bearing tool response remains.
+2. Complete final-artifact install, minimal install, repair, upgrade, rollback, uninstall, and purge acceptance on the ARM and Intel macOS test users.
+3. Complete coordinated two-host update, old-peer bootstrap, failure rollback, configuration reconciliation, and conflict-refusal acceptance.
+4. Upgrade both live hosts, reconcile the revised Qwen/model-proxy profiles, and repeat protocol and global-status validation without restarting unaffected services.
+5. Produce a clean committed archive with release-hygiene evidence, obtain explicit approval, and require green macOS CI before publication.
 
 The application-owned UV runtime, standard Python package, dual-architecture offline wheelhouse, adapter registry, core Textual dashboard, version/drift status, remote update implementation, and configuration reconciliation implementation are complete and covered by local regression tests. They remain release candidates until the final host acceptance sequence passes.
 
@@ -34,6 +34,7 @@ The runtime completed its 48-hour soak with continuous successful hourly health 
 - Guided editing for stable existing-component fields, dependencies, ownership, and readiness timeout.
 - Read-only bounded topology grouped by host with host, stack, driver, and condition filters.
 - No daemon, autonomous changes, model downloads, or secret-value editor.
+- Detached short-lived workers persist accepted long-running operations and survive TUI exit without creating a resident privileged service.
 
 The TUI should begin as a compact operational dashboard. Configuration screens are reached from host or component detail views rather than presenting every possible field at startup.
 

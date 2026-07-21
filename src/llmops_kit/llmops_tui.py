@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import contextlib
-import io
 import json
 import shlex
 import sys
@@ -16,6 +14,7 @@ from . import llmops_cli, llmops_update
 from .llmops_config import update_display
 from .llmops_drivers import ComponentRunner
 from .llmops_executor import ExecutionError, Executor
+from .llmops_operations import ACTIVE_STATES, dispatch, list_records
 from .llmops_topology import TopologyError
 from .llmops_topology_view import project_topology
 from .llmops_ui import UiPreferences, load_ui_preferences, resolve_ui_path, save_ui_preferences
@@ -23,7 +22,7 @@ from .llmops_ui import UiPreferences, load_ui_preferences, resolve_ui_path, save
 
 CONDITION_STYLES = {
     "ok": "bold #43d17a",
-    "down": "bold #a8b0bd",
+    "down": "bold #c86b6b",
     "attention": "bold #ffd166",
     "error": "bold #ff5c5c",
     "unobserved": "bold #55d8ff",
@@ -60,6 +59,8 @@ def configure_command(component: str, changes: dict[str, Any]) -> str:
         argv.extend(("--depends-on", dependency))
     if "health_timeout" in changes:
         argv.extend(("--health-timeout", str(changes["health_timeout"])))
+    for action, timeout in changes.get("timeouts", {}).items():
+        argv.extend((f"--{action}-timeout", str(timeout)))
     argv.extend(("--apply", "--yes"))
     return shlex.join(argv)
 
@@ -118,6 +119,8 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
     class ConfirmOperation(ModalScreen[bool]):
         """Show a reproducible command and require explicit confirmation."""
 
+        BINDINGS = [("escape", "cancel", "Cancel")]
+
         def __init__(self, command: str, plan: list[dict[str, str]]) -> None:
             super().__init__()
             self.command = command
@@ -138,8 +141,13 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
         def on_button_pressed(self, event: Any) -> None:
             self.dismiss(event.button.id == "run")
 
+        def action_cancel(self) -> None:
+            self.dismiss(False)
+
     class StopImpact(ModalScreen[str]):
         """Require an explicit policy when a stop has active dependents."""
+
+        BINDINGS = [("escape", "cancel", "Cancel")]
 
         def __init__(self, component: str, dependents: list[str]) -> None:
             super().__init__()
@@ -162,8 +170,13 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
         def on_button_pressed(self, event: Any) -> None:
             self.dismiss(event.button.id)
 
+        def action_cancel(self) -> None:
+            self.dismiss("cancel")
+
     class EditComponent(ModalScreen[Optional[dict[str, Any]]]):
         """Guided editor for stable desired-state component fields."""
+
+        BINDINGS = [("escape", "cancel", "Cancel")]
 
         def __init__(self, component: Any) -> None:
             super().__init__()
@@ -195,6 +208,11 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                     type="integer",
                     id="edit-timeout",
                 )
+                yield Label("Start / stop / restart timeout seconds")
+                with Horizontal():
+                    yield Input(value=str(self.component.timeouts.start), type="integer", id="edit-start-timeout")
+                    yield Input(value=str(self.component.timeouts.stop), type="integer", id="edit-stop-timeout")
+                    yield Input(value=str(self.component.timeouts.restart), type="integer", id="edit-restart-timeout")
                 with Horizontal(classes="dialog-actions"):
                     yield Button("Cancel", id="cancel")
                     yield Button("Review", id="review", variant="primary")
@@ -216,11 +234,21 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                     "enabled": self.query_one("#edit-enabled", Checkbox).value,
                     "depends_on": dependencies,
                     "health_timeout": int(self.query_one("#edit-timeout", Input).value),
+                    "timeouts": {
+                        "start": int(self.query_one("#edit-start-timeout", Input).value),
+                        "stop": int(self.query_one("#edit-stop-timeout", Input).value),
+                        "restart": int(self.query_one("#edit-restart-timeout", Input).value),
+                    },
                 }
             )
 
+        def action_cancel(self) -> None:
+            self.dismiss(None)
+
     class HelpScreen(ModalScreen[None]):
         """Display contextual operations and status help."""
+
+        BINDINGS = [("escape", "close", "Close"), ("h", "close", "Close")]
 
         def compose(self) -> ComposeResult:
             with Vertical(classes="dialog", id="help-dialog"):
@@ -252,8 +280,13 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
         def on_button_pressed(self, event: Any) -> None:
             self.dismiss(None)
 
+        def action_close(self) -> None:
+            self.dismiss(None)
+
     class SettingsScreen(ModalScreen[Optional[UiPreferences]]):
         """Edit host-local TUI preferences."""
+
+        BINDINGS = [("escape", "cancel", "Cancel")]
 
         def __init__(self, preferences: UiPreferences) -> None:
             super().__init__()
@@ -299,8 +332,13 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                 )
             )
 
+        def action_cancel(self) -> None:
+            self.dismiss(None)
+
     class BrandingScreen(ModalScreen[Optional[dict[str, str]]]):
         """Edit shared organization and site labels."""
+
+        BINDINGS = [("escape", "cancel", "Cancel")]
 
         def __init__(self, display: dict[str, Any]) -> None:
             super().__init__()
@@ -328,8 +366,39 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                 }
             )
 
+        def action_cancel(self) -> None:
+            self.dismiss(None)
+
+    class LogChannelScreen(ModalScreen[Optional[str]]):
+        """Select a supported component log channel."""
+
+        BINDINGS = [("escape", "cancel", "Cancel")]
+
+        def __init__(self, channels: tuple[str, ...]) -> None:
+            super().__init__()
+            self.channels = channels
+
+        def compose(self) -> ComposeResult:
+            with Vertical(classes="dialog", id="log-channel-dialog"):
+                yield Label("Select log channel", classes="dialog-title")
+                yield Select(tuple((item.replace("-", " ").title(), item) for item in self.channels), value=self.channels[0], id="log-channel")
+                with Horizontal(classes="dialog-actions"):
+                    yield Button("Cancel", id="cancel")
+                    yield Button("Open", id="open", variant="primary")
+
+        def on_button_pressed(self, event: Any) -> None:
+            if event.button.id == "cancel":
+                self.dismiss(None)
+            else:
+                self.dismiss(str(self.query_one("#log-channel", Select).value))
+
+        def action_cancel(self) -> None:
+            self.dismiss(None)
+
     class TopologyScreen(ModalScreen[None]):
         """Show a bounded, filterable, host-grouped topology tree."""
+
+        BINDINGS = [("escape", "close", "Close")]
 
         def __init__(self, topology: Any, status_by_id: dict[str, dict[str, Any]]) -> None:
             super().__init__()
@@ -337,13 +406,21 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
             self.status_by_id = status_by_id
 
         def compose(self) -> ComposeResult:
+            hosts = (("All hosts", ""),) + tuple((name, name) for name in sorted(self.topology.hosts))
+            stacks = (("All stacks", ""),) + tuple((name, name) for name in sorted(self.topology.stacks))
+            drivers = (("All drivers", ""),) + tuple(
+                (name, name) for name in sorted({item.driver for item in self.topology.all_components()})
+            )
+            conditions = (("All conditions", ""),) + tuple(
+                (name.title(), name) for name in ("ok", "down", "attention", "error", "unobserved")
+            )
             with Vertical(id="topology-dialog"):
                 yield Label("Service Topology", classes="dialog-title")
                 with Horizontal(id="topology-filters"):
-                    yield Input(placeholder="Host", id="topology-host")
-                    yield Input(placeholder="Stack", id="topology-stack")
-                    yield Input(placeholder="Driver", id="topology-driver")
-                    yield Input(placeholder="Condition", id="topology-condition")
+                    yield Select(hosts, value="", id="topology-host")
+                    yield Select(stacks, value="", id="topology-stack")
+                    yield Select(drivers, value="", id="topology-driver")
+                    yield Select(conditions, value="", id="topology-condition")
                     yield Button("Apply", id="apply", variant="primary")
                     yield Button("Close", id="close")
                 yield Tree("Topology", id="topology-tree")
@@ -353,10 +430,10 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
             self.refresh_tree()
 
         def refresh_tree(self) -> None:
-            host_filter = self.query_one("#topology-host", Input).value.strip()
-            stack_filter = self.query_one("#topology-stack", Input).value.strip()
-            driver_filter = self.query_one("#topology-driver", Input).value.strip()
-            condition_filter = self.query_one("#topology-condition", Input).value.strip()
+            host_filter = str(self.query_one("#topology-host", Select).value or "")
+            stack_filter = str(self.query_one("#topology-stack", Select).value or "")
+            driver_filter = str(self.query_one("#topology-driver", Select).value or "")
+            condition_filter = str(self.query_one("#topology-condition", Select).value or "")
             projection = project_topology(
                 self.topology,
                 host=host_filter or None,
@@ -399,6 +476,9 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                 f"Dependents: {', '.join(item['dependents']) or 'none'}"
             )
 
+        def action_close(self) -> None:
+            self.dismiss(None)
+
     class LlmOpsApp(App[None]):
         TITLE = "LLM-Ops-Kit"
         CSS = """
@@ -407,23 +487,27 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
         #summary { height: 3; padding: 1 2; background: #111923; color: #f5f7fa; }
         #components { height: 1fr; background: #0b0f14; color: #f5f7fa; }
         #components > .datatable--header { background: #243444; color: #ffffff; text-style: bold; }
-        #components > .datatable--cursor { background: #075e68; color: #ffffff; text-style: bold; }
-        #detail { height: 10; border-top: solid #55d8ff; padding: 1 2; overflow-y: auto; background: #0f151d; color: #f5f7fa; }
-        #action-bar { height: 3; padding: 1 2; background: #1b2733; color: #ffffff; text-style: bold; }
-        .dialog { width: 78; height: auto; max-height: 92%; padding: 1 2; border: thick #55d8ff; background: #111923; color: #ffffff; }
-        .dialog-title { text-style: bold; color: #55d8ff; margin-bottom: 1; }
+        #components > .datatable--cursor { background: #29445c; color: #ffffff; text-style: bold; }
+        #detail { height: 11; border-top: solid #6f8ea3; padding: 1 2; overflow-y: auto; background: #0f151d; color: #f5f7fa; }
+        #action-bar { height: 3; padding: 0 1; background: #1b2733; color: #ffffff; text-style: bold; }
+        #action-bar Button { min-width: 9; height: 3; margin: 0 1 0 0; border: none; background: #33485d; color: #ffffff; }
+        #action-bar Button:hover { background: #49637c; }
+        .dialog { width: 78; height: auto; max-height: 92%; padding: 1 2; border: thick #6f8ea3; background: #111923; color: #ffffff; }
+        .dialog-title { text-style: bold; color: #b8d4e8; margin-bottom: 1; }
         .dialog-body { color: #f5f7fa; overflow-y: auto; }
         .dialog-actions { height: 3; margin-top: 1; }
         .equivalent-command { margin: 1 0; color: #9fe870; background: #0b0f14; padding: 1; }
         .warning { color: #ffd166; margin-bottom: 1; }
-        Button { margin-right: 1; }
+        Button { margin-right: 1; background: #33485d; color: #ffffff; }
+        Button.-primary { background: #496f91; color: #ffffff; }
+        Button.-error { background: #9f3d46; color: #ffffff; }
         Input, Select { background: #18222d; color: #ffffff; border: tall #557086; }
         Checkbox { color: #ffffff; }
-        #topology-dialog { width: 95%; height: 95%; padding: 1 2; border: thick #55d8ff; background: #0b0f14; }
+        #topology-dialog { width: 95%; height: 95%; padding: 1 2; border: thick #6f8ea3; background: #0b0f14; }
         #topology-filters { height: 5; }
-        #topology-filters Input { width: 1fr; margin-right: 1; }
+        #topology-filters Select { width: 1fr; margin-right: 1; }
         #topology-tree { height: 1fr; background: #0f151d; color: #f5f7fa; }
-        #topology-detail { height: 8; border-top: solid #55d8ff; padding: 1; }
+        #topology-detail { height: 8; border-top: solid #6f8ea3; padding: 1; }
         """
         BINDINGS = [
             ("r", "refresh", "Refresh"),
@@ -437,6 +521,7 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
             ("comma", "settings", "Settings"),
             ("o", "branding", "Display labels"),
             ("?", "help", "Help"),
+            ("h", "help", "Help"),
             ("u", "update_check", "Toolkit update check"),
             ("ctrl+u", "update_apply", "Apply toolkit update"),
             ("d", "doctor", "Doctor"),
@@ -467,12 +552,15 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
             yield Static("Loading topology...", id="summary")
             yield DataTable(id="components", cursor_type="row", zebra_stripes=False)
             yield Static("Select a component for details.", id="detail")
-            yield Static(
-                "[b]r[/b] Refresh  [b]s[/b] Start  [b]x[/b] Stop  [b]b[/b] Restart  "
-                "[b]l[/b] Logs  [b]t[/b] Topology  [b]?[/b] Help  [b]q[/b] Quit",
-                id="action-bar",
-                markup=True,
-            )
+            with Horizontal(id="action-bar"):
+                yield Button("Refresh", id="action-refresh")
+                yield Button("Start", id="action-start")
+                yield Button("Stop", id="action-stop")
+                yield Button("Restart", id="action-restart")
+                yield Button("Logs", id="action-logs")
+                yield Button("Topology", id="action-topology")
+                yield Button("Help", id="action-help")
+                yield Button("Quit", id="action-quit")
 
         def on_mount(self) -> None:
             table = self.query_one("#components", DataTable)
@@ -529,6 +617,9 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                     f"Component version: {state.get('component_version') or 'unknown'}  "
                     f"Toolkit version: {state.get('toolkit_version') or 'unknown'}  "
                     f"Drift: {state.get('drift', 'unknown')}\n"
+                    f"Desired runtime: {state.get('desired_runtime') or 'unknown'}  "
+                    f"Observed runtime: {state.get('observed_runtime') or 'unknown'}  "
+                    f"Operation: {state.get('operation_id') or 'none'}\n"
                     f"Dependencies: {', '.join(item.depends_on) or 'none'}  Ownership: {item.ownership}"
                 )
             else:
@@ -549,6 +640,24 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                 local=False,
             )
             payload = await asyncio.to_thread(llmops_cli._collect_status, args)
+            active_operations = {
+                str(record.get("target", "")): record
+                for record in list_records(self.topology.paths)
+                if record.get("state") in ACTIVE_STATES
+            }
+            transient = {
+                "start": "starting",
+                "stop": "stopping",
+                "restart": "restarting",
+                "update": "updating",
+                "reconcile": "reconciling",
+            }
+            for item in payload:
+                operation = active_operations.get(str(item.get("component", "")))
+                if operation is not None:
+                    item["lifecycle"] = transient.get(str(operation.get("action", "")), "running")
+                    item["condition"] = "attention"
+                    item["operation_id"] = operation.get("operation_id", "")
             self.status_by_id = {item["component"]: item for item in payload}
             self.rows = (
                 self.topology.all_components()
@@ -667,24 +776,35 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                 approved = await self.push_screen_wait(ConfirmOperation(command, plan))
                 if not approved:
                     return
-                if hasattr(target, "component_id"):
-                    results = await asyncio.to_thread(
-                        executor.execute_component,
-                        target,
-                        action,
-                        cascade=cascade,
-                        force=force,
-                    )
-                else:
-                    results = await asyncio.to_thread(executor.execute, operations)
+                argv = shlex.split(command)[1:]
+                if config_home:
+                    argv = ["--config-home", str(self.topology.paths.config_home), *argv]
+                operation = dispatch(
+                    self.topology.paths,
+                    argv=argv,
+                    action=action,
+                    target=(
+                        target.qualified_id
+                        if hasattr(target, "qualified_id")
+                        else target.name
+                    ),
+                    command=command,
+                    plan=plan,
+                    host=(
+                        target.host
+                        if hasattr(target, "host")
+                        else ",".join(sorted({item["host"] for item in plan}))
+                    ),
+                )
                 self.query_one("#detail", Static).update(
-                    json.dumps([item.as_dict() for item in results], indent=2)
+                    f"Operation queued: {operation['operation_id']}\n{command}\n"
+                    "The operation continues independently if the TUI exits."
                 )
             except (ExecutionError, TopologyError) as exc:
                 self.query_one("#detail", Static).update(str(exc))
             finally:
                 self.mutating = False
-                await self.inspect()
+                self.action_refresh()
 
         def _mutate(self, action: str) -> None:
             target = self.selected_component()
@@ -701,8 +821,29 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
             self._mutate("restart")
 
         async def show_logs(self, component: Any) -> None:
-            result = await asyncio.to_thread(ComponentRunner(self.topology).run, component, "logs")
-            self.query_one("#detail", Static).update(result.stdout or result.stderr or "No log output")
+            channels = (
+                ("service", "raw-request", "rendered-prompt", "raw-response")
+                if component.driver == "model-proxy"
+                else ("service",)
+            )
+            channel = channels[0]
+            if len(channels) > 1:
+                selected = await self.push_screen_wait(LogChannelScreen(channels))
+                if selected is None:
+                    return
+                channel = selected
+            result = await asyncio.to_thread(
+                ComponentRunner(self.topology).logs,
+                component,
+                channel=channel,
+            )
+            heading = (
+                f"Host: {component.host}  Run as: {self.topology.hosts[component.host].user}  "
+                f"Channel: {channel}\n"
+            )
+            self.query_one("#detail", Static).update(
+                heading + (result.stdout or result.stderr or "No log output")
+            )
 
         def action_logs(self) -> None:
             component = self.selected_component()
@@ -826,10 +967,18 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
             )
             if not approved:
                 return
-            output = io.StringIO()
-            with contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
-                code = await asyncio.to_thread(llmops_update.main, ["--apply"])
-            self.query_one("#detail", Static).update(f"exit={code}\n{output.getvalue()}")
+            operation = dispatch(
+                self.topology.paths,
+                argv=["update", "--apply"],
+                action="update",
+                target="LLM-Ops-Kit toolkit",
+                command="llmops update --apply",
+                plan=[{"action": "update", "component": "LLM-Ops-Kit toolkit"}],
+                host="authority",
+            )
+            self.query_one("#detail", Static).update(
+                f"Operation queued: {operation['operation_id']}\nllmops update --apply"
+            )
 
         def action_update_apply(self) -> None:
             self.run_worker(self.apply_update(), exclusive=True)
@@ -839,6 +988,21 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
             self.query_one("#detail", Static).update(
                 "Configuration valid" if not errors else "\n".join(errors)
             )
+
+        def on_button_pressed(self, event: Any) -> None:
+            actions = {
+                "action-refresh": self.action_refresh,
+                "action-start": self.action_start,
+                "action-stop": self.action_stop,
+                "action-restart": self.action_restart,
+                "action-logs": self.action_logs,
+                "action-topology": self.action_topology,
+                "action-help": self.action_help,
+                "action-quit": self.action_quit,
+            }
+            action = actions.get(event.button.id)
+            if action is not None:
+                action()
 
         def on_data_table_row_highlighted(self, event: Any) -> None:
             if 0 <= event.cursor_row < len(self.rows):

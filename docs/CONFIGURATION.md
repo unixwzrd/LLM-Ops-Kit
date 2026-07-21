@@ -92,6 +92,13 @@ Set `peer_observable` to `false` when components run in a local desktop login do
     "type": "http",
     "target": "http://127.0.0.1:11434/health",
     "timeout_seconds": 60
+  },
+  "timeouts": {
+    "start": 900,
+    "stop": 120,
+    "restart": 900,
+    "status": 30,
+    "logs": 30
   }
 }
 ```
@@ -99,6 +106,19 @@ Set `peer_observable` to `false` when components run in a local desktop login do
 Drivers are `modelctl`, `process`, `launchd`, `model-proxy`, `tts-bridge`, `ssh-tunnel`, `agent`, and gated `command`. Generic process and agent profiles define lifecycle actions as argument arrays. No agent implementation receives privileged treatment.
 
 Tags are optional operator-defined subsystem labels used by `llmops status <tag>`. Libraries embedded inside another process are not independently manageable components unless a process, service, or health adapter is configured for them.
+
+Lifecycle command timeouts are seconds in the range 1 through 86400. A timed-out command returns code 124 and is recorded as a failed operation; the detached worker remains independent of the TUI process.
+
+Inspect the exact effective non-secret profile, host, execution identity, dependencies, probes, timeouts, endpoints, template, and log settings with:
+
+```bash
+llmops config effective
+llmops config effective component <component>
+llmops component logs <component> --channel service
+llmops component logs model-proxy --channel rendered-prompt
+```
+
+Log paths are resolved and read on the component's configured host. A displayed remote path is never implied to exist on the controlling host.
 
 ## Reusing Model Profiles
 

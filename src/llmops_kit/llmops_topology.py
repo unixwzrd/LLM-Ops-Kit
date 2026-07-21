@@ -59,6 +59,17 @@ class HealthCheck:
 
 
 @dataclass(frozen=True)
+class LifecycleTimeouts:
+    """Maximum execution time for component lifecycle commands."""
+
+    start: int = 900
+    stop: int = 120
+    restart: int = 900
+    status: int = 30
+    logs: int = 30
+
+
+@dataclass(frozen=True)
 class Component:
     """One independently managed component inside a stack."""
 
@@ -72,6 +83,7 @@ class Component:
     ownership: str
     tags: tuple[str, ...]
     health: HealthCheck
+    timeouts: LifecycleTimeouts
 
     @property
     def qualified_id(self) -> str:
@@ -174,6 +186,23 @@ def _parse_health(raw: Any, *, component_ref: str) -> HealthCheck:
     return HealthCheck(kind=kind, target=target, timeout_seconds=timeout)
 
 
+def _parse_timeouts(raw: Any, *, component_ref: str) -> LifecycleTimeouts:
+    """Parse bounded lifecycle command timeouts."""
+
+    if raw is None:
+        return LifecycleTimeouts()
+    if not isinstance(raw, dict):
+        raise TopologyError(f"{component_ref}: timeouts must be an object")
+    defaults = LifecycleTimeouts()
+    values: dict[str, int] = {}
+    for action in ("start", "stop", "restart", "status", "logs"):
+        value = raw.get(action, getattr(defaults, action))
+        if not isinstance(value, int) or value < 1 or value > 86400:
+            raise TopologyError(f"{component_ref}: timeouts.{action} must be 1..86400")
+        values[action] = value
+    return LifecycleTimeouts(**values)
+
+
 def _parse_component(stack_name: str, raw: Any) -> Component:
     if not isinstance(raw, dict):
         raise TopologyError(f"stack {stack_name}: every component must be an object")
@@ -218,6 +247,7 @@ def _parse_component(stack_name: str, raw: Any) -> Component:
         ownership=ownership,
         tags=tuple(dict.fromkeys(tag.strip() for tag in tags)),
         health=_parse_health(raw.get("health"), component_ref=reference),
+        timeouts=_parse_timeouts(raw.get("timeouts"), component_ref=reference),
     )
 
 
@@ -504,6 +534,13 @@ def write_topology_catalog(topology: Topology, destination: Path) -> Path:
                 "ownership": component.ownership,
                 "tags": list(component.tags),
                 "depends_on": list(component.depends_on),
+                "timeouts": {
+                    "start": component.timeouts.start,
+                    "stop": component.timeouts.stop,
+                    "restart": component.timeouts.restart,
+                    "status": component.timeouts.status,
+                    "logs": component.timeouts.logs,
+                },
             }
             for component in topology.all_components()
         ],

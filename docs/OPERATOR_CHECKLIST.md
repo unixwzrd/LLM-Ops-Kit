@@ -16,10 +16,13 @@ Back: [Documentation index](./INDEX.md)
 ## Operate
 
 - [ ] Run `llmops status` and review every `attention` or `error` condition; inspect lifecycle, health, and observability before acting.
+- [ ] Use `llmops config effective component <component>` to verify resolved endpoints, templates, timeouts, environment references, and readiness probes.
+- [ ] Use `llmops component version <component>` to compare desired and observed immutable runtimes; treat `stale-runtime` as attention.
 - [ ] Treat `authority-only` as unobserved, not stopped; inspect it from the owning account.
 - [ ] Use `component plan` before first-time lifecycle changes.
 - [ ] Confirm the equivalent command shown by `llmops tui` before mutation.
-- [ ] Review component logs after restart and verify readiness.
+- [ ] Review component logs after restart using the appropriate channel and verify the reported host, execution user, path, and readiness.
+- [ ] Use `llmops operation list` and `llmops operation show <operation-id>` for lifecycle work dispatched from the TUI.
 
 ## Synchronize
 

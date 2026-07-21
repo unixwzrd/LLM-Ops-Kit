@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import io
+import subprocess
 import tempfile
 import unittest
 from contextlib import redirect_stdout
@@ -20,7 +21,7 @@ from llmops_kit.llmops_cli import _condition as condition
 from llmops_kit.llmops_cli import _validate_host_operation as validate_host_operation
 from llmops_kit.llmops_cli import stack_operations
 from llmops_kit.llmops_config import load_config
-from llmops_kit.llmops_drivers import CommandResult, ComponentObservation, ComponentRunner, DriverError, _launchd_command
+from llmops_kit.llmops_drivers import CommandResult, ComponentObservation, ComponentRunner, DriverError, _launchd_command, build_component_command
 from llmops_kit.llmops_executor import Executor, ExecutionError, Operation, component_plan, stack_plan
 from llmops_kit.llmops_inventory import InventoryError, load_inventory
 from llmops_kit.llmops_lifecycle_state import LifecycleStateStore
@@ -284,6 +285,38 @@ class TopologyTests(ControlFixture):
     def test_component_tags_are_loaded(self) -> None:
         self.assertEqual(self.topology.resolve_component("chat").tags, ("model", "chat"))
 
+    def test_effective_component_reports_profile_host_and_resolved_values(self) -> None:
+        llmops_cli.CURRENT_TOPOLOGY = self.topology
+        payload = llmops_cli._effective_component(self.topology.resolve_component("chat"))
+        self.assertEqual(payload["component"], "sample:chat")
+        self.assertEqual(payload["execution_user"], "operator")
+        self.assertEqual(payload["resolved"]["MODEL"], "/models/chat.gguf")
+        self.assertTrue(payload["profile_path"].endswith("models/chat.json"))
+
+    def test_model_proxy_log_channels_resolve_on_component_host(self) -> None:
+        component = self.topology.resolve_component("proxy")
+        command = build_component_command(
+            self.topology,
+            component,
+            "logs",
+            log_channel="rendered-prompt",
+        )
+        self.assertIn(str(self.paths.logs_dir / "model-proxy.rendered.log"), command)
+
+    def test_observed_runtime_uses_live_process_command(self) -> None:
+        component = self.topology.resolve_component("proxy")
+        lifecycle = CommandResult(component.qualified_id, "status", "status", 0, "model-proxy: running pid=42", "")
+        runtime = CommandResult(
+            component.qualified_id,
+            "runtime",
+            "ps",
+            0,
+            "/opt/llm-ops/releases/0.9.0b6/scripts/model_proxy_tap.py",
+            "",
+        )
+        observation = ComponentObservation("running", "healthy", "observed", lifecycle, lifecycle, runtime)
+        self.assertEqual(llmops_cli._observed_runtime(observation), "0.9.0b6")
+
     def test_component_tags_must_be_nonempty_strings(self) -> None:
         stack = json.loads((self.paths.stacks_dir / "sample.json").read_text(encoding="utf-8"))
         stack["components"][0]["tags"] = [""]
@@ -318,6 +351,15 @@ class TopologyTests(ControlFixture):
             "",
         )
         self.assertEqual(ComponentRunner.lifecycle_from_result(proxy, result), "running")
+
+    @mock.patch("llmops_kit.llmops_drivers.subprocess.run")
+    def test_component_action_timeout_returns_bounded_failure(self, run: mock.Mock) -> None:
+        component = self.topology.resolve_component("chat")
+        run.side_effect = subprocess.TimeoutExpired(["modelctl", "chat", "start"], 900)
+        result = ComponentRunner(self.topology).run(component, "start")
+        self.assertEqual(result.returncode, 124)
+        self.assertIn("start timed out after 900 seconds", result.stderr)
+        self.assertEqual(run.call_args.kwargs["timeout"], 900)
 
     def test_status_record_has_no_legacy_status_alias(self) -> None:
         proxy = self.topology.resolve_component("proxy")

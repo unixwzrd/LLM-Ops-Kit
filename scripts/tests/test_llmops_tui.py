@@ -124,13 +124,45 @@ class TuiApplicationTests(unittest.IsolatedAsyncioTestCase):
                     self.assertIsNotNone(app.screen.query_one("#topology-tree"))
                     await pilot.click("#close")
                     await pilot.pause()
-                    await pilot.press("?")
+                    await pilot.click("#action-help")
                     await pilot.pause()
                     self.assertIsNotNone(app.screen.query_one("#help-dialog"))
-                    await pilot.click("#close")
+                    await pilot.press("escape")
                     await pilot.pause()
                 collect.assert_called()
             self.assertEqual((paths.stacks_dir / "starter.json").read_bytes(), original)
+
+    async def test_confirmed_lifecycle_action_dispatches_without_blocking_tui(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            paths = resolve_paths(
+                {
+                    "HOME": str(root),
+                    "LLMOPS_CONFIG_HOME": str(root / "config"),
+                    "LLMOPS_DATA_HOME": str(root / "data"),
+                    "LLMOPS_STATE_HOME": str(root / "state"),
+                    "LLMOPS_CACHE_HOME": str(root / "cache"),
+                }
+            )
+            initialize(paths, preset="single-host", user="operator")
+            stack_path = paths.stacks_dir / "starter.json"
+            stack = json.loads(stack_path.read_text(encoding="utf-8"))
+            stack["components"][0]["enabled"] = True
+            stack_path.write_text(json.dumps(stack, indent=2) + "\n", encoding="utf-8")
+            app = build_application(str(paths.config_home), None)
+            queued = {
+                "operation_id": "20260721T120000Z-abcdef123456",
+                "state": "queued",
+            }
+            with mock.patch("llmops_kit.llmops_tui.dispatch", return_value=queued) as detached:
+                async with app.run_test(size=(140, 42)) as pilot:
+                    await pilot.pause(1)
+                    await pilot.click("#action-start")
+                    await pilot.pause()
+                    await pilot.click("#run")
+                    await pilot.pause()
+                    self.assertTrue(detached.called)
+                    self.assertEqual(detached.call_args.kwargs["target"], "starter:chat")
 
     async def test_stop_requires_explicit_dependent_policy(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

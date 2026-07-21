@@ -19,7 +19,8 @@ Back: [Documentation index](./INDEX.md)
 
 ## Required Before Approval
 
-- [ ] Confirm `0.9.0b7` status records contain lifecycle, health, condition, observability, execution user, component version, and toolkit version without the removed legacy status alias on both trusted hosts.
+- [ ] Confirm `0.9.0b8` status records contain lifecycle, health, condition, observability, execution user, component version, desired/observed runtime, and toolkit version without the removed legacy status alias on both trusted hosts.
+- [ ] Confirm prompt replay through the installed media-history template retains exactly one historical image-bearing tool response and proxy forwarding remains byte-preserving.
 - [ ] Confirm CLI and TUI both refuse a target-only stop with active dependents unless cascade or force is explicitly selected.
 - [x] Pass keyboard navigation, high-contrast rendering, help, settings, branding, automatic-refresh pause, and bounded topology acceptance using the installed Textual wheel. Six artifact-boundary TUI tests passed on 2026-07-21 with repository source removed from `PYTHONPATH`.
 - [x] Build the candidate directly from a committed `git archive HEAD` without adding a synthetic `.git` directory, then install and inspect the resulting checksummed artifact in isolated roots.
