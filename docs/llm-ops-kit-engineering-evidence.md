@@ -1,10 +1,10 @@
 # LLM-Ops-Kit Engineering Evidence
 
 - **Evidence updated:** 2026-07-21
-- **Accepted live candidate:** `0.9.0b15`
-- **Current source candidate:** `0.9.0b15`
-- **Candidate runtime artifact source commit:** `4640ae8`
-- **Candidate release archive SHA-256:** `5354d1f0af662a31acf669a7ce47aef0f24013ae76f758442cd398fcf5a1d031`
+- **Accepted live candidate:** `0.9.0b16`
+- **Current source candidate:** `0.9.0b16`
+- **Candidate runtime artifact source commit:** `546bbc2`
+- **Candidate release archive SHA-256:** `505530aeb4772890897ce97e08f2e1ca7c4912c82f11af0e472c0bf623589cc6`
 
 ## Purpose
 
@@ -20,7 +20,7 @@ The full two-host and protocol acceptance baseline was collected against `0.9.0b
 
 Accepted runtime baseline `0.9.0b5` added a shared catalog-aware status collector and was installed on both live macOS hosts through coordinated update. Its shared catalog and host-specific configuration hashes remained unchanged, and all observable services remained running.
 
-Candidate `0.9.0b15` separates lifecycle, health, condition, and observability; separates toolkit, component, desired-runtime, and observed-runtime identities; reports the configured execution identity; centralizes dependent-impact enforcement across CLI and TUI; and adds the high-contrast, keyboard-accessible, configurable TUI and bounded topology projection. It also adds host-qualified log inspection, effective configuration inspection, configurable lifecycle timeouts, persistent detached operations, authority-backed reconciliation, structurally pruned historical media decode/save calls, model start-runtime provenance, and a top-positioned clickable action bar that preserves immediate table keyboard focus. The exact candidate archive was installed on both live hosts, its model, proxy, and bridge components were restarted, and both trusted hosts returned the same global status view. Live rollback acceptance exposed three updater defects that narrower tests missed; each received a focused regression before the successful coordinated b14 to b13 to b14 cycle.
+Candidate `0.9.0b16` separates lifecycle, health, condition, and observability; separates toolkit, component, desired-runtime, and observed-runtime identities; reports the configured execution identity; centralizes dependent-impact enforcement across CLI and TUI; and adds the high-contrast, keyboard-accessible, configurable TUI and bounded topology projection. It also adds host-qualified log inspection, effective configuration inspection, configurable lifecycle timeouts, persistent detached operations, authority-backed reconciliation, structurally pruned historical media decode/save calls, model start-runtime provenance, a top-positioned clickable action bar, reactive topology filters with Reset, semantic topology colors, visible Settings, and a direct Quit action. The exact candidate archive was installed on both live hosts without restarting the intentionally stopped chat model. Live rollback acceptance exposed three updater defects that narrower tests missed; each received a focused regression before the successful coordinated b14 to b13 to b14 cycle.
 
 ## Topology And Trust Boundary
 
@@ -188,8 +188,8 @@ This distinction prevents readiness and policy from being misreported as lifecyc
 
 | Evidence | Result |
 |---|---|
-| Candidate source regression | Commit `4640ae8` passed 146 tests, shell syntax, ShellCheck, Python compilation, adapter checks, archive audits, and maintainer precheck |
-| Candidate clean distribution | Runtime-only `0.9.0b15` archive built from `git archive HEAD` and installed on both live hosts; the immediately preceding b14 artifact passed isolated minimal installation, version, adapter doctor, uninstall, and purge |
+| Candidate source regression | Commit `546bbc2` passed 146 tests, shell syntax, ShellCheck, Python compilation, adapter checks, archive audits, and maintainer precheck |
+| Candidate clean distribution | Runtime-only `0.9.0b16` archive built from `git archive HEAD` and installed on both live hosts; the preceding b14 artifact passed isolated minimal installation, version, adapter doctor, uninstall, and purge |
 | Candidate installed-wheel tests | Six Textual tests and 42 control-plane tests passed with repository source removed from `PYTHONPATH` |
 | Clean distribution | Runtime-only archive built from clean commit `6989f97` |
 | Release identity | Version `0.9.0b5`; archive SHA-256 `8169e9c6f953a3036c1c5e30aa2868ac4e9ab704172c5074c184d71140076b8f` |
@@ -217,7 +217,7 @@ No single layer is treated as conclusive. The evidence chain is configuration id
 - `authority-only` does not prove that the component is running; it states that the current peer is not an authorized observer. The authority must inspect that component.
 - The current beta does not download models, install arbitrary engines, edit raw secrets, or autonomously remediate failures.
 - The Textual TUI is an on-demand client, not a daemon. A future WebUI must use the same control interfaces rather than create a second executor.
-- The `0.9.0b15` candidate remains local and unpublished. Publication is gated on the remaining release checklist, explicit maintainer approval, and green macOS CI.
+- The `0.9.0b16` candidate remains local and unpublished. Publication is gated on the remaining release checklist, explicit maintainer approval, and green macOS CI.
 
 ## Reproduction Outline
 
