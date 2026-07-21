@@ -12,6 +12,7 @@
 - Added optional adapter update and relocation capability contracts without enabling unsafe generic mutation behavior.
 - Packaged the control library in a conventional `src/llmops_kit` layout with one authoritative version, console entry point, locked dependencies, built-in resources, and optional Textual dependency metadata.
 - Added a checksummed release wheelhouse containing the project, Jinja2, Textual, and transitive dependencies for offline installation.
+- Made the release builder consume commit metadata exported into `RELEASE.json`, allowing the public artifact to be built directly from `git archive` without reconstructing a Git checkout.
 - Reworked installation around one UV-managed Python runtime and one application environment per immutable release; installed commands no longer depend on system Python, Conda activation, virtual environments, or shell startup files.
 - Added normal and `--minimal` installation, repair, local and coordinated host update, installer-level rollback, default uninstall, and purge behavior.
 - Added a versioned adapter registry, built-in adapter manifests, adapter discovery through Python entry points, `llmops adapter` commands, and conformance tests.

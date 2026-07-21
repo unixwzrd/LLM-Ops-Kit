@@ -21,8 +21,8 @@ Back: [Documentation index](./INDEX.md)
 
 - [ ] Confirm `0.9.0b6` status records contain lifecycle, health, condition, observability, component version, and toolkit version without the removed legacy status alias on both trusted hosts.
 - [ ] Confirm CLI and TUI both refuse a target-only stop with active dependents unless cascade or force is explicitly selected.
-- [ ] Pass keyboard navigation, high-contrast rendering, help, settings, branding, automatic-refresh pause, and bounded topology acceptance in the final Textual artifact.
-- [ ] Build the final documentation-and-test revision from a clean committed `git archive HEAD`, not a dirty working-tree fixture. The `0.9.0b5` runtime artifact passed this gate before the evidence-document corrections.
+- [x] Pass keyboard navigation, high-contrast rendering, help, settings, branding, automatic-refresh pause, and bounded topology acceptance using the installed `0.9.0b6` Textual wheel. Six artifact-boundary TUI tests passed on 2026-07-21 with repository source removed from `PYTHONPATH`.
+- [x] Build `0.9.0b6` directly from a committed `git archive HEAD` without adding a synthetic `.git` directory, then install and inspect the resulting checksummed artifact in isolated roots.
 - [ ] Pass final normal/minimal install, repair, upgrade, rollback, uninstall, purge, migration, TUI, remote update, reconciliation, and protocol acceptance.
 - [x] Confirm all Markdown links, command examples, and public paths resolve.
 - [x] Confirm no release file or archive member contains private paths, addresses, credentials, topology, model weights, voice samples, caches, or development history.

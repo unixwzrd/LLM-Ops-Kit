@@ -186,7 +186,9 @@ This distinction prevents readiness and policy from being misreported as lifecyc
 
 | Evidence | Result |
 |---|---|
-| Candidate source regression | `0.9.0b6` passes 129 source tests and the complete precheck in the application-owned Python environment; clean-artifact rerun remains required |
+| Candidate source regression | `0.9.0b6` passes 129 source tests and the complete precheck in the application-owned Python environment |
+| Candidate clean distribution | `git archive HEAD` source built without a `.git` directory; checksum verification, managed Python bootstrap, wheelhouse install, initialization, doctor, topology, and TUI loading passed in isolated roots |
+| Candidate installed-wheel tests | Six Textual tests and 42 control-plane tests passed with repository source removed from `PYTHONPATH` |
 | Clean distribution | Runtime-only archive built from clean commit `6989f97` |
 | Release identity | Version `0.9.0b5`; archive SHA-256 `8169e9c6f953a3036c1c5e30aa2868ac4e9ab704172c5074c184d71140076b8f` |
 | macOS packaging baseline | Exact-artifact normal and minimal installation previously passed on Apple Silicon and Intel isolated users |
@@ -197,7 +199,7 @@ This distinction prevents readiness and policy from being misreported as lifecyc
 | Protocol baseline | Chat, 1,024-dimensional embeddings, WAV TTS, gateway, dashboard, optimization proxy, and tunnel checks passed |
 | Reconciliation | Apply, idempotent no-op, conflict refusal, backup restoration, and clean manifest verification passed |
 | Failure injection | Partial-start cleanup, second-host update failure rollback, tampered artifact rejection, unreachable host handling, and invalid configuration refusal passed |
-| Candidate artifact and live acceptance | Pending for `0.9.0b6`; baseline results are not promoted to candidate evidence |
+| Candidate live acceptance | Pending for `0.9.0b6`; baseline live and protocol results are not promoted to candidate evidence |
 
 ## Why The Evidence Is Sufficient
 
@@ -212,7 +214,7 @@ No single layer is treated as conclusive. The evidence chain is configuration id
 - `authority-only` does not prove that the component is running; it states that the current peer is not an authorized observer. The authority must inspect that component.
 - The current beta does not download models, install arbitrary engines, edit raw secrets, or autonomously remediate failures.
 - The Textual TUI is an on-demand client, not a daemon. A future WebUI must use the same control interfaces rather than create a second executor.
-- The `0.9.0b6` source candidate has not been committed, pushed, tagged, deployed, or published. Clean-artifact acceptance, explicit maintainer approval, and green macOS CI remain release gates.
+- The `0.9.0b6` candidate is committed locally and passes clean-artifact acceptance. It has not been pushed, tagged, deployed, or published. Two-host live acceptance, explicit maintainer approval, and green macOS CI remain release gates.
 
 ## Reproduction Outline
 

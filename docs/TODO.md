@@ -23,13 +23,13 @@ Back: [Documentation index](./INDEX.md)
 
 ## Beta Release Gates
 
-- [x] Pass the dependency-complete source suite and precheck in the packaged UV environment. Current pre-artifact evidence: 129 tests and precheck passed on 2026-07-21; the final clean artifact must rerun the same gates.
+- [x] Pass the dependency-complete source suite and precheck in the packaged UV environment. The final committed source passed 129 tests and precheck on 2026-07-21.
 - [x] Pass normal clean installation from a verified archive on isolated Apple Silicon and Intel macOS users.
 - [ ] Repeat normal installation from the final committed release artifact on both macOS users after documentation and acceptance fixes stop changing the package.
 - [x] Pass `--minimal` installation on isolated Apple Silicon and Intel macOS users and confirm the CLI works while `llmops tui` reports the omitted optional dependency cleanly.
 - [x] Pass guided interactive model-profile reuse and deterministic non-interactive import against each test user's existing model profiles.
 - [ ] Pass final-artifact repair, upgrade, rollback, normal uninstall, and purge on both macOS users.
-- [ ] Pass final-artifact Textual interaction tests for status, arrow and mouse selection, selection persistence, automatic-refresh pause, help, settings, topology, lifecycle impact confirmation/cancellation, configuration validation, update check, and update cancellation. Source-level headless coverage passes.
+- [x] Pass final-artifact Textual interaction tests for status, arrow and mouse selection, selection persistence, automatic-refresh pause, help, settings, topology, lifecycle impact confirmation/cancellation, configuration validation, update check, and update cancellation. Six TUI and 42 control-plane tests passed against the installed `0.9.0b6` wheel with repository source removed from `PYTHONPATH`.
 - [ ] Pass coordinated two-host update tests for unreachable preflight, interrupted transfer, old-peer bootstrap, apply failure, automatic rollback, and mixed-version refusal.
 - [x] Pass live configuration reconciliation plan/apply/idempotence and independently edited target conflict refusal.
 - [x] Confirm identical topology/catalog hashes and global status from both trusted live hosts.
