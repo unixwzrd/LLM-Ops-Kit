@@ -26,8 +26,8 @@ Back: [Documentation index](./INDEX.md)
 
 ## Beta Release Gates
 
-- [ ] Replay the current Hermes request through the installed media-history template and confirm one final historical image-bearing tool response, no earlier payloads, and no duplicate assistant base64 copies.
-- [x] Pass the dependency-complete source suite and precheck in the packaged UV environment. The final committed source passed 131 tests and precheck on 2026-07-21.
+- [x] Replay the current Hermes request through the installed media-history template and confirm one final historical image-bearing tool response, no earlier payloads, and no duplicate assistant base64 copies. The installed `0.9.0b11` replay retained one image result and one PNG marker, with zero assistant decode/copy calls.
+- [x] Pass the dependency-complete source suite and precheck in the packaged UV environment. Commit `72e9a7f` passed 142 tests and precheck on 2026-07-21.
 - [x] Pass normal clean installation from a verified archive on isolated Apple Silicon and Intel macOS users.
 - [ ] Repeat normal installation from the final committed release artifact on both macOS users after documentation and acceptance fixes stop changing the package.
 - [x] Pass `--minimal` installation on isolated Apple Silicon and Intel macOS users and confirm the CLI works while `llmops tui` reports the omitted optional dependency cleanly.
@@ -37,7 +37,7 @@ Back: [Documentation index](./INDEX.md)
 - [ ] Pass coordinated two-host update tests for unreachable preflight, interrupted transfer, old-peer bootstrap, apply failure, automatic rollback, and mixed-version refusal.
 - [x] Pass live configuration reconciliation plan/apply/idempotence and independently edited target conflict refusal.
 - [x] Confirm identical topology/catalog hashes and global status from both trusted live hosts.
-- [ ] Upgrade both live hosts from the preserved operator-v1 runtime to `0.9.0b11`, reconcile template/profile changes, validate services, roll back once, and return to the candidate.
+- [ ] Upgrade both live hosts from the preserved operator-v1 runtime to `0.9.0b11`, reconcile template/profile changes, validate services, roll back once, and return to the candidate. The coordinated update, reconciliation, individual model/proxy/bridge restarts, runtime-provenance checks, and global status validation passed on 2026-07-21; the live rollback-and-return exercise remains open.
 - [ ] Re-run model, embedding, TTS, model-proxy, tts-bridge, gateway, dashboard, tunnel, dependency, cascade, individual restart, and cold-start acceptance against the final artifact. The `0.9.0b4` baseline passed; the documentation-and-test revision still requires final-artifact repetition.
 - [ ] Produce a clean local release commit and build exclusively from `git archive HEAD`; require clean status, documentation links, secret scan, private-path scan, archive audit, and ignored-file audit.
 - [x] Regenerate the two missing standardized operational reports from 48 hourly archived source records. The reports preserve transient migration and cold-cycle exceptions rather than describing the cycles as uninterrupted steady state.

@@ -1,10 +1,10 @@
 # LLM-Ops-Kit Engineering Evidence
 
 - **Evidence updated:** 2026-07-21
-- **Accepted runtime baseline:** `0.9.0b5`
+- **Accepted live candidate:** `0.9.0b11`
 - **Current source candidate:** `0.9.0b11`
-- **Baseline runtime artifact source commit:** `6989f97`
-- **Baseline release archive SHA-256:** `8169e9c6f953a3036c1c5e30aa2868ac4e9ab704172c5074c184d71140076b8f`
+- **Candidate runtime artifact source commit:** `72e9a7f`
+- **Candidate release archive SHA-256:** `2e86f4db48800f7a077ecfc0a33680e5c83a431156067f76f05293ed6cacd3e6`
 
 ## Purpose
 
@@ -20,7 +20,7 @@ The full two-host and protocol acceptance baseline was collected against `0.9.0b
 
 Accepted runtime baseline `0.9.0b5` added a shared catalog-aware status collector and was installed on both live macOS hosts through coordinated update. Its shared catalog and host-specific configuration hashes remained unchanged, and all observable services remained running.
 
-Source candidate `0.9.0b11` separates lifecycle, health, condition, and observability; separates toolkit, component, desired-runtime, and observed-runtime identities; reports the configured execution identity; centralizes dependent-impact enforcement across CLI and TUI; and adds the high-contrast, keyboard-accessible, configurable TUI and bounded topology projection. It also adds host-qualified log inspection, effective configuration inspection, configurable lifecycle timeouts, persistent detached operations, authority-backed reconciliation, structurally pruned historical media decode/save calls, and model start-runtime provenance.
+Candidate `0.9.0b11` separates lifecycle, health, condition, and observability; separates toolkit, component, desired-runtime, and observed-runtime identities; reports the configured execution identity; centralizes dependent-impact enforcement across CLI and TUI; and adds the high-contrast, keyboard-accessible, configurable TUI and bounded topology projection. It also adds host-qualified log inspection, effective configuration inspection, configurable lifecycle timeouts, persistent detached operations, authority-backed reconciliation, structurally pruned historical media decode/save calls, and model start-runtime provenance. The exact candidate archive was installed on both live hosts, its model, proxy, and bridge components were restarted, and both trusted hosts returned the same global status view.
 
 ## Topology And Trust Boundary
 
@@ -188,8 +188,8 @@ This distinction prevents readiness and policy from being misreported as lifecyc
 
 | Evidence | Result |
 |---|---|
-| Candidate source regression | `0.9.0b11` source regression and precheck are rerun after each release fix; the final count and commit are recorded only after the local release commit |
-| Candidate clean distribution | Pending for `0.9.0b11`; the archive must be produced from the final local commit rather than the dirty working tree |
+| Candidate source regression | Commit `72e9a7f` passed 142 tests, shell syntax, ShellCheck, Python compilation, adapter checks, archive audits, and maintainer precheck |
+| Candidate clean distribution | Runtime-only `0.9.0b11` archive built from `git archive HEAD`; isolated minimal installation, version, adapter doctor, uninstall, and purge passed |
 | Candidate installed-wheel tests | Six Textual tests and 42 control-plane tests passed with repository source removed from `PYTHONPATH` |
 | Clean distribution | Runtime-only archive built from clean commit `6989f97` |
 | Release identity | Version `0.9.0b5`; archive SHA-256 `8169e9c6f953a3036c1c5e30aa2868ac4e9ab704172c5074c184d71140076b8f` |
@@ -201,7 +201,8 @@ This distinction prevents readiness and policy from being misreported as lifecyc
 | Protocol baseline | Chat, 1,024-dimensional embeddings, WAV TTS, gateway, dashboard, optimization proxy, and tunnel checks passed |
 | Reconciliation | Apply, idempotent no-op, conflict refusal, backup restoration, and clean manifest verification passed |
 | Failure injection | Partial-start cleanup, second-host update failure rollback, tampered artifact rejection, unreachable host handling, and invalid configuration refusal passed |
-| Candidate live acceptance | Pending for `0.9.0b11`; prior live and protocol results are not promoted to candidate evidence |
+| Candidate live acceptance | Both hosts installed `0.9.0b11` with `0.9.0b10` retained as `previous`; chat, embedding, TTS, model-proxy, and tts-bridge restarted healthy and reported matching desired/observed b11 runtime. Both trusted hosts reported eight healthy observable components and one consistently unobserved authority-owned Desktop tunnel. The final rollback/return and complete cold-cycle remain open. |
+| Candidate media replay | Authoritative raw request replay through the installed media-history template produced 260,840 rendered bytes, one image result, one PNG marker, zero assistant decode/copy calls, and one preserved truncation marker |
 
 ## Why The Evidence Is Sufficient
 
