@@ -120,6 +120,8 @@ llmops component logs model-proxy --channel rendered-prompt
 
 Log paths are resolved and read on the component's configured host. A displayed remote path is never implied to exist on the controlling host.
 
+Mutable desired state defaults to `~/.config/llm-ops`. Deployed commands read immutable role-filtered revisions through `current-config`, but `config display`, `component configure`, and `config reconcile` always read and write the authority tree. Set `LLMOPS_AUTHORITY_CONFIG_HOME` when the authority uses a non-default location; do not point it at `current-config`.
+
 ## Reusing Model Profiles
 
 Interactive `llmops init` discovers model profiles under an existing default configuration root when the destination differs. Use `--model-defaults-from <path>` to select another source explicitly.

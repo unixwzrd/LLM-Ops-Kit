@@ -293,6 +293,23 @@ class TopologyTests(ControlFixture):
         self.assertEqual(payload["resolved"]["MODEL"], "/models/chat.gguf")
         self.assertTrue(payload["profile_path"].endswith("models/chat.json"))
 
+    def test_reconcile_uses_mutable_authority_not_active_snapshot(self) -> None:
+        authority = mock.Mock()
+        authority.hosts = {"model-host": self.topology.hosts["model-host"]}
+        args = type(
+            "Args",
+            (),
+            {"host": ["model-host"], "all_hosts": False, "apply": False, "yes": False, "json": True},
+        )()
+        output = io.StringIO()
+        with (
+            mock.patch("llmops_kit.llmops_cli.desired_topology", return_value=authority),
+            mock.patch("llmops_kit.llmops_cli.reconcile_plan", return_value=([], {})) as plan,
+            redirect_stdout(output),
+        ):
+            self.assertEqual(llmops_cli.cmd_config_reconcile(args), 0)
+        plan.assert_called_once_with(authority, ["model-host"])
+
     def test_model_proxy_log_channels_resolve_on_component_host(self) -> None:
         component = self.topology.resolve_component("proxy")
         command = build_component_command(

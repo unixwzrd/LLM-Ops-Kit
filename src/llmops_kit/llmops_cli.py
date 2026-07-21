@@ -270,7 +270,7 @@ def cmd_config_hash(args: argparse.Namespace) -> int:
 def cmd_config_display(args: argparse.Namespace) -> int:
     """Plan or transactionally update shared operator display metadata."""
 
-    desired = desired_topology(getattr(args, "config_home", None))
+    desired = desired_topology()
     current = desired.config.data.get("display", {})
     organization = args.organization if args.organization is not None else current.get("organization", "")
     site = args.site if args.site is not None else current.get("site", "")
@@ -324,12 +324,13 @@ def cmd_topology_show(args: argparse.Namespace) -> int:
 def cmd_config_reconcile(args: argparse.Namespace) -> int:
     """Plan or apply authority-generated role-filtered snapshots."""
 
+    authority = desired_topology()
     names = list(dict.fromkeys(args.host or []))
     if args.all_hosts:
-        names = sorted(CURRENT_TOPOLOGY.hosts)
+        names = sorted(authority.hosts)
     if not names:
         raise ReconcileError("select at least one --host or use --all-hosts")
-    plan, snapshots = reconcile_plan(CURRENT_TOPOLOGY, names)
+    plan, snapshots = reconcile_plan(authority, names)
     try:
         if any(item["action"] in {"conflict", "unreachable", "error"} for item in plan):
             emit({"ok": False, "plan": plan}, json_output=args.json)
@@ -345,7 +346,7 @@ def cmd_config_reconcile(args: argparse.Namespace) -> int:
                 emit({"ok": True, "cancelled": True, "plan": plan}, json_output=args.json)
                 return 0
         results = [
-            apply_snapshot(CURRENT_TOPOLOGY.hosts[item["host"]], snapshots[item["host"]], item["desired_hash"])
+            apply_snapshot(authority.hosts[item["host"]], snapshots[item["host"]], item["desired_hash"])
             for item in plan
             if item["action"] == "apply"
         ]
@@ -702,7 +703,7 @@ def configure_component(
 
 
 def cmd_component_configure(args: argparse.Namespace) -> int:
-    topology = desired_topology(getattr(args, "config_home", None))
+    topology = desired_topology()
     component = topology.resolve_component(args.component)
     changes = _component_changes(args)
     payload = configure_component(component, changes, apply=False, topology=topology)

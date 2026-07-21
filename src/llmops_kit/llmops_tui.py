@@ -532,7 +532,7 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
             super().__init__()
             self.topology = llmops_cli.build_topology(config_home=config_home, inventory=inventory)
             llmops_cli.CURRENT_TOPOLOGY = self.topology
-            self.desired_topology = llmops_cli.desired_topology(config_home)
+            self.desired_topology = llmops_cli.desired_topology()
             self.rows: list[Any] = []
             self.view = "components"
             self.status_by_id: dict[str, dict[str, Any]] = {}
@@ -874,7 +874,7 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                 topology=self.desired_topology,
             )
             self.query_one("#detail", Static).update(json.dumps(result, indent=2, sort_keys=True))
-            self.desired_topology = llmops_cli.desired_topology(config_home)
+            self.desired_topology = llmops_cli.desired_topology()
             await self.inspect()
 
         def action_edit(self) -> None:
@@ -928,7 +928,7 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
             if not approved:
                 return
             backup = update_display(self.desired_topology.paths.config_file, **changes)
-            self.desired_topology = llmops_cli.desired_topology(config_home)
+            self.desired_topology = llmops_cli.desired_topology()
             self._apply_branding()
             self.query_one("#detail", Static).update(
                 f"Shared display labels saved; backup={backup if backup.exists() else 'none'}"
