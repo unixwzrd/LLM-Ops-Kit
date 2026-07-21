@@ -11,11 +11,16 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
     "additionalProperties": true,
-    "required": ["schema_version", "name", "actions"],
+    "required": ["schema_version", "name"],
+    "oneOf": [
+      {"required": ["actions"]},
+      {"properties": {"lifecycle": {"const": "external"}}, "required": ["lifecycle"]}
+    ],
     "properties": {
       "schema_version": {"type": "integer", "const": 2, "default": 2},
       "template_id": {"type": "string", "const": "generic-agent", "default": "generic-agent"},
       "name": {"type": "string", "minLength": 1},
+      "lifecycle": {"type": "string", "const": "external"},
       "actions": {"type": "object", "required": ["start", "stop", "status"], "properties": {
         "start": {"type": "array", "minItems": 1, "items": {"type": "string"}, "x-llmops-ui": {"group": "Lifecycle", "order": 10, "widget": "argv"}},
         "stop": {"type": "array", "minItems": 1, "items": {"type": "string"}, "x-llmops-ui": {"group": "Lifecycle", "order": 20, "widget": "argv"}},

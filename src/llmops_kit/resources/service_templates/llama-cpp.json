@@ -57,7 +57,7 @@
         },
         "allOf": [
           {"if": {"properties": {"spec_type": {"const": "ngram"}}, "required": ["spec_type"]}, "then": {"not": {"anyOf": [{"required": ["draft_model"]}, {"required": ["mtp_model"]}]}}},
-          {"if": {"properties": {"spec_type": {"const": "mtp"}}, "required": ["spec_type"]}, "then": {"required": ["mtp_model"], "not": {"anyOf": [{"required": ["draft_model"]}, {"required": ["spec_ngram_size_n"]}, {"required": ["spec_ngram_size_m"]}]}}},
+          {"if": {"properties": {"spec_type": {"const": "mtp"}}, "required": ["spec_type"]}, "then": {"not": {"anyOf": [{"required": ["draft_model"]}, {"required": ["spec_ngram_size_n"]}, {"required": ["spec_ngram_size_m"]}]}}},
           {"if": {"properties": {"spec_type": {"const": "draft-model"}}, "required": ["spec_type"]}, "then": {"required": ["draft_model"], "not": {"anyOf": [{"required": ["mtp_model"]}, {"required": ["spec_ngram_size_n"]}, {"required": ["spec_ngram_size_m"]}]}}}
         ]
       },

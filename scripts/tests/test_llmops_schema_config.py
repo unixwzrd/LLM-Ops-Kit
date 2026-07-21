@@ -99,6 +99,86 @@ class SchemaConfigurationTests(ControlFixture):
         self.assertTrue(invalid["requires_review"])
         self.assertIn("authority host is not in inventory: missing", invalid["findings"])
 
+    def test_schema_migration_normalizes_historical_live_profile_shapes(self) -> None:
+        self.prepare_v1()
+        chat_path = self.paths.models_dir / "chat.json"
+        chat = {
+            "schema_version": 1,
+            "name": "chat",
+            "type": "llm",
+            "env": {
+                "MODEL": "/models/chat.gguf",
+                "HOST": "0.0.0.0",
+                "PORT": "11434",
+                "CTX_SIZE": "65536",
+                "EXTRA_FLAGS": "--spec-type draft-mtp --cache-prompt",
+            },
+        }
+        chat_path.write_text(json.dumps(chat, indent=2) + "\n", encoding="utf-8")
+
+        tts_path = self.paths.models_dir / "QwenTTS.json"
+        tts = {
+            "schema_version": 1,
+            "name": "QwenTTS",
+            "type": "tts",
+            "environment": {
+                "MODEL": "/models/qwen-tts",
+                "PORT": "11439",
+                "TTS_SERVER_MODULE": "mlx_audio.server",
+            },
+        }
+        tts_path.write_text(json.dumps(tts, indent=2) + "\n", encoding="utf-8")
+
+        proxy_path = self.paths.services_dir / "proxy.json"
+        proxy = json.loads(proxy_path.read_text(encoding="utf-8"))
+        proxy["runtime"]["listen_port"] = "11434"
+        proxy["runtime"]["upstream_port"] = "11433"
+        proxy_path.write_text(json.dumps(proxy, indent=2) + "\n", encoding="utf-8")
+
+        agent_path = self.paths.agents_dir / "external-agent.json"
+        agent_path.write_text(
+            json.dumps(
+                {"schema_version": 1, "name": "external-agent", "env": {"AGENT_HOME": "/agent"}},
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        stack_path = self.paths.stacks_dir / "sample.json"
+        stack = json.loads(stack_path.read_text(encoding="utf-8"))
+        stack["components"].append(
+            {"id": "tts", "host": "model-host", "driver": "modelctl", "profile": "QwenTTS", "enabled": False}
+        )
+        stack_path.write_text(json.dumps(stack, indent=2) + "\n", encoding="utf-8")
+
+        plan = migrate_schema_v2(self.paths, apply=False, authority_host="model-host")
+        self.assertFalse(plan["requires_review"], plan["findings"])
+        migrate_schema_v2(
+            self.paths,
+            apply=True,
+            expected_hash=plan["authority_hash"],
+            authority_host="model-host",
+        )
+
+        migrated_chat = json.loads(chat_path.read_text(encoding="utf-8"))
+        self.assertEqual(migrated_chat["env"], chat["env"])
+        self.assertEqual(migrated_chat["environment"], chat["env"])
+        self.assertEqual(migrated_chat["model_path"], "/models/chat.gguf")
+        self.assertEqual(migrated_chat["runtime"]["port"], 11434)
+        self.assertEqual(migrated_chat["server"]["spec_type"], "mtp")
+
+        migrated_tts = json.loads(tts_path.read_text(encoding="utf-8"))
+        self.assertEqual(migrated_tts["template_id"], "modelctl")
+        migrated_proxy = json.loads(proxy_path.read_text(encoding="utf-8"))
+        self.assertEqual(migrated_proxy["runtime"]["listen_port"], 11434)
+        migrated_agent = json.loads(agent_path.read_text(encoding="utf-8"))
+        self.assertEqual(migrated_agent["lifecycle"], "external")
+        self.assertEqual(migrated_agent["environment"], {"AGENT_HOME": "/agent"})
+        migrated_stack = json.loads(stack_path.read_text(encoding="utf-8"))
+        tts_component = next(item for item in migrated_stack["components"] if item["id"] == "tts")
+        self.assertEqual(tts_component["template_id"], "modelctl")
+
     def test_atomic_speculation_replacement_enforces_llama_constraints(self) -> None:
         self.migrate()
         configure_component_schema(

@@ -42,3 +42,7 @@ Providers declare named endpoints. Consumers declare required endpoint names and
 ```
 
 Bind addresses describe the provider process. Advertised addresses are resolved for the consuming target during reconciliation; reusable source profiles are not rewritten.
+
+## Built-In Model Templates
+
+Use `llama-cpp` for llama.cpp server profiles with structured inference and speculation fields. Use `modelctl` for non-llama engines that still use the modelctl lifecycle backend, such as an externally packaged TTS server. The generic template keeps its reviewed environment map and lifecycle metadata without claiming llama.cpp-specific parameters.

@@ -5,7 +5,8 @@
 ### Beta release readiness
 
 - Added canonical configuration schema version 2 with versioned JSON Schema 2020-12 service templates, constrained UI metadata, one-time v1 migration, and no runtime v1 compatibility reads.
-- Added built-in templates for llama.cpp, model-proxy, tts-bridge, standalone processes, user and external launchd, SSH tunnels, generic agents, external HTTP services, RTK, and experimental user systemd.
+- Added built-in templates for llama.cpp, generic non-llama modelctl workloads, model-proxy, tts-bridge, standalone processes, user and external launchd, SSH tunnels, generic agents, external HTTP services, RTK, and experimental user systemd.
+- Made schema-v2 migration normalize real proof-of-concept `env` profiles, string service ports, native-MTP llama settings, non-llama TTS modelctl profiles, external agents, and launchd-owned tunnels without deleting source fields.
 - Added schema-aware template, profile, and component inspection, typed multi-field `--set` and `--unset`, transactional profile creation/editing/cloning, component add/clone/retire/restore, stale-authority-hash refusal, and endpoint-derived dependencies.
 - Added a Textual Service Catalog, generated profile forms, full component Details, stack membership/dependency inspection, dynamic host/profile/endpoint choices, and llama.cpp speculation conflict handling.
 - Added one designated desired-state authority to the observer catalog. Schema mutations invoked on another trusted host are forwarded to the authority, and `llmops tui` launched on a trusted peer runs on the authority through SSH.

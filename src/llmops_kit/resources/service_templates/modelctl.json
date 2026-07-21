@@ -1,0 +1,29 @@
+{
+  "template_version": 1,
+  "id": "modelctl",
+  "version": "1.0.0",
+  "adapter": "llama-cpp",
+  "profile_kind": "model",
+  "component_kind": "model",
+  "platforms": ["darwin", "linux"],
+  "lifecycle": "standalone",
+  "profile_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": true,
+    "required": ["schema_version", "name", "type", "environment"],
+    "properties": {
+      "schema_version": {"type": "integer", "const": 2, "default": 2},
+      "template_id": {"type": "string", "const": "modelctl", "default": "modelctl"},
+      "name": {"type": "string", "minLength": 1},
+      "type": {"type": "string", "minLength": 1},
+      "lifecycle": {"type": "string", "enum": ["standalone", "external"], "default": "standalone"},
+      "environment": {"type": "object", "additionalProperties": {"type": ["string", "number", "boolean"]}, "x-llmops-ui": {"group": "Environment", "order": 10, "advanced": true}}
+    }
+  },
+  "defaults": {"schema_version": 2, "template_id": "modelctl", "name": "model", "type": "custom", "lifecycle": "standalone", "environment": {}},
+  "bindings": {"resolver": "modelctl"},
+  "endpoints": {"provides": {}},
+  "logs": {"service": {"path": "state:logs/modelctl-{profile}.log"}},
+  "actions": {}
+}

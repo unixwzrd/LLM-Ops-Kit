@@ -6,6 +6,7 @@ import copy
 import hashlib
 import json
 import os
+import shlex
 import shutil
 import time
 from dataclasses import dataclass
@@ -108,6 +109,82 @@ def authority_hash(paths: LlmOpsPaths) -> str:
     return _digest_tree(paths.config_home)
 
 
+def _legacy_int(value: Any) -> Any:
+    """Convert a legacy decimal string while preserving non-decimal values."""
+
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return value
+    return value
+
+
+def _model_template_id(document: Mapping[str, Any]) -> str:
+    """Select llama.cpp only for profiles that actually describe llama.cpp."""
+
+    environment = document.get("environment", {})
+    if document.get("type") == "tts" or (
+        isinstance(environment, dict) and environment.get("TTS_SERVER_MODULE")
+    ):
+        return "modelctl"
+    return "llama-cpp"
+
+
+def _normalize_v1_profile(document: dict[str, Any], template_id: str) -> None:
+    """Add canonical v2 fields without deleting any version-one values."""
+
+    environment = document.get("environment")
+    if not isinstance(environment, dict) and isinstance(document.get("env"), dict):
+        environment = copy.deepcopy(document["env"])
+        document["environment"] = environment
+    if not isinstance(environment, dict):
+        environment = {}
+    if template_id == "llama-cpp" and isinstance(environment, dict):
+        if environment.get("MODEL"):
+            document.setdefault("model_path", environment["MODEL"])
+        runtime = document.setdefault("runtime", {})
+        runtime.setdefault("host", environment.get("HOST", "127.0.0.1"))
+        runtime.setdefault("port", _legacy_int(environment.get("PORT", 11434)))
+        if "THREADS" in environment:
+            runtime.setdefault("threads", _legacy_int(environment["THREADS"]))
+        llama = document.setdefault("llama", {})
+        for legacy, field in (
+            ("CTX_SIZE", "ctx_size"),
+            ("GPU_LAYERS", "gpu_layers"),
+            ("BATCH_SIZE", "batch_size"),
+            ("UBATCH_SIZE", "ubatch_size"),
+        ):
+            if legacy in environment:
+                llama.setdefault(field, _legacy_int(environment[legacy]))
+        prompt = document.setdefault("template", {})
+        if environment.get("CHAT_TEMPLATE"):
+            prompt.setdefault("path", environment["CHAT_TEMPLATE"])
+            prompt.setdefault("enabled", environment.get("USE_CUSTOM_TEMPLATE", "0") == "1")
+        server = document.setdefault("server", {})
+        if environment.get("EXTRA_FLAGS"):
+            flags = shlex.split(str(environment["EXTRA_FLAGS"]))
+            server.setdefault("extra_flags", flags)
+            if "--spec-type" in flags:
+                index = flags.index("--spec-type")
+                if index + 1 < len(flags):
+                    spec_type = flags[index + 1]
+                    server.setdefault("spec_type", "mtp" if spec_type == "draft-mtp" else spec_type)
+    elif template_id == "modelctl":
+        document.setdefault("lifecycle", "standalone")
+    elif template_id in {"model-proxy", "tts-bridge"}:
+        runtime = document.setdefault("runtime", {})
+        for key in ("listen_port", "upstream_port", "port"):
+            if key in runtime:
+                runtime[key] = _legacy_int(runtime[key])
+        if template_id == "tts-bridge":
+            runtime.setdefault("host", "127.0.0.1")
+    elif template_id == "generic-agent" and "actions" not in document:
+        if isinstance(document.get("env"), dict):
+            document.setdefault("environment", copy.deepcopy(document["env"]))
+        document.setdefault("lifecycle", "external")
+
+
 def migrate_schema_v2(
     paths: LlmOpsPaths,
     *,
@@ -135,8 +212,13 @@ def migrate_schema_v2(
         for component in document.get("components", []):
             if not isinstance(component, dict):
                 continue
-            template_id = component.get("template_id") or infer_template_id(
-                str(component.get("driver", "")), str(component.get("profile", ""))
+            profile_name = str(component.get("profile", ""))
+            driver = str(component.get("driver", ""))
+            model_document = documents.get(paths.models_dir / f"{profile_name}.json", {})
+            template_id = component.get("template_id") or (
+                _model_template_id(model_document)
+                if driver == "modelctl" and model_document
+                else infer_template_id(driver, profile_name)
             )
             component["template_id"] = template_id
             template = registry.get(str(template_id))
@@ -164,7 +246,7 @@ def migrate_schema_v2(
         if choices:
             template_id = next(iter(choices))
         elif path.parent == paths.models_dir:
-            template_id = "llama-cpp"
+            template_id = _model_template_id(document)
         elif path.parent == paths.agents_dir:
             template_id = "generic-agent"
         elif path.stem in {"model-proxy", "tts-bridge", "rtk"}:
@@ -175,6 +257,7 @@ def migrate_schema_v2(
         document["schema_version"] = 2
         document["template_id"] = template_id
         document.setdefault("name", path.stem)
+        _normalize_v1_profile(document, template_id)
         template = registry.get(template_id)
         if template:
             findings.extend(f"{path}: {error}" for error in validate_profile(template, document))
