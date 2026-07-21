@@ -113,6 +113,7 @@ def migrate_schema_v2(
     *,
     apply: bool,
     expected_hash: Optional[str] = None,
+    authority_host: Optional[str] = None,
 ) -> dict[str, Any]:
     """Plan or apply the one-time canonical v1-to-v2 configuration migration."""
 
@@ -182,6 +183,28 @@ def migrate_schema_v2(
         if path in documents:
             documents[path]["schema_version"] = 2
 
+    if authority_host:
+        inventory = documents.get(paths.inventory_file, {})
+        matching_hosts = [
+            host
+            for host in inventory.get("hosts", [])
+            if isinstance(host, dict) and host.get("name") == authority_host
+        ]
+        if not matching_hosts:
+            findings.append(f"authority host is not in inventory: {authority_host}")
+        elif not matching_hosts[0].get("trusted_control", False):
+            findings.append(f"authority host is not a trusted control host: {authority_host}")
+        else:
+            config = documents.get(paths.config_file)
+            if config is None:
+                findings.append("authority host cannot be set because config.json is missing")
+            else:
+                control = config.setdefault("control", {})
+                if not isinstance(control, dict):
+                    findings.append("config.json control must be an object")
+                else:
+                    control["authority_host"] = authority_host
+
     changed = {
         path: document
         for path, document in documents.items()
@@ -194,6 +217,7 @@ def migrate_schema_v2(
         "files": [str(path) for path in sorted(changed)],
         "findings": findings,
         "requires_review": bool(findings),
+        "authority_host": authority_host or "",
         "authority_hash": authority_hash(paths),
     }
     if not apply:

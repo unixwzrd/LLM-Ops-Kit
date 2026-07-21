@@ -887,7 +887,11 @@ def cmd_migrate_config(args: argparse.Namespace) -> int:
 
 def cmd_migrate_schema(args: argparse.Namespace) -> int:
     paths = authority_paths(args.config_home)
-    plan = migrate_schema_v2(paths, apply=False)
+    plan = migrate_schema_v2(
+        paths,
+        apply=False,
+        authority_host=args.authority_host,
+    )
     if not _confirm_plan(args, plan, "Migrate this canonical configuration to schema version 2?"):
         emit(plan, json_output=args.json)
         return 0
@@ -896,6 +900,7 @@ def cmd_migrate_schema(args: argparse.Namespace) -> int:
             paths,
             apply=True,
             expected_hash=args.expected_hash,
+            authority_host=args.authority_host,
         ),
         json_output=args.json,
     )
@@ -1988,6 +1993,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     migrate_schema = sub.add_parser("migrate-schema")
     migrate_schema.add_argument("--expected-hash")
+    migrate_schema.add_argument(
+        "--authority-host",
+        help="set the trusted desired-state authority while migrating",
+    )
     migrate_schema_action = migrate_schema.add_mutually_exclusive_group()
     migrate_schema_action.add_argument("--plan", action="store_true")
     migrate_schema_action.add_argument("--apply", action="store_true")

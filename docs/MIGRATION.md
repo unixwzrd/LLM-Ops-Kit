@@ -60,8 +60,10 @@ Migration does not modify the legacy source. To abandon migrated configuration, 
 Existing operator-v1 JSON uses a separate one-time migration:
 
 ```bash
-llmops migrate-schema --plan
-llmops migrate-schema --apply --yes
+llmops migrate-schema --authority-host model-host --plan
+llmops migrate-schema --authority-host model-host --apply --yes
 ```
+
+`--authority-host` must name a `trusted_control` inventory host. Setting it during migration avoids relying on inventory order and makes the desired-state authority explicit before reconciliation.
 
 The plan assigns reviewed built-in template IDs from existing drivers, preserves profile values, adds explicit restart policy defaults, and reports ambiguous profiles for review. Application is refused while findings remain. After migration, normal runtime commands accept schema version 2 only; version 1 documents remain test fixtures rather than compatibility inputs.

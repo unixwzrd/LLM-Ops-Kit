@@ -72,6 +72,33 @@ class SchemaConfigurationTests(ControlFixture):
             if key != "schema_version":
                 self.assertEqual(after[key], value)
 
+    def test_schema_migration_sets_only_a_trusted_authority(self) -> None:
+        self.prepare_v1()
+        plan = migrate_schema_v2(
+            self.paths,
+            apply=False,
+            authority_host="model-host",
+        )
+        self.assertFalse(plan["requires_review"])
+        self.assertEqual(plan["authority_host"], "model-host")
+        migrate_schema_v2(
+            self.paths,
+            apply=True,
+            authority_host="model-host",
+            expected_hash=plan["authority_hash"],
+        )
+        config = json.loads(self.paths.config_file.read_text(encoding="utf-8"))
+        self.assertEqual(config["control"]["authority_host"], "model-host")
+
+        self.prepare_v1()
+        invalid = migrate_schema_v2(
+            self.paths,
+            apply=False,
+            authority_host="missing",
+        )
+        self.assertTrue(invalid["requires_review"])
+        self.assertIn("authority host is not in inventory: missing", invalid["findings"])
+
     def test_atomic_speculation_replacement_enforces_llama_constraints(self) -> None:
         self.migrate()
         configure_component_schema(
