@@ -118,6 +118,19 @@ class RemoteUpdateTests(unittest.TestCase):
             result = llmops_update._remote_verify("peer", HOST, "beta-2", 10)
         self.assertEqual(result, {"version": "beta-2", "catalog_hash": "abc123", "config_hash": "def456"})
 
+    def test_remote_apply_reselects_target_when_old_peer_has_it_as_previous(self) -> None:
+        completed = subprocess.CompletedProcess([], 0, "selected previous\n", "")
+        verification = {"version": "beta-2", "catalog_hash": "abc123", "config_hash": "def456"}
+        with (
+            mock.patch.object(llmops_update, "_run_remote", return_value=completed) as run_remote,
+            mock.patch.object(llmops_update, "_remote_verify", return_value=verification),
+        ):
+            result = llmops_update._remote_apply("peer", HOST, "$HOME/a.tar.xz", "$HOME/a.sha256", "beta-2", 10)
+        script = run_remote.call_args.args[1]
+        self.assertIn('test "$previous" = "$target"', script)
+        self.assertIn("update --rollback", script)
+        self.assertEqual(result["version"], "beta-2")
+
     def test_verification_failure_rolls_back_the_updated_host(self) -> None:
         completed = subprocess.CompletedProcess([], 0, "installed\n", "")
         rollback = {"host": "peer", "ok": True, "output": "", "error": ""}

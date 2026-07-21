@@ -331,7 +331,13 @@ def _remote_apply(
     state_home = _remote_path(host.get("state_home", "~/.local/state/llm-ops"))
     install_args = f"--prefix {install_root} --public-bin-dir {public_bin} --state-home {state_home}"
     script = (
-        f"if test -x {llmops}; then "
+        f"root={install_root}; target={shlex.quote(version)}; "
+        'current=$(basename "$(readlink "$root/current" 2>/dev/null || true)"); '
+        'previous=$(basename "$(readlink "$root/previous" 2>/dev/null || true)"); '
+        'if test "$current" = "$target"; then printf "already current: %s\\n" "$target"; '
+        f"elif test \"$previous\" = \"$target\" && test -x \"$root/releases/$target/app/bin/llmops\"; then "
+        f"{llmops} update --rollback {install_args}; "
+        f"elif test -x {llmops}; then "
         f"{llmops} update --apply --archive \"{archive}\" --checksum-file \"{checksum}\" {install_args}; "
         "else "
         f"stage=$(dirname \"{archive}\"); cd \"$stage\"; "

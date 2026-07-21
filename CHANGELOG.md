@@ -4,6 +4,7 @@
 
 ### Beta release readiness
 
+- Made a newer controller reselect a complete target retained as an older peer's `previous` release, allowing coordinated return after rollback without relying on the old peer's update implementation.
 - Prevented failed duplicate-release installation from deleting the pre-existing immutable release directory through its cleanup trap.
 - Made selected-host rollback honor `--host` and `--all-hosts`, skip peers already at the target release, and reselect a complete target already present as `previous` instead of reinstalling or deleting it during failure recovery.
 - Persisted the immutable runtime that launched each model process and made runtime provenance prefer that start marker over a newer selected wrapper.
