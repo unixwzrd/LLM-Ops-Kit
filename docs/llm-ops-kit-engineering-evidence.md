@@ -1,9 +1,9 @@
 # LLM-Ops-Kit Engineering Evidence
 
 - **Evidence updated:** 2026-07-21
-- **Accepted live candidate:** `0.9.0b17`
-- **Current source candidate:** `0.9.0b18`
-- **Current source artifact:** pending clean-archive acceptance
+- **Accepted live candidate:** `0.9.0b21`
+- **Current source candidate:** `0.9.0b21`
+- **Current source artifact:** checksummed dual-architecture clean release candidate
 
 ## Purpose
 
@@ -21,7 +21,7 @@ Accepted runtime baseline `0.9.0b5` added a shared catalog-aware status collecto
 
 Candidate `0.9.0b16` separates lifecycle, health, condition, and observability; separates toolkit, component, desired-runtime, and observed-runtime identities; reports the configured execution identity; centralizes dependent-impact enforcement across CLI and TUI; and adds the high-contrast, keyboard-accessible, configurable TUI and bounded topology projection. It also adds host-qualified log inspection, effective configuration inspection, configurable lifecycle timeouts, persistent detached operations, authority-backed reconciliation, structurally pruned historical media decode/save calls, model start-runtime provenance, a top-positioned clickable action bar, reactive topology filters with Reset, semantic topology colors, visible Settings, and a direct Quit action. The exact candidate archive was installed on both live hosts without restarting the intentionally stopped chat model. Live rollback acceptance exposed three updater defects that narrower tests missed; each received a focused regression before the successful coordinated b14 to b13 to b14 cycle.
 
-Source candidate `0.9.0b18` adds canonical schema version 2, reviewed service templates, typed transactional configuration, reusable profile and component management, endpoint-derived dependencies, generated Textual forms, one designated mutation authority, and RTK tool inspection. Its 159 source tests and maintainer precheck pass. Exact-artifact and two-host schema-migration acceptance remain pending and are not represented as completed live evidence.
+Candidate `0.9.0b21` adds canonical schema version 2, 12 reviewed service templates, typed transactional configuration, reusable profile and component management, endpoint-derived dependencies, generated Textual forms, one designated mutation authority, and RTK tool inspection. Its 163 source tests and maintainer precheck pass. Real v1 authority and role-filtered configuration copies migrated without findings and passed `doctor`; the backed-up live authority then migrated and reconciled idempotent v2 snapshots to both trusted hosts without starting the intentionally stopped chat model.
 
 ## Topology And Trust Boundary
 
@@ -191,11 +191,11 @@ This distinction prevents readiness and policy from being misreported as lifecyc
 
 | Evidence | Result |
 |---|---|
-| Current source regression | Source candidate `0.9.0b18` passes 159 tests, shell syntax, ShellCheck, Python compilation, template/schema validation, and maintainer precheck; clean-artifact rerun is pending |
+| Current source regression | Candidate `0.9.0b21` passes 163 tests, shell syntax, ShellCheck, Python compilation, template/schema validation, clean-distribution checks, generated TUI provisioning, and maintainer precheck |
 | Schema and template behavior | Tests cover one-time v1 migration, no field loss, typed set/unset, atomic mutually exclusive replacement, shared profiles, endpoint wiring, retirement/restore, stale-hash refusal, local-template safety, and generated TUI forms |
 | RTK review gate | Live read-only evidence reports RTK 0.43.0, telemetry disabled, 154/154 RTK verification tests, gain metrics, and a Hermes dry run that wrote nothing; hook enablement remains unapproved |
-| Candidate clean distribution | Runtime-only `0.9.0b16` archive built from `git archive HEAD` and installed on both live hosts; the preceding b14 artifact passed isolated minimal installation, version, adapter doctor, uninstall, and purge |
-| Candidate installed-wheel tests | Six Textual tests and 42 control-plane tests passed with repository source removed from `PYTHONPATH` |
+| Candidate clean distribution | Runtime-only schema-v2 archives were built from clean committed source, installed on isolated Apple Silicon and Intel roots, and inspected for JSON Schema, Textual, and all 12 packaged service templates |
+| Candidate installed-wheel tests | Eight Textual tests, including generated-form component creation, and the complete control-plane suite pass with repository source first; clean-distribution tests install the built wheel without checkout residue |
 | Clean distribution | Runtime-only archive built from clean commit `6989f97` |
 | Release identity | Version `0.9.0b5`; archive SHA-256 `8169e9c6f953a3036c1c5e30aa2868ac4e9ab704172c5074c184d71140076b8f` |
 | macOS packaging baseline | Exact-artifact normal and minimal installation previously passed on Apple Silicon and Intel isolated users |
@@ -222,7 +222,7 @@ No single layer is treated as conclusive. The evidence chain is configuration id
 - `authority-only` does not prove that the component is running; it states that the current peer is not an authorized observer. The authority must inspect that component.
 - The current beta does not download models, install arbitrary engines, edit raw secrets, or autonomously remediate failures. It can create configuration and lifecycle integration from reviewed templates.
 - The Textual TUI is an on-demand client, not a daemon. A future WebUI must use the same control interfaces rather than create a second executor.
-- The `0.9.0b18` source candidate remains local and unpublished. Publication is gated on clean-artifact and two-host migration acceptance, the remaining release checklist, explicit maintainer approval, and green macOS CI.
+- The `0.9.0b21` candidate remains local and unpublished. Publication is gated on the remaining final-artifact lifecycle/protocol checks, explicit maintainer approval, and green macOS CI.
 
 ## Reproduction Outline
 
@@ -230,7 +230,7 @@ An independent maintainer can reproduce the public evidence without the private 
 
 ```bash
 scripts/precheck
-python scripts/build-release.py --output-dir /tmp/llmops-release
+uv run --all-extras python scripts/build-release.py --output-dir /tmp/llmops-release
 shasum -a 256 /tmp/llmops-release/LLM-Ops-Kit-*.tar.xz
 llmops doctor --probe
 llmops status --json

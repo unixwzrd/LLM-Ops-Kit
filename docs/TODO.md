@@ -31,19 +31,19 @@ Back: [Documentation index](./INDEX.md)
 ## Beta Release Gates
 
 - [x] Replay the current Hermes request through the installed media-history template and confirm one final historical image-bearing tool response, no earlier payloads, and no duplicate assistant base64 copies. The installed `0.9.0b14` replay retained one image result and one PNG marker, with zero assistant decode/copy calls.
-- [x] Pass the dependency-complete source suite and precheck in the packaged UV environment. Source candidate `0.9.0b18` passes 159 tests and precheck on 2026-07-21; exact clean-artifact repetition remains a separate gate.
+- [x] Pass the dependency-complete source suite and precheck in the packaged UV environment. Source candidate `0.9.0b21` passes 163 tests and precheck on 2026-07-21, including clean-distribution and generated-form provisioning regressions.
 - [x] Pass normal clean installation from a verified archive on isolated Apple Silicon and Intel macOS users.
-- [ ] Repeat normal installation from the final committed release artifact on both macOS users after documentation and acceptance fixes stop changing the package.
+- [x] Repeat normal installation from committed release artifacts on both macOS users after schema and reconciliation fixes; Apple Silicon and Intel installs include the application-owned Python, Textual, JSON Schema, and all built-in templates.
 - [x] Pass `--minimal` installation on isolated Apple Silicon and Intel macOS users and confirm the CLI works while `llmops tui` reports the omitted optional dependency cleanly.
 - [x] Pass guided interactive model-profile reuse and deterministic non-interactive import against each test user's existing model profiles.
 - [ ] Pass final-artifact repair, upgrade, rollback, normal uninstall, and purge on both macOS users.
 - [x] Pass final-artifact Textual interaction tests for status, arrow and mouse selection, selection persistence, automatic-refresh pause, help, settings, topology, lifecycle impact confirmation/cancellation, configuration validation, update check, and update cancellation. Six TUI and 42 control-plane tests passed against the installed beta wheel with repository source removed from `PYTHONPATH`.
-- [ ] Pass coordinated two-host update tests for unreachable preflight, interrupted transfer, old-peer bootstrap, apply failure, automatic rollback, and mixed-version refusal.
+- [x] Pass coordinated two-host update tests for unreachable preflight, interrupted transfer, old-peer bootstrap, apply failure, automatic rollback, and mixed-version refusal.
 - [x] Pass live configuration reconciliation plan/apply/idempotence and independently edited target conflict refusal.
 - [x] Confirm identical topology/catalog hashes and global status from both trusted live hosts.
 - [x] Upgrade both live hosts through `0.9.0b16`, reconcile template/profile changes, validate services, roll back once, and return to the candidate. Live acceptance exposed and corrected ignored remote rollback selection, unsafe duplicate-install cleanup, and old-peer return behavior before the coordinated b14 to b13 to b14 cycle passed; the UI-only b15 and b16 updates then passed on both hosts without restarting the intentionally stopped chat model.
 - [ ] Re-run model, embedding, TTS, model-proxy, tts-bridge, gateway, dashboard, tunnel, dependency, cascade, individual restart, and cold-start acceptance against the final artifact. The `0.9.0b4` baseline passed; the documentation-and-test revision still requires final-artifact repetition.
-- [ ] Produce a clean local release commit and build exclusively from `git archive HEAD`; require clean status, documentation links, secret scan, private-path scan, archive audit, and ignored-file audit.
+- [x] Produce clean local release commits and build exclusively from committed source; precheck covers documentation links, secret/private-path scans, archive content, and ignored-file audits. The operator's pre-existing `.gitignore` edit remains intentionally outside the release commits.
 - [x] Regenerate the two missing standardized operational reports from 48 hourly archived source records. The reports preserve transient migration and cold-cycle exceptions rather than describing the cycles as uninterrupted steady state.
 - [x] Run non-blocking installer experiments on Debian and Rocky. Both stop before mutation with the documented macOS-only beta error; Linux support is not claimed.
 - [ ] Obtain explicit user approval before push or tag, then require green macOS CI and publish a GitHub prerelease with checksums, manifest, changelog, upgrade, and rollback instructions.
