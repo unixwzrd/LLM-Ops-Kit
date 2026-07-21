@@ -1047,7 +1047,7 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
             super().__init__()
             self.topology = llmops_cli.build_topology(config_home=config_home, inventory=inventory)
             llmops_cli.CURRENT_TOPOLOGY = self.topology
-            self.desired_topology = llmops_cli.desired_topology()
+            self.desired_topology = llmops_cli.desired_topology(config_home)
             self.rows: list[Any] = []
             self.view = "components"
             self.status_by_id: dict[str, dict[str, Any]] = {}
@@ -1407,7 +1407,7 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                 expected_hash=plan["authority_hash"],
             )
             self.query_one("#detail", Static).update(json.dumps(result, indent=2, sort_keys=True))
-            self.desired_topology = llmops_cli.desired_topology()
+            self.desired_topology = llmops_cli.desired_topology(config_home)
             await self.inspect()
 
         def action_edit(self) -> None:
@@ -1523,7 +1523,7 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                     expected_hash=plan["authority_hash"],
                 )
                 self.query_one("#detail", Static).update(json.dumps(result, indent=2, sort_keys=True))
-                self.desired_topology = llmops_cli.desired_topology()
+                self.desired_topology = llmops_cli.desired_topology(config_home)
                 await self.inspect()
                 return
             if action in {"retire", "restore"}:
@@ -1559,7 +1559,7 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                     expected_hash=plan["authority_hash"],
                 )
                 self.query_one("#detail", Static).update(json.dumps(result, indent=2, sort_keys=True))
-                self.desired_topology = llmops_cli.desired_topology()
+                self.desired_topology = llmops_cli.desired_topology(config_home)
                 await self.inspect()
                 return
             template_id = reference
@@ -1616,7 +1616,7 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                 **values,
             )
             self.query_one("#detail", Static).update(json.dumps(result, indent=2, sort_keys=True))
-            self.desired_topology = llmops_cli.desired_topology()
+            self.desired_topology = llmops_cli.desired_topology(config_home)
             await self.inspect()
 
         def action_catalog(self) -> None:
@@ -1667,7 +1667,7 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
             if not approved:
                 return
             backup = update_display(self.desired_topology.paths.config_file, **changes)
-            self.desired_topology = llmops_cli.desired_topology()
+            self.desired_topology = llmops_cli.desired_topology(config_home)
             self._apply_branding()
             self.query_one("#detail", Static).update(
                 f"Shared display labels saved; backup={backup if backup.exists() else 'none'}"

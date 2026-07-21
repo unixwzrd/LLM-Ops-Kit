@@ -98,6 +98,7 @@ class TuiApplicationTests(unittest.IsolatedAsyncioTestCase):
             stack_path.write_text(json.dumps(stack, indent=2) + "\n", encoding="utf-8")
             original = (paths.stacks_dir / "starter.json").read_bytes()
             app = build_application(str(paths.config_home), None)
+            self.assertEqual(app.desired_topology.paths.config_home, paths.config_home)
             with mock.patch.object(llmops_cli, "_collect_status", wraps=llmops_cli._collect_status) as collect:
                 async with app.run_test(size=(120, 40)) as pilot:
                     await pilot.pause(1)
@@ -178,6 +179,48 @@ class TuiApplicationTests(unittest.IsolatedAsyncioTestCase):
                         exit_app.assert_called_once()
                 collect.assert_called()
             self.assertEqual((paths.stacks_dir / "starter.json").read_bytes(), original)
+
+    async def test_service_catalog_provisions_without_manual_json(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            paths = resolve_paths(
+                {
+                    "HOME": str(root),
+                    "LLMOPS_CONFIG_HOME": str(root / "config"),
+                    "LLMOPS_DATA_HOME": str(root / "data"),
+                    "LLMOPS_STATE_HOME": str(root / "state"),
+                    "LLMOPS_CACHE_HOME": str(root / "cache"),
+                }
+            )
+            initialize(paths, preset="single-host", user="operator")
+            app = build_application(str(paths.config_home), None)
+            async with app.run_test(size=(140, 44)) as pilot:
+                await pilot.pause(1)
+                await pilot.click("#action-catalog")
+                await pilot.pause()
+                catalog = app.screen.query_one("#catalog-table")
+                catalog.move_cursor(row=app.screen.template_ids.index("standalone"))
+                await pilot.pause()
+                await pilot.click("#add")
+                await pilot.pause()
+                app.screen.query_one("#add-id").value = "worker"
+                app.screen.query_one("#add-profile-name").value = "worker-profile"
+                await pilot.click("#review")
+                await pilot.pause()
+                self.assertIn(
+                    "llmops component add worker --template standalone",
+                    str(app.screen.query_one("#equivalent-command").render()),
+                )
+                await pilot.click("#run")
+                await pilot.pause(1)
+            topology = llmops_cli.build_topology(
+                config_home=str(paths.config_home),
+                inventory=str(paths.inventory_file),
+            )
+            component = topology.resolve_component("worker")
+            self.assertEqual(component.template_id, "standalone")
+            self.assertFalse(component.enabled)
+            self.assertTrue((paths.services_dir / "worker-profile.json").is_file())
 
     async def test_confirmed_lifecycle_action_dispatches_without_blocking_tui(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

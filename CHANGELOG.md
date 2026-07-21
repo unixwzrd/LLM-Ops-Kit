@@ -9,6 +9,7 @@
 - Made schema-v2 migration normalize real proof-of-concept `env` profiles, string service ports, native-MTP llama settings, non-llama TTS modelctl profiles, external agents, and launchd-owned tunnels without deleting source fields.
 - Allowed reconciliation to replace a selected version-one snapshot during the bounded schema-v2 cutover while retaining strict version-two-only runtime reads and target-side validation before selection.
 - Prevented local-target reconciliation probes from inheriting authority-tree path overrides and comparing the mutable authority hash to the selected role-filtered snapshot.
+- Kept Textual desired-state reloads bound to the explicitly selected configuration root and added headless acceptance that creates a complete disabled component/profile through generated forms without manual JSON.
 - Added schema-aware template, profile, and component inspection, typed multi-field `--set` and `--unset`, transactional profile creation/editing/cloning, component add/clone/retire/restore, stale-authority-hash refusal, and endpoint-derived dependencies.
 - Added a Textual Service Catalog, generated profile forms, full component Details, stack membership/dependency inspection, dynamic host/profile/endpoint choices, and llama.cpp speculation conflict handling.
 - Added one designated desired-state authority to the observer catalog. Schema mutations invoked on another trusted host are forwarded to the authority, and `llmops tui` launched on a trusted peer runs on the authority through SSH.
