@@ -64,8 +64,11 @@ class TuiContractTests(unittest.TestCase):
         self.assertEqual(payload[0]["execution_user"], "operator")
 
     def test_condition_styles_are_distinct_and_textual(self) -> None:
-        self.assertEqual(set(CONDITION_STYLES), {"ok", "attention", "error", "unobserved"})
-        self.assertEqual(len(set(CONDITION_STYLES.values())), 4)
+        self.assertEqual(
+            set(CONDITION_STYLES),
+            {"ok", "down", "attention", "error", "unobserved"},
+        )
+        self.assertEqual(len(set(CONDITION_STYLES.values())), 5)
 
     def test_local_preferences_do_not_require_canonical_configuration(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

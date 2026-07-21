@@ -110,6 +110,10 @@ class LlmOpsPaths:
         return self.state_home / "plans"
 
     @property
+    def lifecycle_state_file(self) -> Path:
+        return self.state_home / "lifecycle-state.json"
+
+    @property
     def gguf_metadata_cache_dir(self) -> Path:
         return self.cache_home / "gguf-metadata"
 
@@ -138,6 +142,7 @@ class LlmOpsPaths:
             "logs_dir": str(self.logs_dir),
             "health_dir": str(self.health_dir),
             "plans_dir": str(self.plans_dir),
+            "lifecycle_state_file": str(self.lifecycle_state_file),
             "cache_home": str(self.cache_home),
             "gguf_metadata_cache_dir": str(self.gguf_metadata_cache_dir),
             "probes_cache_dir": str(self.probes_cache_dir),

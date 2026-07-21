@@ -6,6 +6,7 @@
 
 - Replaced the ambiguous status field with independent lifecycle, health, condition, and observability fields, plus distinct toolkit and observed component versions.
 - Added the configured component execution identity as `execution_user` in JSON and `RUN_AS` in CLI and TUI status, distinguishing service ownership from the operator invoking LLM-Ops-Kit.
+- Persisted operator-requested lifecycle state so an intentional stop reports `lifecycle=stopped`, `desired_lifecycle=stopped`, and `condition=down` instead of a false error; unexpectedly stopped components remain errors.
 - Corrected model-proxy observation so a live proxy with an unavailable upstream is reported as running and degraded rather than stopped.
 - Centralized component mutation preparation so CLI and Textual operations enforce the same active-dependent stop policy.
 - Added immediate keyboard-driven detail updates, selection preservation, high-contrast status styling, contextual help, local automatic-refresh settings, and shared organization/site labels to the Textual console.

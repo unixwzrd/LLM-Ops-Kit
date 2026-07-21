@@ -22,6 +22,7 @@ Conditions use text and color:
 | Condition | Color | Meaning |
 |---|---|---|
 | `ok` | Green | Healthy, intentionally disabled, or otherwise normal |
+| `down` | Gray | Intentionally stopped by an LLM-Ops-Kit lifecycle operation |
 | `attention` | Amber | Running but degraded, stale, or drifted |
 | `error` | Red | Stopped unexpectedly, failed, or unreachable through an authorized route |
 | `unobserved` | Cyan | Known to the authority but not observable from this host |

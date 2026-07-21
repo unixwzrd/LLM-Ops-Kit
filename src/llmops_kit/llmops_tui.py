@@ -23,6 +23,7 @@ from .llmops_ui import UiPreferences, load_ui_preferences, resolve_ui_path, save
 
 CONDITION_STYLES = {
     "ok": "bold #43d17a",
+    "down": "bold #a8b0bd",
     "attention": "bold #ffd166",
     "error": "bold #ff5c5c",
     "unobserved": "bold #55d8ff",
@@ -522,6 +523,7 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                     f"Driver: {item.driver}  Profile: {item.profile}\n"
                     f"Condition: {state.get('condition', 'unobserved')}  "
                     f"Lifecycle: {state.get('lifecycle', 'unknown')}  "
+                    f"Desired: {state.get('desired_lifecycle', 'unknown')}  "
                     f"Health: {state.get('health', 'unknown')}  "
                     f"Observability: {state.get('observability', 'unknown')}\n"
                     f"Component version: {state.get('component_version') or 'unknown'}  "
@@ -584,6 +586,8 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                         if "attention" in states
                         else "unobserved"
                         if "unobserved" in states
+                        else "down"
+                        if "down" in states
                         else "ok"
                     )
                     style = CONDITION_STYLES[condition]

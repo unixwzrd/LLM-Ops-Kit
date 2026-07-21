@@ -186,7 +186,7 @@ This distinction prevents readiness and policy from being misreported as lifecyc
 
 | Evidence | Result |
 |---|---|
-| Candidate source regression | `0.9.0b7` passes 129 source tests and the complete precheck in the application-owned Python environment |
+| Candidate source regression | `0.9.0b7` passes 131 source tests and the complete precheck in the application-owned Python environment |
 | Candidate clean distribution | `git archive HEAD` source built without a `.git` directory; checksum verification, managed Python bootstrap, wheelhouse install, initialization, doctor, topology, and TUI loading passed in isolated roots |
 | Candidate installed-wheel tests | Six Textual tests and 42 control-plane tests passed with repository source removed from `PYTHONPATH` |
 | Clean distribution | Runtime-only archive built from clean commit `6989f97` |

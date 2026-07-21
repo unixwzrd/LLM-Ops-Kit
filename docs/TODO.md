@@ -23,7 +23,7 @@ Back: [Documentation index](./INDEX.md)
 
 ## Beta Release Gates
 
-- [x] Pass the dependency-complete source suite and precheck in the packaged UV environment. The final committed source passed 129 tests and precheck on 2026-07-21.
+- [x] Pass the dependency-complete source suite and precheck in the packaged UV environment. The final committed source passed 131 tests and precheck on 2026-07-21.
 - [x] Pass normal clean installation from a verified archive on isolated Apple Silicon and Intel macOS users.
 - [ ] Repeat normal installation from the final committed release artifact on both macOS users after documentation and acceptance fixes stop changing the package.
 - [x] Pass `--minimal` installation on isolated Apple Silicon and Intel macOS users and confirm the CLI works while `llmops tui` reports the omitted optional dependency cleanly.

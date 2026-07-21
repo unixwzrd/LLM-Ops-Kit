@@ -11,11 +11,14 @@ Back: [Documentation index](./INDEX.md)
 |---|---|---|
 | `lifecycle` | `running`, `stopped`, `disabled`, `unknown` | Whether the process or native service exists |
 | `health` | `healthy`, `degraded`, `unhealthy`, `unknown`, `not-applicable` | Whether the running component passes its readiness check |
-| `condition` | `ok`, `attention`, `error`, `unobserved` | Operator-facing severity derived from lifecycle, health, drift, and observability |
+| `desired_lifecycle` | `running`, `stopped`, `disabled` | Last successful lifecycle intent recorded by LLM-Ops-Kit |
+| `condition` | `ok`, `down`, `attention`, `error`, `unobserved` | Operator-facing state derived from lifecycle, desired lifecycle, health, drift, and observability |
 | `observability` | `observed`, `authority-only`, `unreachable` | Whether this host has and successfully used an authorized observation route |
 | `execution_user` | configured account name | Identity LLM-Ops-Kit uses for lifecycle operations on the component host |
 
 A running model-proxy whose upstream model is unavailable is `lifecycle=running`, `health=degraded`, and `condition=attention`. It is not reported as stopped merely because its health command exits nonzero.
+
+An operator-requested stop is `lifecycle=stopped`, `desired_lifecycle=stopped`, and `condition=down`. It is expected and returns status exit code 0. An enabled component that is stopped while `desired_lifecycle=running` is an error. Desired lifecycle state is stored transactionally under the operational state root and survives immutable runtime updates.
 
 `authority-only` means the topology catalog knows the component but the current host lacks an authorized observation route. It is represented as `observability=authority-only`, `lifecycle=unknown`, and `condition=unobserved`. It does not assert that the component is running or stopped.
 
@@ -29,7 +32,7 @@ The removed legacy `status` alias is not present in beta JSON records.
 
 | Exit | Meaning |
 |---|---|
-| `0` | All records are `ok` or `unobserved` |
+| `0` | All records are `ok`, `down`, or `unobserved` |
 | `1` | At least one record requires `attention`, with no `error` |
 | `2` | At least one record is `error`, or status configuration is invalid |
 

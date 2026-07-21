@@ -29,6 +29,7 @@ try:
     from .llmops_drivers import ComponentRunner, DriverError, build_component_command
     from .llmops_executor import ExecutionError, Executor, component_plan, stack_plan
     from .llmops_inventory import InventoryError, load_inventory
+    from .llmops_lifecycle_state import LifecycleStateError, LifecycleStateStore
     from .llmops_init import InitError, ModelCandidate, discover_model_profiles, initialize
     from .llmops_migration import MigrationError, migrate
     from .llmops_paths import LlmOpsPaths, resolve_authority_config_home, resolve_paths
@@ -42,6 +43,7 @@ except ImportError:  # Direct source execution.
     from llmops_drivers import ComponentRunner, DriverError, build_component_command
     from llmops_executor import ExecutionError, Executor, component_plan, stack_plan
     from llmops_inventory import InventoryError, load_inventory
+    from llmops_lifecycle_state import LifecycleStateError, LifecycleStateStore
     from llmops_init import InitError, ModelCandidate, discover_model_profiles, initialize
     from llmops_migration import MigrationError, migrate
     from llmops_paths import LlmOpsPaths, resolve_authority_config_home, resolve_paths
@@ -620,6 +622,7 @@ def _human_status(payload: list[dict[str, Any]]) -> None:
     columns = (
         "condition",
         "lifecycle",
+        "desired_lifecycle",
         "health",
         "component",
         "host",
@@ -629,7 +632,7 @@ def _human_status(payload: list[dict[str, Any]]) -> None:
         "toolkit_version",
         "drift",
     )
-    headers = {"execution_user": "RUN_AS"}
+    headers = {"desired_lifecycle": "DESIRED", "execution_user": "RUN_AS"}
     widths = {
         column: max(
             len(headers.get(column, column.upper())),
@@ -647,7 +650,14 @@ def _human_status(payload: list[dict[str, Any]]) -> None:
     print("\n" + "  ".join(f"{name}={counts[name]}" for name in sorted(counts)))
 
 
-def _condition(*, lifecycle: str, health: str, observability: str, drift: str) -> str:
+def _condition(
+    *,
+    lifecycle: str,
+    desired_lifecycle: str,
+    health: str,
+    observability: str,
+    drift: str,
+) -> str:
     """Derive an operator condition without hiding lifecycle or health."""
 
     if observability == "authority-only":
@@ -657,6 +667,8 @@ def _condition(*, lifecycle: str, health: str, observability: str, drift: str) -
     if lifecycle == "disabled":
         return "ok"
     if lifecycle == "stopped":
+        if desired_lifecycle == "stopped":
+            return "down"
         return "error"
     if health in {"degraded", "unhealthy"} or drift not in {"", "none"}:
         return "attention"
@@ -697,6 +709,7 @@ def _inspect_status(components: list[Any], args: argparse.Namespace) -> list[dic
     by_component = {component: (result, error) for component, result, error in inspected}
     payload: list[dict[str, Any]] = []
     metadata = _runtime_metadata()
+    desired_states = LifecycleStateStore(CURRENT_TOPOLOGY.paths.lifecycle_state_file).load()
     include_detail = args.verbose or (bool(args.selector) and len(components) == 1)
     for component in components:
         observation, error = by_component.get(component.qualified_id, (None, ""))
@@ -715,14 +728,20 @@ def _inspect_status(components: list[Any], args: argparse.Namespace) -> list[dic
             health = observation.health
             observability = observation.observability
             result = observation.lifecycle_result
+        desired_lifecycle = desired_states.get(
+            component.qualified_id,
+            "running" if component.enabled else "disabled",
+        )
         condition = _condition(
             lifecycle=lifecycle,
+            desired_lifecycle=desired_lifecycle,
             health=health,
             observability=observability,
             drift=metadata["drift"],
         )
         item = {
             "lifecycle": lifecycle,
+            "desired_lifecycle": desired_lifecycle,
             "health": health,
             "condition": condition,
             "observability": observability,
@@ -1118,6 +1137,7 @@ def _catalog_status(args: argparse.Namespace, catalog: dict[str, Any]) -> list[d
                 payload.append(
                     {
                         "lifecycle": "disabled",
+                        "desired_lifecycle": "disabled",
                         "health": "not-applicable",
                         "condition": "ok",
                         "observability": "observed",
@@ -1138,6 +1158,7 @@ def _catalog_status(args: argparse.Namespace, catalog: dict[str, Any]) -> list[d
                 payload.append(
                     {
                         "lifecycle": "unknown",
+                        "desired_lifecycle": "running",
                         "health": "unknown",
                         "condition": "unobserved",
                         "observability": "authority-only",
@@ -1157,6 +1178,7 @@ def _catalog_status(args: argparse.Namespace, catalog: dict[str, Any]) -> list[d
             payload.append(
                 {
                     "lifecycle": "unknown",
+                    "desired_lifecycle": "running",
                     "health": "unknown",
                     "condition": "error",
                     "observability": "unreachable",
@@ -1504,6 +1526,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         TopologyError,
         DriverError,
         ExecutionError,
+        LifecycleStateError,
         AdapterError,
         ReconcileError,
     ) as exc:

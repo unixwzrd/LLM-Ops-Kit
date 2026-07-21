@@ -23,6 +23,7 @@ from llmops_kit.llmops_config import load_config
 from llmops_kit.llmops_drivers import CommandResult, ComponentObservation, ComponentRunner, DriverError, _launchd_command
 from llmops_kit.llmops_executor import Executor, ExecutionError, Operation, component_plan, stack_plan
 from llmops_kit.llmops_inventory import InventoryError, load_inventory
+from llmops_kit.llmops_lifecycle_state import LifecycleStateStore
 from llmops_kit.llmops_paths import resolve_paths
 from llmops_kit.llmops_topology import (
     Topology,
@@ -298,11 +299,13 @@ class TopologyTests(ControlFixture):
         self.assertEqual(len(status_components("modelctl", include_disabled=False)), 2)
 
     def test_condition_preserves_lifecycle_health_and_observability(self) -> None:
-        self.assertEqual(condition(lifecycle="running", health="healthy", observability="observed", drift="none"), "ok")
-        self.assertEqual(condition(lifecycle="running", health="degraded", observability="observed", drift="none"), "attention")
-        self.assertEqual(condition(lifecycle="stopped", health="not-applicable", observability="observed", drift="none"), "error")
-        self.assertEqual(condition(lifecycle="unknown", health="unknown", observability="authority-only", drift="unknown"), "unobserved")
-        self.assertEqual(condition(lifecycle="unknown", health="unknown", observability="unreachable", drift="unknown"), "error")
+        common = {"desired_lifecycle": "running"}
+        self.assertEqual(condition(lifecycle="running", health="healthy", observability="observed", drift="none", **common), "ok")
+        self.assertEqual(condition(lifecycle="running", health="degraded", observability="observed", drift="none", **common), "attention")
+        self.assertEqual(condition(lifecycle="stopped", health="not-applicable", observability="observed", drift="none", **common), "error")
+        self.assertEqual(condition(lifecycle="stopped", desired_lifecycle="stopped", health="not-applicable", observability="observed", drift="none"), "down")
+        self.assertEqual(condition(lifecycle="unknown", health="unknown", observability="authority-only", drift="unknown", **common), "unobserved")
+        self.assertEqual(condition(lifecycle="unknown", health="unknown", observability="unreachable", drift="unknown", **common), "error")
 
     def test_proxy_lifecycle_remains_running_when_health_status_fails(self) -> None:
         proxy = self.topology.resolve_component("proxy")
@@ -622,6 +625,23 @@ class PlannerTests(ControlFixture):
 
 
 class ExecutorTests(ControlFixture):
+    def test_idempotent_stop_persists_requested_down_state(self) -> None:
+        runner = FakeRunner()
+        executor = Executor(self.topology, runner=runner)
+        chat = self.topology.resolve_component("chat")
+        executor.execute(component_plan(self.topology, chat, "stop"))
+        states = LifecycleStateStore(self.paths.lifecycle_state_file).load()
+        self.assertEqual(states["sample:chat"], "stopped")
+        self.assertNotIn(("sample:chat", "stop"), runner.calls)
+
+    def test_start_persists_requested_running_state(self) -> None:
+        runner = FakeRunner()
+        executor = Executor(self.topology, runner=runner)
+        chat = self.topology.resolve_component("chat")
+        executor.execute(component_plan(self.topology, chat, "start"))
+        states = LifecycleStateStore(self.paths.lifecycle_state_file).load()
+        self.assertEqual(states["sample:chat"], "running")
+
     def test_start_is_idempotent_and_preserves_preexisting_components(self) -> None:
         runner = FakeRunner(running={"sample:chat"})
         executor = Executor(self.topology, runner=runner)

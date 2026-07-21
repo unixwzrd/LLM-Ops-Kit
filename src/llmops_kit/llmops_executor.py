@@ -11,6 +11,7 @@ from typing import Any, Iterator, Optional
 
 try:
     from llmops_drivers import CommandResult, ComponentRunner, DriverError
+    from llmops_lifecycle_state import LifecycleStateError, LifecycleStateStore
     from llmops_topology import (
         Component,
         Stack,
@@ -22,6 +23,7 @@ try:
     )
 except ModuleNotFoundError:  # pragma: no cover
     from .llmops_drivers import CommandResult, ComponentRunner, DriverError
+    from .llmops_lifecycle_state import LifecycleStateError, LifecycleStateStore
     from .llmops_topology import (
         Component,
         Stack,
@@ -208,13 +210,16 @@ class Executor:
         results: list[CommandResult] = []
         started: list[Component] = []
         lock_path = self.topology.paths.run_dir / "orchestrator.lock"
+        state_store = LifecycleStateStore(self.topology.paths.lifecycle_state_file)
         with operation_lock(lock_path):
             try:
+                desired = state_store.load()
                 for operation in operations:
                     component = operation.component
                     action = operation.action
                     if action == "start":
                         if self.runner.is_running(component):
+                            desired[component.qualified_id] = "running"
                             continue
                         result = self.runner.run(component, "start")
                         results.append(result)
@@ -224,6 +229,7 @@ class Executor:
                             )
                         started.append(component)
                         self.runner.wait_healthy(component)
+                        desired[component.qualified_id] = "running"
                     elif action == "restart":
                         result = self.runner.run(component, "restart")
                         results.append(result)
@@ -232,8 +238,10 @@ class Executor:
                                 f"{component.qualified_id}: restart failed: {result.stderr or result.stdout}"
                             )
                         self.runner.wait_healthy(component)
+                        desired[component.qualified_id] = "running"
                     elif action == "stop":
                         if not self.runner.is_running(component):
+                            desired[component.qualified_id] = "stopped"
                             continue
                         result = self.runner.run(component, "stop")
                         results.append(result)
@@ -241,9 +249,12 @@ class Executor:
                             raise ExecutionError(
                                 f"{component.qualified_id}: stop failed: {result.stderr or result.stdout}"
                             )
+                        desired[component.qualified_id] = "stopped"
                     else:
                         results.append(self.runner.run(component, action))
-            except (DriverError, ExecutionError):
+                if any(operation.action in {"start", "stop", "restart"} for operation in operations):
+                    state_store.save(desired)
+            except (DriverError, ExecutionError, LifecycleStateError):
                 for component in reversed(started):
                     self.runner.run(component, "stop")
                 raise
