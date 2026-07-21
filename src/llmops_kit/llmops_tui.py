@@ -404,6 +404,7 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
             super().__init__()
             self.topology = topology
             self.status_by_id = status_by_id
+            self.resetting_filters = False
 
         def compose(self) -> ComposeResult:
             hosts = (("All hosts", ""),) + tuple((name, name) for name in sorted(self.topology.hosts))
@@ -421,7 +422,7 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                     yield Select(stacks, value="", id="topology-stack")
                     yield Select(drivers, value="", id="topology-driver")
                     yield Select(conditions, value="", id="topology-condition")
-                    yield Button("Apply", id="apply", variant="primary")
+                    yield Button("Reset", id="reset")
                     yield Button("Close", id="close")
                 yield Tree("Topology", id="topology-tree")
                 yield Static("Select a component for relationships.", id="topology-detail")
@@ -449,17 +450,51 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                     continue
                 by_host.setdefault(item["host"], []).append(item)
             for host in sorted(by_host):
-                host_node = tree.root.add(f"{host} ({len(by_host[host])})", expand=True)
+                conditions = [
+                    str(self.status_by_id.get(item["id"], {}).get("condition", "unobserved"))
+                    for item in by_host[host]
+                ]
+                severity = {"error": 4, "attention": 3, "down": 2, "unobserved": 1, "ok": 0}
+                host_condition = max(conditions, key=lambda value: severity.get(value, 1))
+                host_label = Text(
+                    f"{host} ({len(by_host[host])})",
+                    style=CONDITION_STYLES.get(host_condition, "#f5f7fa"),
+                )
+                host_node = tree.root.add(host_label, expand=True)
                 for item in sorted(by_host[host], key=lambda value: value["id"]):
                     state = self.status_by_id.get(item["id"], {})
                     condition = state.get("condition", "unobserved")
-                    host_node.add_leaf(f"[{condition}] {item['id']}", data=item)
+                    label = Text(
+                        f"[{condition}] {item['id']}",
+                        style=CONDITION_STYLES.get(condition, "#f5f7fa"),
+                    )
+                    host_node.add_leaf(label, data=item)
             tree.root.expand()
+
+        def on_select_changed(self, event: Any) -> None:
+            if event.select.id not in {
+                "topology-host",
+                "topology-stack",
+                "topology-driver",
+                "topology-condition",
+            }:
+                return
+            if not self.resetting_filters:
+                self.refresh_tree()
 
         def on_button_pressed(self, event: Any) -> None:
             if event.button.id == "close":
                 self.dismiss(None)
-            elif event.button.id == "apply":
+            elif event.button.id == "reset":
+                self.resetting_filters = True
+                for selector in (
+                    "#topology-host",
+                    "#topology-stack",
+                    "#topology-driver",
+                    "#topology-condition",
+                ):
+                    self.query_one(selector, Select).value = ""
+                self.resetting_filters = False
                 self.refresh_tree()
 
         def on_tree_node_highlighted(self, event: Any) -> None:
@@ -557,6 +592,7 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                 yield Button("Restart", id="action-restart")
                 yield Button("Logs", id="action-logs")
                 yield Button("Topology", id="action-topology")
+                yield Button("Settings", id="action-settings")
                 yield Button("Help", id="action-help")
                 yield Button("Quit", id="action-quit")
             yield DataTable(id="components", cursor_type="row", zebra_stripes=False)
@@ -998,9 +1034,12 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                 "action-restart": self.action_restart,
                 "action-logs": self.action_logs,
                 "action-topology": self.action_topology,
+                "action-settings": self.action_settings,
                 "action-help": self.action_help,
-                "action-quit": self.action_quit,
             }
+            if event.button.id == "action-quit":
+                self.exit()
+                return
             action = actions.get(event.button.id)
             if action is not None:
                 action()

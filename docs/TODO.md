@@ -46,6 +46,11 @@ Back: [Documentation index](./INDEX.md)
 
 ## Deferred From Beta
 
+- [ ] Add catalog-wide `component logs list/read/follow` commands and a full-screen scrollable TUI log viewer with adapter-declared channels, remote host/user resolution, path identity, refresh, and follow controls.
+- [ ] Add an adapter-driven fresh-install wizard that discovers local/LAN capabilities, imports existing profiles when present, creates validated new profiles, and previews the generated topology without requiring manual JSON authoring.
+- [ ] Add shared adapter-schema profile forms for llama.cpp, model-proxy, TTS model/bridge, tunnels, launchd, and generic agents, with transactional writes and advanced canonical JSON fallback.
+- [ ] Add explicit manual/standalone/launchd lifecycle ownership and crash-only restart policies that never override an intentional operator stop.
+- [ ] Add full-screen stack membership/dependency management and clarify catalog host aliases versus network hostnames throughout configuration and help.
 - [ ] Add adapter-specific and arbitrary-profile schema forms after the schema contract stabilizes. Unknown fields remain canonical JSON in beta.
 - [ ] Add deterministic corrective suggestions from active probes to the TUI. The beta TUI shows configuration validation only.
 - [ ] Add a correlated model-proxy diagnostic exchange browser. The beta exposes component logs without modifying proxy traffic.

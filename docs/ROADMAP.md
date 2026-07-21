@@ -38,6 +38,15 @@ The runtime completed its 48-hour soak with continuous successful hourly health 
 
 The TUI should begin as a compact operational dashboard. Configuration screens are reached from host or component detail views rather than presenting every possible field at startup.
 
+### Prioritized Operator Polish
+
+1. **P0 - TUI interaction correctness:** Keep the visible Quit action equivalent to `q`, expose Settings in the primary action bar, apply topology filters immediately, provide one Reset action, and retain semantic condition colors in topology groups and components.
+2. **P1 - Remote log operations:** Add CLI list/read/follow operations for every adapter-declared log channel, resolving host and execution user through the catalog. Add a full-screen scrollable TUI viewer with channel selection, host/path identity, refresh, and follow controls.
+3. **P1 - Guided first installation and configuration:** Extend `llmops init` into an adapter-driven wizard that discovers hosts and executables, imports validated existing profiles when available, creates new model/service/agent profiles from adapter schemas, and previews the generated topology before writing it. Fresh users must not be required to author JSON manually.
+4. **P1 - Extensible profile configuration:** Let adapter manifests provide typed fields, defaults, validation, help, secret-reference handling, and advanced JSON fallback. Initial forms cover llama.cpp, model-proxy, TTS model/bridge, SSH tunnels, launchd, and generic agents. The same schemas must serve CLI, TUI, future WebUI, recipes, and third-party adapters.
+5. **P2 - Lifecycle ownership and restart policy:** Model standalone, manual, launchd, and later systemd ownership explicitly. Separate crash recovery from an operator-requested stop, and expose install/remove/enable/disable plus bounded restart policy without adding a privileged daemon.
+6. **P2 - Stack and host management:** Distinguish catalog host aliases from network hostnames, add full-screen stack membership and dependency views, support stack creation/editing and logical grouping, and keep desired-state reassignment separate from provisioning or stateful relocation.
+
 ### Shared UX
 
 The optional WebUI should reuse the proven MLXForge pattern: a separate FastAPI process, static HTML/CSS/JavaScript, structured JSON errors, SSE for lifecycle events, and availability independent of model processes. Reuse visual tokens and widget contracts initially; extract a shared package only after both products demonstrate a stable common implementation.
