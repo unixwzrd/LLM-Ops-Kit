@@ -114,7 +114,7 @@ Rollback is a pointer exchange between immutable releases, not reconstruction fr
 ```mermaid
 flowchart TB
     subgraph Startup["Startup: dependency-first topological order"]
-        direction TB
+        direction LR
         S1["1. Chat model"] -. "next plan step" .-> S2["2. Model proxy"]
         S2 -.-> S3["3. Context optimizer"]
         S3 -.-> S4["4. Embedding model"]
@@ -126,7 +126,7 @@ flowchart TB
     end
 
     subgraph Shutdown["Shutdown: exact reverse of startup"]
-        direction TB
+        direction LR
         X9["1. Desktop tunnel"] -. "next plan step" .-> X8["2. Dashboard"]
         X8 -.-> X7["3. Agent gateway"]
         X7 -.-> X6["4. TTS bridge"]
@@ -137,7 +137,7 @@ flowchart TB
         X2 -.-> X1["9. Chat model"]
     end
 
-    S9 ~~~ X9
+    Startup ~~~ Shutdown
 ```
 
 The dotted arrows show the accepted plan sequence, not additional dependency edges. Independent branches may have more than one valid topological ordering, but once the planner selects a deterministic startup order, full-stack shutdown reverses that exact list. The accepted nine-component stop plan was mechanically compared with the start plan and matched it in reverse.
