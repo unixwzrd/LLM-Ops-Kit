@@ -550,8 +550,6 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
         def compose(self) -> ComposeResult:
             yield Header()
             yield Static("Loading topology...", id="summary")
-            yield DataTable(id="components", cursor_type="row", zebra_stripes=False)
-            yield Static("Select a component for details.", id="detail")
             with Horizontal(id="action-bar"):
                 yield Button("Refresh", id="action-refresh")
                 yield Button("Start", id="action-start")
@@ -561,6 +559,8 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                 yield Button("Topology", id="action-topology")
                 yield Button("Help", id="action-help")
                 yield Button("Quit", id="action-quit")
+            yield DataTable(id="components", cursor_type="row", zebra_stripes=False)
+            yield Static("Select a component for details.", id="detail")
 
         def on_mount(self) -> None:
             table = self.query_one("#components", DataTable)
@@ -575,6 +575,7 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                 "Version",
                 "Drift",
             )
+            table.focus()
             self._reset_refresh_timer()
             self.action_refresh()
 

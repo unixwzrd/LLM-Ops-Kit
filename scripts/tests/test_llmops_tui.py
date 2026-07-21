@@ -102,6 +102,8 @@ class TuiApplicationTests(unittest.IsolatedAsyncioTestCase):
                 async with app.run_test(size=(120, 40)) as pilot:
                     await pilot.pause(1)
                     table = app.query_one("#components")
+                    action_bar = app.query_one("#action-bar")
+                    self.assertLess(action_bar.region.y, table.region.y)
                     self.assertEqual(table.row_count, 3)
                     await pilot.press("down")
                     await pilot.pause()
