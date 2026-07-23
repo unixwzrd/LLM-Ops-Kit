@@ -45,7 +45,7 @@ Default state is under `~/.local/state/llm-ops/logs/`. Log commands execute on t
 
 ## Media-History Template
 
-`Qwen-3_5-stock-template.jinja` is the unchanged reference. `Qwen-3_5-media-history-template.jinja` is an optional context-cost policy for textual media tool history. It preserves the final structurally identified image-bearing tool response, removes earlier payloads and assistant-side byte copies, and preserves native structured multimodal input. It does not validate base64 in Jinja.
+`Qwen-3_5-stock-template.jinja` is the unchanged reference. `Qwen-3_5-media-history-template.jinja` is an optional context-cost policy for textual media tool history. It removes image-producing tool call/result pairs and assistant-side byte copies because truncated tool-result images cannot be reconstructed reliably. Native structured multimodal input remains intact and renders the Qwen vision placeholders used to bind separately processed image data. The template does not validate base64 in Jinja.
 
 ## Validation
 

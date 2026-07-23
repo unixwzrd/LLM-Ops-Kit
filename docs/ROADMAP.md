@@ -1,7 +1,7 @@
 # Roadmap
 
 **Created**: 2026-07-19
-**Updated**: 2026-07-21
+**Updated**: 2026-07-23
 
 Back: [Documentation index](./INDEX.md)
 
@@ -15,7 +15,7 @@ The beta is deliberately narrow. It should make the existing operator-v1 capabil
 
 ### Release blockers
 
-1. Replay the authoritative Hermes prompt through the revised media-history template and prove exactly one historical image-bearing tool response remains.
+1. Replay authoritative Hermes image-generation and dedicated vision requests through the revised media-history template, proving textual tool-result images are removed while native structured vision input remains bound through one Qwen vision placeholder.
 2. Complete final-artifact install, minimal install, repair, upgrade, rollback, uninstall, and purge acceptance on the ARM and Intel macOS test users.
 3. Complete coordinated two-host update, old-peer bootstrap, failure rollback, configuration reconciliation, and conflict-refusal acceptance.
 4. Upgrade both live hosts, reconcile the revised Qwen/model-proxy profiles, and repeat protocol and global-status validation without restarting unaffected services.

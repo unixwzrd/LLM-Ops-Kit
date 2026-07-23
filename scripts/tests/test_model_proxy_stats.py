@@ -172,7 +172,7 @@ class ModelProxyStatsTests(unittest.TestCase):
         self.assertEqual(render_error, "TemplateRenderError: No messages provided.")
 
     @unittest.skipIf(model_proxy_tap.jinja2 is None, "Jinja is not installed")
-    def test_media_history_template_keeps_last_tool_image_and_omits_duplicates(self) -> None:
+    def test_media_history_template_omits_all_tool_images_and_duplicates(self) -> None:
         template_path = SCRIPTS_DIR / "templates" / "Qwen-3_5-media-history-template.jinja"
         loaded_path, renderer, load_error = model_proxy_tap.load_chat_template_renderer(
             str(template_path)
@@ -255,14 +255,14 @@ class ModelProxyStatsTests(unittest.TestCase):
 
         self.assertIsNone(render_error)
         self.assertNotIn("OLDPAYLOAD", rendered)
-        self.assertIn("LATESTPAYLOAD", rendered)
+        self.assertNotIn("LATESTPAYLOAD", rendered)
         self.assertNotIn("old image generation call", rendered)
         self.assertNotIn("generate old image", rendered)
         self.assertNotIn("old image decode call", rendered)
         self.assertNotIn("old image decode result", rendered)
         self.assertNotIn("base64.b64decode", rendered)
-        self.assertIn("generating a newer image", rendered)
-        self.assertIn("generate again", rendered)
+        self.assertNotIn("generating a newer image", rendered)
+        self.assertNotIn("generate again", rendered)
 
     @unittest.skipIf(model_proxy_tap.jinja2 is None, "Jinja is not installed")
     def test_media_history_template_preserves_structured_images(self) -> None:
@@ -300,6 +300,76 @@ class ModelProxyStatsTests(unittest.TestCase):
         self.assertIsNone(render_error)
         self.assertEqual(rendered.count("<|image_pad|>"), 2)
         self.assertNotIn("[Earlier image omitted]", rendered)
+
+    @unittest.skipIf(model_proxy_tap.jinja2 is None, "Jinja is not installed")
+    def test_media_history_template_preserves_dedicated_vision_after_tool_history(self) -> None:
+        template_path = SCRIPTS_DIR / "templates" / "Qwen-3_5-media-history-template.jinja"
+        loaded_path, renderer, load_error = model_proxy_tap.load_chat_template_renderer(
+            str(template_path)
+        )
+        image_url = "data:image/png;base64," + ("A" * 1_410_000)
+        rendered, render_error = model_proxy_tap.render_prompt_from_payload(
+            {
+                "messages": [
+                    {"role": "user", "content": "generate an earlier image"},
+                    {
+                        "role": "assistant",
+                        "content": "generating an earlier image",
+                        "tool_calls": [
+                            {
+                                "type": "function",
+                                "function": {
+                                    "name": "terminal",
+                                    "arguments": json.dumps(
+                                        {"command": "generate earlier image"}
+                                    ),
+                                },
+                            }
+                        ],
+                    },
+                    {
+                        "role": "tool",
+                        "content": json.dumps(
+                            {
+                                "images": [
+                                    "iVBORw0KGgoHISTORICAL" + ("B" * 5000)
+                                ]
+                            }
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": (
+                                    "Describe everything visible in this image in "
+                                    "thorough detail."
+                                ),
+                            },
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": image_url},
+                            },
+                        ],
+                    }
+                ],
+                "tools": [],
+                "add_generation_prompt": True,
+            },
+            chat_template_renderer=renderer,
+            chat_template_path=loaded_path,
+            chat_template_error=load_error,
+            chat_template_max_chars=0,
+        )
+
+        self.assertIsNone(render_error)
+        self.assertNotIn("iVBORw0KGgoHISTORICAL", rendered)
+        self.assertNotIn("generating an earlier image", rendered)
+        self.assertIn("Describe everything visible in this image", rendered)
+        self.assertEqual(rendered.count("<|vision_start|>"), 1)
+        self.assertEqual(rendered.count("<|image_pad|>"), 1)
+        self.assertEqual(rendered.count("<|vision_end|>"), 1)
 
     @unittest.skipIf(model_proxy_tap.jinja2 is None, "Jinja is not installed")
     def test_media_history_template_keeps_only_latest_explicit_audio_and_video_results(self) -> None:
@@ -442,9 +512,9 @@ class ModelProxyStatsTests(unittest.TestCase):
         self.assertIsNone(render_error)
         self.assertNotIn("iVBORw0KGgoOLD", rendered)
         self.assertNotIn("first generation", rendered)
-        self.assertIn("iVBORw0KGgoLATEST", rendered)
-        self.assertIn("second generation", rendered)
-        self.assertEqual(rendered.count("[OUTPUT TRUNCATED"), 1)
+        self.assertNotIn("iVBORw0KGgoLATEST", rendered)
+        self.assertNotIn("second generation", rendered)
+        self.assertNotIn("[OUTPUT TRUNCATED", rendered)
 
 class _CaptureHandler(BaseHTTPRequestHandler):
     received_bodies: list[bytes] = []

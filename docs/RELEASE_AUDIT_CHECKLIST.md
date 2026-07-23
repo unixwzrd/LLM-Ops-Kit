@@ -1,7 +1,7 @@
 # Release Audit
 
 **Created**: 2026-07-18
-**Updated**: 2026-07-21
+**Updated**: 2026-07-23
 
 Back: [Documentation index](./INDEX.md)
 
@@ -20,7 +20,8 @@ Back: [Documentation index](./INDEX.md)
 ## Required Before Approval
 
 - [x] Confirm `0.9.0b16` status records contain lifecycle, health, condition, observability, execution user, component version, desired/observed runtime, and toolkit version without the removed legacy status alias on both trusted hosts. The chat model was intentionally left stopped for separate MLXForge testing after the UI-only update.
-- [x] Confirm prompt replay through the installed media-history template retains exactly one historical image-bearing tool response and proxy forwarding remains byte-preserving. The authoritative replay retained one image result and one PNG marker, removed every assistant decode/copy call, and preserved the known truncation marker.
+- [x] Confirm prompt replay through the media-history template removes textual image tool results and assistant decode/copy calls while proxy forwarding remains byte-preserving.
+- [x] Confirm a dedicated structured vision request retains its `image_url` in the raw request and renders exactly one Qwen vision placeholder. Captured requests met both conditions; their upstream `500 Compute error` responses remain a model-engine issue.
 - [x] Build the schema-v2 candidate from clean committed source and confirm its wheel contains all 12 built-in service templates plus JSON Schema and Textual dependencies.
 - [x] Migrate checksummed copies and the live authority configuration to schema version 2 with no profile, component, stack, execution user, endpoint, lifecycle, or log-channel loss; both resulting nine-component copies passed `doctor` before live cutover.
 - [x] Verify schema mutation and `llmops tui` route from the non-authority trusted host to the designated authority and stale hashes are refused.

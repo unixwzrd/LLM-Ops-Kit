@@ -1,8 +1,8 @@
 # LLM-Ops-Kit Engineering Evidence
 
-- **Evidence updated:** 2026-07-21
+- **Evidence updated:** 2026-07-23
 - **Accepted live candidate:** `0.9.0b21`
-- **Current source candidate:** `0.9.0b21`
+- **Current source candidate:** `0.9.0b22`
 - **Current source artifact:** checksummed dual-architecture clean release candidate
 
 ## Purpose
@@ -207,7 +207,8 @@ This distinction prevents readiness and policy from being misreported as lifecyc
 | Reconciliation | Apply, idempotent no-op, conflict refusal, backup restoration, and clean manifest verification passed |
 | Failure injection | Partial-start cleanup, second-host update failure rollback, tampered artifact rejection, unreachable host handling, and invalid configuration refusal passed |
 | Candidate live acceptance | Both hosts installed `0.9.0b15`; chat, embedding, TTS, model-proxy, and tts-bridge restarted healthy and reported matching desired/observed b15 runtime. Both trusted hosts reported eight healthy observable components and one consistently unobserved authority-owned Desktop tunnel. Coordinated rollback to b13 and version-pinned coordinated return to b14 passed before the UI-only b15 update. The complete cold-cycle remains open because the stack includes the separately owned Desktop tunnel. |
-| Candidate media replay | Authoritative raw request replay through the installed media-history template produced 260,840 rendered bytes, one image result, one PNG marker, zero assistant decode/copy calls, and one preserved truncation marker |
+| Historical media replay | Authoritative image-generation history is filtered so textual image tool results and assistant decode/copy calls do not enter the rendered conversation prompt |
+| Dedicated vision request | The captured raw request retained one structured `image_url` of about 1.41 MB and rendered one `<\|vision_start\|><\|image_pad\|><\|vision_end\|>` sequence; the upstream returned `500 Compute error`, proving the media reached the model path but vision execution failed upstream |
 
 ## Why The Evidence Is Sufficient
 

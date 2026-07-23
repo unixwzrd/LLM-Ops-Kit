@@ -1,7 +1,7 @@
 # Model Profiles
 
 **Created**: 2026-07-16
-**Updated**: 2026-07-21
+**Updated**: 2026-07-23
 
 Back: [Documentation index](./INDEX.md)
 
@@ -41,9 +41,9 @@ Models are canonical JSON documents under `~/.config/llm-ops/models/`. `modelctl
 
 Embedding and TTS profiles use `type: embedding` or `type: tts`. Temporary emergency overrides may be exported into the process environment. Persisted behavior belongs in JSON.
 
-`Qwen-3_5-stock-template.jinja` is retained as the unchanged upstream baseline. `Qwen-3_5-media-history-template.jinja` is derived from it and temporarily preserves the final image-bearing textual tool response while removing earlier image-producing call/response pairs and assistant calls that duplicate media bytes. The template detects explicit image result structure instead of scanning arbitrary text for short base64 signatures. It does not attempt base64 validation in Jinja. Native structured multimodal message parts remain intact.
+`Qwen-3_5-stock-template.jinja` is retained as the unchanged upstream baseline. `Qwen-3_5-media-history-template.jinja` is derived from it and removes image-producing textual tool call/result pairs and assistant calls that duplicate media bytes. Tool-result images are often truncated before reaching history and cannot be reconstructed reliably. The template detects explicit image result structure instead of scanning arbitrary text for short base64 signatures. It does not attempt base64 validation in Jinja.
 
-The temporary final-image policy remains until complete, non-truncated tool-result fixtures have been captured. The model profile and model-proxy diagnostic renderer must reference the same selected template so diagnostic rendering matches llama.cpp prompt construction.
+Native structured multimodal message parts remain intact. A dedicated vision request therefore renders `<|vision_start|><|image_pad|><|vision_end|>` while the model engine receives and processes the corresponding image data separately. The model profile and model-proxy diagnostic renderer must reference the same selected template so diagnostic rendering matches llama.cpp prompt construction.
 
 ```bash
 llmops component plan restart <stack>:<model-component>

@@ -4,6 +4,7 @@
 
 ### Beta release readiness
 
+- Changed the media-history template to remove every textual image tool call/result pair, including the most recent truncated result, while preserving native structured vision requests and their Qwen vision placeholders.
 - Added canonical configuration schema version 2 with versioned JSON Schema 2020-12 service templates, constrained UI metadata, one-time v1 migration, and no runtime v1 compatibility reads.
 - Added built-in templates for llama.cpp, generic non-llama modelctl workloads, model-proxy, tts-bridge, standalone processes, user and external launchd, SSH tunnels, generic agents, external HTTP services, RTK, and experimental user systemd.
 - Made schema-v2 migration normalize real proof-of-concept `env` profiles, string service ports, native-MTP llama settings, non-llama TTS modelctl profiles, external agents, and launchd-owned tunnels without deleting source fields.
@@ -23,7 +24,7 @@
 - Persisted the immutable runtime that launched each model process and made runtime provenance prefer that start marker over a newer selected wrapper.
 - Pruned historical assistant tool calls that explicitly decode or save prior base64 media even when the copied bytes are referenced through a temporary file rather than embedded in the call itself.
 - Corrected configuration reconciliation and TUI configuration editing to consume the mutable authority tree rather than regenerating desired snapshots from the active deployed revision.
-- Replaced the custom latest-image template with a structurally detected media-history template that preserves the final image-bearing tool response, removes earlier image payloads and assistant-side base64 copies, and leaves native structured multimodal content intact. The stock Qwen template remains unchanged.
+- Replaced the custom latest-image template with a structurally detected media-history template that removes textual image tool results and assistant-side base64 copies while leaving native structured multimodal content intact. The stock Qwen template remains unchanged.
 - Added `llmops config effective`, host-qualified component log channels, component runtime/version inspection, configurable lifecycle timeouts, and persisted detached operation records.
 - Added desired-versus-observed runtime reporting and stale-runtime detection based on live process commands and immutable release identities.
 - Made long-running TUI lifecycle and toolkit update actions continue through detached short-lived workers so exiting the TUI neither cancels nor waits for active work.
@@ -107,7 +108,7 @@
 - Centralized model log rotation using copy-and-truncate so active log paths and inodes remain stable for monitoring tools.
 - Kept model-proxy strictly passive: diagnostic prompt rendering never changes the request forwarded upstream.
 - Added Hugging Face-compatible `raise_exception` support to model-proxy chat-template rendering, with regressions against the shipped Qwen template.
-- Added an optional Qwen template derived from the unchanged stock template that prunes historical textual media tool responses while preserving the final structurally identified image result and native structured multimodal inputs.
+- Added an optional Qwen template derived from the unchanged stock template that prunes textual image tool responses while preserving native structured multimodal inputs.
 - Added focused regressions for historical tool exchanges, duplicate embedded payloads, and structured image and video content.
 
 ### Cleanup and documentation

@@ -42,12 +42,9 @@
 {%- if not messages %}
     {{- raise_exception('No messages provided.') }}
 {%- endif %}
-{%- set media_state = namespace(last_image_message_index=-1, last_audio_message_index=-1, last_video_message_index=-1) %}
+{%- set media_state = namespace(last_audio_message_index=-1, last_video_message_index=-1) %}
 {%- for message in messages %}
     {%- if message.role == 'tool' and message.content is string and message.content|length > 4096 %}
-        {%- if 'images' in message.content and ('iVBORw0KGgo' in message.content or '/9j/' in message.content or 'data:image/' in message.content) %}
-            {%- set media_state.last_image_message_index = loop.index0 %}
-        {%- endif %}
         {%- if ('audio' in message.content or 'audios' in message.content) and 'data:audio/' in message.content %}
             {%- set media_state.last_audio_message_index = loop.index0 %}
         {%- endif %}
@@ -63,7 +60,6 @@
     {%- if message.role == 'tool' and message.content is string and message.content|length > 4096 %}
         {%- if 'images' in message.content and ('iVBORw0KGgo' in message.content or '/9j/' in message.content or 'data:image/' in message.content) %}
             {%- set content_state.has_media = true %}
-            {%- set content_state.keep_media = message_index == media_state.last_image_message_index %}
         {%- endif %}
         {%- if ('audio' in message.content or 'audios' in message.content) and 'data:audio/' in message.content %}
             {%- set content_state.has_media = true %}

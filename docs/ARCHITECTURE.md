@@ -155,6 +155,6 @@ The distribution is a standard `src/llmops_kit` Python package installed into an
 
 Model-proxy is a passive transport and observability tap: the upstream request and downstream response bodies are forwarded unchanged. Optional Jinja rendering is diagnostic and supplies a model-engine chat template; it is not proxy rewriting.
 
-The unchanged stock Qwen template remains the reference. The optional media-history template uses message roles and explicit tool-response structure to remove costly historical image payloads and assistant calls that copy those bytes. It temporarily preserves the final image-bearing textual tool response and preserves native structured image and video parts. Portable Jinja does not validate base64; complete captured fixtures and offline diagnostics own that decision.
+The unchanged stock Qwen template remains the reference. The optional media-history template uses message roles and explicit tool-response structure to remove costly textual image tool results and assistant calls that copy those bytes. Native structured image and video parts remain intact; their rendered vision placeholders bind media processed separately by the model engine. Portable Jinja does not validate base64.
 
 The normal beta installation includes Textual. `--minimal` omits the TUI and its dependencies. Integration-specific dependencies remain optional. Release artifacts contain no private topology, model weights, voice samples, credentials, tests, or development history.

@@ -1,7 +1,7 @@
 # Maintainer TODO
 
 **Created**: 2026-07-16
-**Updated**: 2026-07-21
+**Updated**: 2026-07-23
 
 Back: [Documentation index](./INDEX.md)
 
@@ -20,7 +20,7 @@ Back: [Documentation index](./INDEX.md)
 - [x] Remove proof-of-concept repository synchronization, source-checkout deployment, runtime legacy reads, embedded Python shell blocks, and privileged Hermes/OpenClaw behavior.
 - [x] Preserve test-only legacy migration fixtures; they are not installed in release artifacts.
 - [x] Complete the prior operator-v1 48-hour live soak while retaining prior runtimes and checksummed backups.
-- [x] Add the media-history template, preserving one final image-bearing tool response while pruning earlier payloads and duplicate assistant-side copies without changing proxy transport bytes.
+- [x] Add the media-history template, pruning textual image tool results and duplicate assistant-side copies while preserving native structured vision requests and leaving proxy transport bytes unchanged.
 - [x] Add effective configuration, host-qualified log channels, component runtime/version inspection, lifecycle timeouts, and persistent detached operation inspection.
 - [x] Make TUI lifecycle/update actions non-blocking and add progress states, Escape-safe modals, clickable actions, populated topology filters, and accessible colors.
 - [x] Add canonical schema version 2, reviewed JSON Schema service templates, typed field inspection and mutation, transactional profile/component creation, endpoint wiring, reversible retirement, and stale-authority-hash refusal.
@@ -30,8 +30,9 @@ Back: [Documentation index](./INDEX.md)
 
 ## Beta Release Gates
 
-- [x] Replay the current Hermes request through the installed media-history template and confirm one final historical image-bearing tool response, no earlier payloads, and no duplicate assistant base64 copies. The installed `0.9.0b14` replay retained one image result and one PNG marker, with zero assistant decode/copy calls.
-- [x] Pass the dependency-complete source suite and precheck in the packaged UV environment. Source candidate `0.9.0b21` passes 163 tests and precheck on 2026-07-21, including clean-distribution and generated-form provisioning regressions.
+- [x] Replay historical Hermes image-generation context through the installed media-history template and confirm textual tool-result image payloads and duplicate assistant base64 copies are removed.
+- [x] Capture a dedicated Hermes vision request and confirm its raw request retains the structured `image_url` while the rendered prompt contains one Qwen vision placeholder. The two captured upstream requests reached the model and returned `500 Compute error`, which is an upstream vision execution issue rather than Jinja image removal.
+- [x] Pass the dependency-complete source suite and precheck in the packaged UV environment. Source candidate `0.9.0b22` passes precheck on 2026-07-23, including the dedicated-vision-after-tool-history regression.
 - [x] Pass normal clean installation from a verified archive on isolated Apple Silicon and Intel macOS users.
 - [x] Repeat normal installation from committed release artifacts on both macOS users after schema and reconciliation fixes; Apple Silicon and Intel installs include the application-owned Python, Textual, JSON Schema, and all built-in templates.
 - [x] Pass `--minimal` installation on isolated Apple Silicon and Intel macOS users and confirm the CLI works while `llmops tui` reports the omitted optional dependency cleanly.
