@@ -30,7 +30,7 @@ Canonical configuration is converted into a validated topology, dependency plan,
 canonical configuration -> schema validation -> topology -> dependency plan -> adapter -> local or remote transport
 ```
 
-Component start satisfies missing upstream dependencies. Component restart affects only the target by default. Component stop refuses active dependents unless `--force` or `--cascade` is used. CLI and TUI call the same mutation preparation service, so interface code cannot bypass dependent-impact checks. Stack operations start in dependency order and stop in the exact reverse of the selected startup order.
+Component start satisfies missing upstream dependencies. Component restart affects only the target by default. Component stop refuses active dependents unless `--force` or `--cascade` is used. CLI and TUI call the same mutation preparation service, so interface code cannot bypass dependent-impact checks. Stack operations include only managed lifecycle components, start them in dependency order, and stop them in the exact reverse of the selected startup order. Externally owned services and tool components remain visible in stack status but are not mutated as a side effect of stack lifecycle commands.
 
 The executor is idempotent. A failed start stops only components started by that invocation and leaves pre-existing services untouched. Mutations use a lifecycle lock; status, health, drift, plans, effective configuration, and logs are read-only. Interactive clients dispatch long-running mutations to detached short-lived workers that persist an operation record. No privileged daemon is required, and closing a client does not cancel an accepted operation.
 

@@ -804,6 +804,32 @@ class PlannerTests(ControlFixture):
         stopped = [item.component.qualified_id for item in stack_plan(stack, "stop")]
         self.assertEqual(stopped, list(reversed(started)))
 
+    def test_stack_lifecycle_skips_externally_owned_components(self) -> None:
+        stack_config = json.loads((self.paths.stacks_dir / "sample.json").read_text(encoding="utf-8"))
+        stack_config["components"][0]["ownership"] = "external"
+        self.write_json(self.paths.stacks_dir / "sample.json", stack_config)
+        topology = Topology(
+            stacks=load_stacks(self.paths),
+            hosts=self.topology.hosts,
+            paths=self.paths,
+            config=self.topology.config,
+        )
+        stack = topology.stacks["sample"]
+
+        for action in ("start", "stop", "restart"):
+            planned = stack_plan(stack, action)
+            self.assertNotIn("sample:chat", [item.component.qualified_id for item in planned])
+
+        status_components = [
+            item.component.qualified_id for item in stack_plan(stack, "status")
+        ]
+        self.assertIn("sample:chat", status_components)
+
+        chat = topology.resolve_component("chat")
+        runner = ComponentRunner(topology)
+        with self.assertRaisesRegex(DriverError, "externally owned component is read-only"):
+            runner.run(chat, "restart")
+
     def test_disabled_component_cannot_be_operated_directly(self) -> None:
         stack = json.loads((self.paths.stacks_dir / "sample.json").read_text(encoding="utf-8"))
         stack["components"][0]["enabled"] = False

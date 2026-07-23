@@ -114,13 +114,14 @@ def stack_plan(stack: Stack, action: str) -> list[Operation]:
     """Build an ordered plan for a complete stack action."""
 
     ordered = [item for item in topological_order(stack) if item.enabled]
+    lifecycle_components = [item for item in ordered if item.ownership == "managed"]
     if action == "start":
-        return [Operation(item, "start") for item in ordered]
+        return [Operation(item, "start") for item in lifecycle_components]
     if action == "stop":
-        return [Operation(item, "stop") for item in reversed(ordered)]
+        return [Operation(item, "stop") for item in reversed(lifecycle_components)]
     if action == "restart":
-        return [Operation(item, "stop") for item in reversed(ordered)] + [
-            Operation(item, "start") for item in ordered
+        return [Operation(item, "stop") for item in reversed(lifecycle_components)] + [
+            Operation(item, "start") for item in lifecycle_components
         ]
     if action == "status":
         return [Operation(item, "status") for item in ordered]

@@ -4,6 +4,7 @@
 
 ### Beta release readiness
 
+- Excluded externally owned tool and service components from stack lifecycle plans while retaining them in stack status; direct lifecycle mutations remain read-only.
 - Changed the media-history template to remove every textual image tool call/result pair, including the most recent truncated result, while preserving native structured vision requests and their Qwen vision placeholders.
 - Added canonical configuration schema version 2 with versioned JSON Schema 2020-12 service templates, constrained UI metadata, one-time v1 migration, and no runtime v1 compatibility reads.
 - Added built-in templates for llama.cpp, generic non-llama modelctl workloads, model-proxy, tts-bridge, standalone processes, user and external launchd, SSH tunnels, generic agents, external HTTP services, RTK, and experimental user systemd.
