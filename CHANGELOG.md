@@ -16,6 +16,7 @@
 - Added one designated desired-state authority to the observer catalog. Schema mutations invoked on another trusted host are forwarded to the authority, and `llmops tui` launched on a trusted peer runs on the authority through SSH.
 - Added RTK as a non-service tool template with version, telemetry, verification, gain, and Hermes dry-run actions. Live evidence confirms telemetry disabled and leaves hook installation behind an explicit canary approval gate.
 - Replaced inherited Textual accent states with one explicit blue-gray high-contrast palette across Settings, forms, select overlays, buttons, cursors, and scrollbars.
+- Styled condition, lifecycle, health, component version, and drift independently in CLI and TUI status so healthy processes remain visibly healthy while stale-runtime and other attention conditions stay visible.
 - Made topology filters apply immediately, replaced Apply with Reset, restored semantic host/component colors, exposed Settings in the primary action bar, and made the visible Quit button exit directly.
 - Moved the TUI's clickable lifecycle action bar above the component table so primary controls remain immediately accessible.
 - Made a newer controller reselect a complete target retained as an older peer's `previous` release, allowing coordinated return after rollback without relying on the old peer's update implementation.

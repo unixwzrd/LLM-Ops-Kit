@@ -1144,19 +1144,21 @@ def _human_status(payload: list[dict[str, Any]]) -> None:
         ("toolkit_version", "TOOLKIT_VERSION"),
         ("drift", "DRIFT"),
     )
-    styles = {
-        "ok": "bold green",
-        "down": "bold #c86b6b",
-        "attention": "bold yellow",
-        "error": "bold bright_red",
-        "unobserved": "bold cyan",
-    }
+    from .llmops_ui import status_cell_style
+
     table = Table(show_header=True, header_style="bold", box=None, pad_edge=False)
     for _, header in columns:
         table.add_column(header, no_wrap=True)
     for item in payload:
-        style = styles.get(str(item.get("condition", "")), "white")
-        table.add_row(*(Text(str(item.get(column, "")), style=style) for column, _ in columns))
+        table.add_row(
+            *(
+                Text(
+                    str(item.get(column, "")),
+                    style=status_cell_style(column, item),
+                )
+                for column, _ in columns
+            )
+        )
     counts: dict[str, int] = {}
     for item in payload:
         counts[item["condition"]] = counts.get(item["condition"], 0) + 1

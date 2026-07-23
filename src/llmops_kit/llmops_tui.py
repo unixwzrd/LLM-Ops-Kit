@@ -27,16 +27,14 @@ from .llmops_operations import ACTIVE_STATES, dispatch, list_records
 from .llmops_topology import TopologyError
 from .llmops_topology_view import project_topology
 from .llmops_templates import load_template_registry, parse_schema_value, schema_node, set_dotted
-from .llmops_ui import UiPreferences, load_ui_preferences, resolve_ui_path, save_ui_preferences
-
-
-CONDITION_STYLES = {
-    "ok": "bold #43d17a",
-    "down": "bold #c86b6b",
-    "attention": "bold #ffd166",
-    "error": "bold #ff5c5c",
-    "unobserved": "bold #55d8ff",
-}
+from .llmops_ui import (
+    CONDITION_STYLES,
+    UiPreferences,
+    load_ui_preferences,
+    resolve_ui_path,
+    save_ui_preferences,
+    status_cell_style,
+)
 
 
 def equivalent_command(
@@ -1189,19 +1187,23 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
             if self.view == "components":
                 for component in self.rows:
                     item = self.status_by_id[component.qualified_id]
-                    style = CONDITION_STYLES.get(item["condition"], "#f5f7fa")
-                    values = (
-                        item["condition"],
-                        item["lifecycle"],
-                        item["health"],
-                        component.qualified_id,
-                        component.host,
-                        item.get("execution_user", ""),
-                        component.driver,
-                        item.get("component_version", ""),
-                        item.get("drift", ""),
+                    cells = (
+                        ("condition", item["condition"]),
+                        ("lifecycle", item["lifecycle"]),
+                        ("health", item["health"]),
+                        ("component", component.qualified_id),
+                        ("host", component.host),
+                        ("execution_user", item.get("execution_user", "")),
+                        ("driver", component.driver),
+                        ("component_version", item.get("component_version", "")),
+                        ("drift", item.get("drift", "")),
                     )
-                    table.add_row(*(Text(str(value), style=style) for value in values))
+                    table.add_row(
+                        *(
+                            Text(str(value), style=status_cell_style(field, item))
+                            for field, value in cells
+                        )
+                    )
             else:
                 for stack in self.rows:
                     states = [

@@ -15,7 +15,12 @@ from llmops_kit.llmops_init import initialize
 from llmops_kit.llmops_executor import MutationPlan, Operation
 from llmops_kit.llmops_paths import resolve_paths
 from llmops_kit.llmops_tui import CONDITION_STYLES, build_application, equivalent_command
-from llmops_kit.llmops_ui import UiPreferences, load_ui_preferences, save_ui_preferences
+from llmops_kit.llmops_ui import (
+    UiPreferences,
+    load_ui_preferences,
+    save_ui_preferences,
+    status_cell_style,
+)
 
 
 class TuiContractTests(unittest.TestCase):
@@ -69,6 +74,22 @@ class TuiContractTests(unittest.TestCase):
             {"ok", "down", "attention", "error", "unobserved"},
         )
         self.assertEqual(len(set(CONDITION_STYLES.values())), 5)
+
+    def test_status_cells_preserve_independent_semantics(self) -> None:
+        record = {
+            "condition": "attention",
+            "lifecycle": "running",
+            "health": "healthy",
+            "component": "sample:embedding",
+            "component_version": "0.9.0b15",
+            "drift": "stale-runtime",
+        }
+        self.assertEqual(status_cell_style("condition", record), CONDITION_STYLES["attention"])
+        self.assertEqual(status_cell_style("lifecycle", record), CONDITION_STYLES["ok"])
+        self.assertEqual(status_cell_style("health", record), CONDITION_STYLES["ok"])
+        self.assertEqual(status_cell_style("component", record), CONDITION_STYLES["attention"])
+        self.assertEqual(status_cell_style("component_version", record), CONDITION_STYLES["attention"])
+        self.assertEqual(status_cell_style("drift", record), CONDITION_STYLES["attention"])
 
     def test_local_preferences_do_not_require_canonical_configuration(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

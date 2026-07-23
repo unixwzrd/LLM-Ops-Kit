@@ -11,6 +11,59 @@ from pathlib import Path
 from typing import Any, Optional
 
 
+CONDITION_STYLES = {
+    "ok": "bold #43d17a",
+    "down": "bold #c86b6b",
+    "attention": "bold #ffd166",
+    "error": "bold #ff5c5c",
+    "unobserved": "bold #55d8ff",
+}
+
+LIFECYCLE_STYLES = {
+    "running": "bold #43d17a",
+    "stopped": "bold #c86b6b",
+    "disabled": "#8b949e",
+    "unknown": "bold #55d8ff",
+    "starting": "bold #ffd166",
+    "stopping": "bold #ffd166",
+    "restarting": "bold #ffd166",
+    "updating": "bold #ffd166",
+    "reconciling": "bold #ffd166",
+}
+
+HEALTH_STYLES = {
+    "healthy": "bold #43d17a",
+    "degraded": "bold #ffd166",
+    "unhealthy": "bold #ff5c5c",
+    "unknown": "bold #55d8ff",
+    "not-applicable": "#8b949e",
+}
+
+
+def status_cell_style(field: str, record: dict[str, Any]) -> str:
+    """Return a semantic style without hiding independent status dimensions."""
+
+    value = str(record.get(field, ""))
+    condition = str(record.get("condition", ""))
+    if field == "condition":
+        return CONDITION_STYLES.get(value, "#f5f7fa")
+    if field in {"lifecycle", "desired_lifecycle"}:
+        return LIFECYCLE_STYLES.get(value, "#f5f7fa")
+    if field == "health":
+        return HEALTH_STYLES.get(value, "#f5f7fa")
+    if field == "drift":
+        if value == "none":
+            return CONDITION_STYLES["ok"]
+        if value in {"", "unknown"}:
+            return CONDITION_STYLES["unobserved"]
+        return CONDITION_STYLES["attention"]
+    if field == "component_version" and str(record.get("drift", "")) == "stale-runtime":
+        return CONDITION_STYLES["attention"]
+    if field == "component":
+        return CONDITION_STYLES.get(condition, "#f5f7fa")
+    return "#f5f7fa"
+
+
 @dataclass(frozen=True)
 class UiPreferences:
     """Validated host-local TUI preferences."""
