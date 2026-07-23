@@ -184,6 +184,14 @@ class TuiApplicationTests(unittest.IsolatedAsyncioTestCase):
                     await pilot.pause()
                     self.assertIsNotNone(app.screen.query_one("#schema-edit-dialog"))
                     self.assertIsNotNone(app.screen.query_one("#schema-fields"))
+                    app.on_data_table_row_highlighted(
+                        type(
+                            "RowEvent",
+                            (),
+                            {"cursor_row": 1, "data_table": table},
+                        )()
+                    )
+                    self.assertIsNotNone(app.screen.query_one("#schema-edit-dialog"))
                     await pilot.press("escape")
                     await pilot.pause()
                     await pilot.click("#action-catalog")

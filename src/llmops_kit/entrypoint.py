@@ -40,6 +40,7 @@ def tui_authority_command(config_home: Path, arguments: list[str]) -> Optional[l
     operation = ["tui", *arguments]
     command = llmops_cli._host_command(target, operation, json_output=False)
     command.insert(1, "-t")
+    command.insert(1, "-q")
     command[-1] = f"LLMOPS_TUI_AUTHORITY_ROUTED=1 {command[-1]}"
     return command
 

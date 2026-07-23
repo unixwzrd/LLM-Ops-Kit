@@ -1182,6 +1182,8 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                 if self.view == "components"
                 else [self.topology.stacks[name] for name in sorted(self.topology.stacks)]
             )
+            if len(self.screen_stack) != 1:
+                return
             table = self.query_one("#components", DataTable)
             table.clear()
             if self.view == "components":
@@ -1752,10 +1754,20 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                 action()
 
         def on_data_table_row_highlighted(self, event: Any) -> None:
+            if (
+                len(self.screen_stack) != 1
+                or getattr(getattr(event, "data_table", None), "id", None) != "components"
+            ):
+                return
             if 0 <= event.cursor_row < len(self.rows):
                 self._show_detail(self.rows[event.cursor_row])
 
         def on_data_table_row_selected(self, event: Any) -> None:
+            if (
+                len(self.screen_stack) != 1
+                or getattr(getattr(event, "data_table", None), "id", None) != "components"
+            ):
+                return
             if 0 <= event.cursor_row < len(self.rows):
                 self._show_detail(self.rows[event.cursor_row])
 

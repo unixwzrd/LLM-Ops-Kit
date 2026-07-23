@@ -236,7 +236,7 @@ class InventoryTests(ControlFixture):
         command = tui_authority_command(self.paths.config_home, [])
         self.assertIsNotNone(command)
         assert command is not None
-        self.assertEqual(command[:2], ["ssh", "-t"])
+        self.assertEqual(command[:3], ["ssh", "-q", "-t"])
         self.assertIn("operator@model.local", command)
         self.assertIn("LLMOPS_TUI_AUTHORITY_ROUTED=1", command[-1])
         self.assertIn("llmops tui", command[-1])
