@@ -27,6 +27,7 @@ Back: [Documentation index](./INDEX.md)
 - [x] Add the Textual Service Catalog, generated profile forms, full Details, stack membership/dependency inspection, and dynamic host/profile/endpoint choices.
 - [x] Route schema operations and the Textual console from trusted peers to one designated desired-state authority.
 - [x] Add RTK as a tool component with installation status, version, telemetry, verification, gain, and Hermes integration dry-run actions.
+- [x] Separate managed-product releases from toolkit runtime identity with a reconciled product manifest, shared CLI/TUI status columns, update metadata, and public inventory inspection.
 
 ## Beta Release Gates
 
