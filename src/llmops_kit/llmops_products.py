@@ -10,6 +10,7 @@ from typing import Any, Mapping, Optional
 
 
 UPDATE_STATES = {"current", "available", "held", "review", "unknown"}
+VERSION_STRATEGIES = {"manifest", "observed-runtime"}
 
 
 class ProductInventoryError(ValueError):
@@ -28,6 +29,7 @@ class ProductRelease:
     last_verified: str = ""
     last_updated: str = ""
     decision: str = ""
+    version_strategy: str = "manifest"
 
     def as_dict(self) -> dict[str, str]:
         return {
@@ -39,6 +41,7 @@ class ProductRelease:
             "last_verified": self.last_verified,
             "last_updated": self.last_updated,
             "decision": self.decision,
+            "version_strategy": self.version_strategy,
         }
 
 
@@ -76,6 +79,11 @@ class ProductInventory:
                 raise ProductInventoryError(
                     f"{path}: {product_id}.update_state must be one of {sorted(UPDATE_STATES)}"
                 )
+            version_strategy = str(raw.get("version_strategy", "manifest"))
+            if version_strategy not in VERSION_STRATEGIES:
+                raise ProductInventoryError(
+                    f"{path}: {product_id}.version_strategy must be one of {sorted(VERSION_STRATEGIES)}"
+                )
             values = {
                 key: str(raw.get(key, ""))
                 for key in (
@@ -90,6 +98,7 @@ class ProductInventory:
             products[product_id] = ProductRelease(
                 product_id=product_id,
                 update_state=update_state,
+                version_strategy=version_strategy,
                 **values,
             )
         components: dict[str, str] = {}

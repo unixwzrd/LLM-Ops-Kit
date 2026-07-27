@@ -542,6 +542,7 @@ class TopologyTests(ControlFixture):
                         "latest_version": "2.4.0",
                         "update_state": "available",
                         "last_verified": "2026-07-27",
+                        "version_strategy": "observed-runtime",
                     }
                 },
                 "components": {"sample:proxy": "model-proxy"},
@@ -577,7 +578,8 @@ class TopologyTests(ControlFixture):
         self.assertEqual(payload[0]["health"], "degraded")
         self.assertEqual(payload[0]["condition"], "attention")
         self.assertEqual(payload[0]["execution_user"], "operator")
-        self.assertEqual(payload[0]["component_version"], "2.3.1")
+        self.assertEqual(payload[0]["component_version"], "0.9.0b4")
+        self.assertEqual(payload[0]["version_strategy"], "observed-runtime")
         self.assertEqual(payload[0]["latest_version"], "2.4.0")
         self.assertEqual(payload[0]["update_state"], "available")
         self.assertEqual(payload[0]["observed_runtime"], "0.9.0b4")

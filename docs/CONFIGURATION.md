@@ -61,6 +61,7 @@ Textual refresh and theme preferences live separately in `ui.json`. That host-lo
       "source": "https://github.com/ggml-org/llama.cpp",
       "last_verified": "2026-07-27",
       "last_updated": "2026-07-23",
+      "version_strategy": "manifest",
       "decision": "review upstream before replacement"
     }
   },
@@ -80,6 +81,8 @@ llmops component version local-ai:chat
 ```
 
 The product inventory is desired state and is reconciled with the topology. It does not probe or mutate upstream packages by itself.
+
+`version_strategy` defaults to `manifest`. Use `observed-runtime` only when the managed product is the immutable LLM-Ops-Kit process itself, such as model-proxy or tts-bridge. That keeps a still-running older process visible until it is deliberately restarted while the selected toolkit and latest product release remain separate fields.
 
 ## Inventory
 

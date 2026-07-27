@@ -1037,6 +1037,7 @@ def cmd_component_version(args: argparse.Namespace) -> int:
             "latest_version",
             "update_state",
             "version_source",
+            "version_strategy",
             "version_last_verified",
             "version_last_updated",
             "update_decision",
@@ -1321,7 +1322,11 @@ def _inspect_status(components: list[Any], args: argparse.Namespace) -> list[dic
             "tags": list(component.tags),
             "returncode": None if result is None else result.returncode,
             "component_version": (
-                product.installed_version
+                observed_runtime
+                if product is not None
+                and product.version_strategy == "observed-runtime"
+                and observed_runtime
+                else product.installed_version
                 if product is not None
                 else "" if observation is None else _component_version(component, observation, profile)
             ),
@@ -1329,6 +1334,7 @@ def _inspect_status(components: list[Any], args: argparse.Namespace) -> list[dic
             "latest_version": "" if product is None else product.latest_version,
             "update_state": "unknown" if product is None else product.update_state,
             "version_source": "" if product is None else product.source,
+            "version_strategy": "" if product is None else product.version_strategy,
             "version_last_verified": "" if product is None else product.last_verified,
             "version_last_updated": "" if product is None else product.last_updated,
             "update_decision": "" if product is None else product.decision,
