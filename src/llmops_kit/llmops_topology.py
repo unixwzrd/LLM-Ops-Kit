@@ -656,6 +656,48 @@ def write_host_snapshot(topology: Topology, *, host_name: str, destination: Path
     config_path.write_text(json.dumps(config_data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     copied.append({"path": "config.json", "sha256": _sha256(config_path)})
 
+    if topology.paths.products_file.is_file():
+        try:
+            product_data = json.loads(topology.paths.products_file.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise TopologyError(f"invalid product inventory {topology.paths.products_file}: {exc}") from exc
+        products = product_data.get("products", {}) if isinstance(product_data, dict) else {}
+        bindings = product_data.get("components", {}) if isinstance(product_data, dict) else {}
+        if product_data.get("schema_version") != 1 or not isinstance(products, dict) or not isinstance(bindings, dict):
+            raise TopologyError(f"invalid product inventory: {topology.paths.products_file}")
+        available_ids = {item.qualified_id for item in available}
+        filtered_bindings = {
+            component: product_id
+            for component, product_id in bindings.items()
+            if component in available_ids
+        }
+        referenced_products = set(filtered_bindings.values())
+        missing = sorted(product_id for product_id in referenced_products if product_id not in products)
+        if missing:
+            raise TopologyError(
+                f"product inventory references undefined products: {', '.join(missing)}"
+            )
+        filtered_products = {
+            product_id: products[product_id]
+            for product_id in sorted(referenced_products)
+        }
+        filtered_data = {
+            "schema_version": 1,
+            "products": filtered_products,
+            "components": dict(sorted(filtered_bindings.items())),
+        }
+        finding = _contains_secret_value(filtered_data)
+        if finding:
+            raise TopologyError(
+                f"product inventory contains secret value at {finding}; use a public source reference"
+            )
+        products_path = destination / "products.json"
+        products_path.write_text(
+            json.dumps(filtered_data, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        copied.append({"path": "products.json", "sha256": _sha256(products_path)})
+
     if topology.paths.templates_dir.is_dir():
         for source in sorted(topology.paths.templates_dir.glob("*.json")):
             target = destination / "templates" / source.name

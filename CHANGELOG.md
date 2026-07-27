@@ -5,6 +5,7 @@
 ### Beta release readiness
 
 - Added a reconciled product-release manifest with explicit component bindings, real managed-product versions, latest-release metadata, update disposition, and `llmops product list/show` inspection.
+- Included role-filtered product manifests in immutable configuration snapshots so every observing runtime reports the same release identity without receiving unrelated component bindings.
 - Unified the default CLI and TUI status columns through one shared presentation contract while keeping toolkit/runtime identity separate from managed-product versions.
 - Excluded externally owned tool and service components from stack lifecycle plans while retaining them in stack status; direct lifecycle mutations remain read-only.
 - Changed the media-history template to remove every textual image tool call/result pair, including the most recent truncated result, while preserving native structured vision requests and their Qwen vision placeholders.

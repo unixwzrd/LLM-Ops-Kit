@@ -10,6 +10,7 @@ import subprocess
 import tempfile
 import unittest
 from contextlib import redirect_stdout
+from dataclasses import replace
 from pathlib import Path
 from typing import Optional
 from unittest import mock
@@ -206,6 +207,31 @@ class ControlFixture(unittest.TestCase):
 
 
 class InventoryTests(ControlFixture):
+    def test_host_snapshot_filters_product_bindings_by_role(self) -> None:
+        self.write_json(
+            self.paths.products_file,
+            {
+                "schema_version": 1,
+                "products": {
+                    "llama-cpp": {"installed_version": "b1057", "update_state": "review"},
+                    "agent": {"installed_version": "1.0", "update_state": "current"},
+                },
+                "components": {
+                    "sample:chat": "llama-cpp",
+                    "sample:agent": "agent",
+                },
+            },
+        )
+        self.topology.hosts["model-host"] = replace(
+            self.topology.hosts["model-host"], trusted_control=False
+        )
+        self.topology.config.data["control"]["authority_host"] = "agent-host"
+        destination = self.root / "snapshot"
+        write_host_snapshot(self.topology, host_name="model-host", destination=destination)
+        products = json.loads((destination / "products.json").read_text(encoding="utf-8"))
+        self.assertEqual(products["components"], {"sample:chat": "llama-cpp"})
+        self.assertEqual(set(products["products"]), {"llama-cpp"})
+
     def test_public_entrypoint_reports_installed_version(self) -> None:
         output = io.StringIO()
         with redirect_stdout(output):
