@@ -62,6 +62,10 @@ class LlmOpsPaths:
         return self.config_home / "inventory.json"
 
     @property
+    def products_file(self) -> Path:
+        return self.config_home / "products.json"
+
+    @property
     def models_dir(self) -> Path:
         return self.config_home / "models"
 
@@ -136,6 +140,7 @@ class LlmOpsPaths:
             "config_home": str(self.config_home),
             "config_file": str(self.config_file),
             "inventory_file": str(self.inventory_file),
+            "products_file": str(self.products_file),
             "models_dir": str(self.models_dir),
             "agents_dir": str(self.agents_dir),
             "profiles_dir": str(self.profiles_dir),

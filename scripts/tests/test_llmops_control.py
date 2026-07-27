@@ -506,6 +506,21 @@ class TopologyTests(ControlFixture):
         self.assertEqual(run.call_args.kwargs["timeout"], 900)
 
     def test_status_record_has_no_legacy_status_alias(self) -> None:
+        self.write_json(
+            self.paths.products_file,
+            {
+                "schema_version": 1,
+                "products": {
+                    "model-proxy": {
+                        "installed_version": "2.3.1",
+                        "latest_version": "2.4.0",
+                        "update_state": "available",
+                        "last_verified": "2026-07-27",
+                    }
+                },
+                "components": {"sample:proxy": "model-proxy"},
+            },
+        )
         proxy = self.topology.resolve_component("proxy")
         result = CommandResult(
             proxy.qualified_id,
@@ -536,12 +551,15 @@ class TopologyTests(ControlFixture):
         self.assertEqual(payload[0]["health"], "degraded")
         self.assertEqual(payload[0]["condition"], "attention")
         self.assertEqual(payload[0]["execution_user"], "operator")
-        self.assertEqual(payload[0]["component_version"], "0.9.0b4")
+        self.assertEqual(payload[0]["component_version"], "2.3.1")
+        self.assertEqual(payload[0]["latest_version"], "2.4.0")
+        self.assertEqual(payload[0]["update_state"], "available")
+        self.assertEqual(payload[0]["observed_runtime"], "0.9.0b4")
 
         output = io.StringIO()
         with redirect_stdout(output):
             llmops_cli._human_status(payload)
-        self.assertIn("RUN_AS", output.getvalue().splitlines()[0])
+        self.assertIn("RUN AS", output.getvalue().splitlines()[0])
 
     def test_topology_projection_is_bounded_to_immediate_relationships(self) -> None:
         projection = project_topology(self.topology, component="proxy")

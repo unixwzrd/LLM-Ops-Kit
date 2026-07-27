@@ -26,6 +26,7 @@ from llmops_kit.llmops_config_ops import (
 from llmops_kit.llmops_drivers import ComponentRunner
 from llmops_kit.llmops_paths import resolve_paths
 from llmops_kit.llmops_templates import TemplateError, load_template_registry, validate_template_document
+from llmops_kit.llmops_topology import load_profile
 
 from test_llmops_control import ControlFixture
 
@@ -277,8 +278,9 @@ class SchemaConfigurationTests(ControlFixture):
         self.assertEqual(observation.lifecycle, "running")
         self.assertEqual(observation.health, "healthy")
         llmops_cli.CURRENT_TOPOLOGY = topology
+        profile = load_profile(topology.paths, topology.resolve_component("sample:rtk"))
         self.assertEqual(
-            llmops_cli._component_version(topology.resolve_component("sample:rtk"), observation),
+            llmops_cli._component_version(topology.resolve_component("sample:rtk"), observation, profile),
             "0.43.0",
         )
 

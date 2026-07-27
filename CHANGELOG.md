@@ -4,6 +4,8 @@
 
 ### Beta release readiness
 
+- Added a reconciled product-release manifest with explicit component bindings, real managed-product versions, latest-release metadata, update disposition, and `llmops product list/show` inspection.
+- Unified the default CLI and TUI status columns through one shared presentation contract while keeping toolkit/runtime identity separate from managed-product versions.
 - Excluded externally owned tool and service components from stack lifecycle plans while retaining them in stack status; direct lifecycle mutations remain read-only.
 - Changed the media-history template to remove every textual image tool call/result pair, including the most recent truncated result, while preserving native structured vision requests and their Qwen vision placeholders.
 - Added canonical configuration schema version 2 with versioned JSON Schema 2020-12 service templates, constrained UI metadata, one-time v1 migration, and no runtime v1 compatibility reads.

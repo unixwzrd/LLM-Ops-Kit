@@ -39,6 +39,18 @@ HEALTH_STYLES = {
     "not-applicable": "#8b949e",
 }
 
+STATUS_COLUMNS = (
+    ("condition", "CONDITION"),
+    ("lifecycle", "LIFECYCLE"),
+    ("health", "HEALTH"),
+    ("component", "COMPONENT"),
+    ("host", "HOST"),
+    ("execution_user", "RUN AS"),
+    ("driver", "DRIVER"),
+    ("component_version", "VERSION"),
+    ("drift", "DRIFT"),
+)
+
 
 def status_cell_style(field: str, record: dict[str, Any]) -> str:
     """Return a semantic style without hiding independent status dimensions."""
@@ -57,8 +69,11 @@ def status_cell_style(field: str, record: dict[str, Any]) -> str:
         if value in {"", "unknown"}:
             return CONDITION_STYLES["unobserved"]
         return CONDITION_STYLES["attention"]
-    if field == "component_version" and str(record.get("drift", "")) == "stale-runtime":
-        return CONDITION_STYLES["attention"]
+    if field == "component_version":
+        if str(record.get("drift", "")) == "stale-runtime":
+            return CONDITION_STYLES["attention"]
+        if str(record.get("update_state", "")) in {"available", "held", "review"}:
+            return CONDITION_STYLES["attention"]
     if field == "component":
         return CONDITION_STYLES.get(condition, "#f5f7fa")
     return "#f5f7fa"

@@ -18,6 +18,7 @@ Canonical configuration contains:
 ```text
 config.json
 inventory.json
+products.json
 models/*.json
 agents/*.json
 services/*.json
@@ -44,6 +45,41 @@ llmops config display --organization "Example Organization" --site "Local AI Lab
 ```
 
 Textual refresh and theme preferences live separately in `ui.json`. That host-local file is not included in desired-state hashes or reconciled snapshots.
+
+## Product Releases
+
+`products.json` records release identity independently from component lifecycle and LLM-Ops-Kit's immutable runtime version:
+
+```json
+{
+  "schema_version": 1,
+  "products": {
+    "llama-cpp": {
+      "installed_version": "build 1057 / c5a4a0bb8",
+      "latest_version": "rolling",
+      "update_state": "review",
+      "source": "https://github.com/ggml-org/llama.cpp",
+      "last_verified": "2026-07-27",
+      "last_updated": "2026-07-23",
+      "decision": "review upstream before replacement"
+    }
+  },
+  "components": {
+    "local-ai:chat": "llama-cpp",
+    "local-ai:embedding": "llama-cpp"
+  }
+}
+```
+
+Valid update states are `current`, `available`, `held`, `review`, and `unknown`. The compact status table shows the installed product version and highlights versions needing review; latest version, source, verification date, and decision remain in component details, JSON status, and:
+
+```bash
+llmops product list
+llmops product show llama-cpp
+llmops component version local-ai:chat
+```
+
+The product inventory is desired state and is reconciled with the topology. It does not probe or mutate upstream packages by itself.
 
 ## Inventory
 

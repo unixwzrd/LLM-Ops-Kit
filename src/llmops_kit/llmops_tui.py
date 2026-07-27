@@ -1080,18 +1080,10 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
             yield Static("Select a component for details.", id="detail")
 
         def on_mount(self) -> None:
+            from .llmops_ui import STATUS_COLUMNS
+
             table = self.query_one("#components", DataTable)
-            table.add_columns(
-                "Condition",
-                "Lifecycle",
-                "Health",
-                "Component",
-                "Host",
-                "Run as",
-                "Driver",
-                "Version",
-                "Drift",
-            )
+            table.add_columns(*(header.title() for _, header in STATUS_COLUMNS))
             table.focus()
             self._reset_refresh_timer()
             self.action_refresh()
@@ -1133,6 +1125,9 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                     f"Health: {state.get('health', 'unknown')}  "
                     f"Observability: {state.get('observability', 'unknown')}\n"
                     f"Component version: {state.get('component_version') or 'unknown'}  "
+                    f"Product: {state.get('product_id') or 'unknown'}  "
+                    f"Latest: {state.get('latest_version') or 'unknown'}  "
+                    f"Update: {state.get('update_state') or 'unknown'}\n"
                     f"Toolkit version: {state.get('toolkit_version') or 'unknown'}  "
                     f"Drift: {state.get('drift', 'unknown')}\n"
                     f"Desired runtime: {state.get('desired_runtime') or 'unknown'}  "
@@ -1187,19 +1182,11 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
             table = self.query_one("#components", DataTable)
             table.clear()
             if self.view == "components":
+                from .llmops_ui import STATUS_COLUMNS
+
                 for component in self.rows:
                     item = self.status_by_id[component.qualified_id]
-                    cells = (
-                        ("condition", item["condition"]),
-                        ("lifecycle", item["lifecycle"]),
-                        ("health", item["health"]),
-                        ("component", component.qualified_id),
-                        ("host", component.host),
-                        ("execution_user", item.get("execution_user", "")),
-                        ("driver", component.driver),
-                        ("component_version", item.get("component_version", "")),
-                        ("drift", item.get("drift", "")),
-                    )
+                    cells = tuple((field, item.get(field, "")) for field, _ in STATUS_COLUMNS)
                     table.add_row(
                         *(
                             Text(str(value), style=status_cell_style(field, item))

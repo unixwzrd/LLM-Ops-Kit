@@ -60,6 +60,7 @@ try:
     from .llmops_operations import list_records, load_record, record_path
     from .llmops_paths import LlmOpsPaths, resolve_authority_config_home, resolve_paths
     from .llmops_probe import probe_topology
+    from .llmops_products import ProductInventory, ProductInventoryError
     from .llmops_profiles import model_values, service_values
     from .llmops_topology import Topology, TopologyError, load_profile, load_stacks, profile_path, validate_topology
     from .llmops_topology_view import project_topology, render_dot, render_mermaid, render_table
@@ -98,6 +99,7 @@ except ImportError:  # Direct source execution.
     from llmops_operations import list_records, load_record, record_path
     from llmops_paths import LlmOpsPaths, resolve_authority_config_home, resolve_paths
     from llmops_probe import probe_topology
+    from llmops_products import ProductInventory, ProductInventoryError
     from llmops_profiles import model_values, service_values
     from llmops_topology import Topology, TopologyError, load_profile, load_stacks, profile_path, validate_topology
     from llmops_topology_view import project_topology, render_dot, render_mermaid, render_table
@@ -113,6 +115,7 @@ PUBLIC_COMMANDS = {
     "adapter": "List and validate installed lifecycle adapters",
     "template": "Inspect and import versioned service templates",
     "profile": "Create and edit reusable schema-driven profiles",
+    "product": "Inspect installed and available managed-product releases",
     "plan": "Preview dependency-ordered operations",
     "doctor": "Validate configuration and probe hosts and dependencies",
     "config": "Show or reconcile canonical configuration",
@@ -1030,6 +1033,13 @@ def cmd_component_version(args: argparse.Namespace) -> int:
             "host",
             "execution_user",
             "component_version",
+            "product_id",
+            "latest_version",
+            "update_state",
+            "version_source",
+            "version_last_verified",
+            "version_last_updated",
+            "update_decision",
             "toolkit_version",
             "desired_runtime",
             "observed_runtime",
@@ -1039,6 +1049,26 @@ def cmd_component_version(args: argparse.Namespace) -> int:
     }
     emit(payload, json_output=args.json)
     return 1 if payload["runtime_drift"] else 0
+
+
+def cmd_product(args: argparse.Namespace) -> int:
+    """Inspect the reconciled product release inventory."""
+
+    inventory = ProductInventory.load(CURRENT_TOPOLOGY.paths.products_file)
+    if args.product_action == "list":
+        payload = [inventory.products[key].as_dict() for key in sorted(inventory.products)]
+    else:
+        try:
+            payload = inventory.products[args.product_id].as_dict()
+        except KeyError as exc:
+            raise ProductInventoryError(f"product not found: {args.product_id}") from exc
+        payload["components"] = sorted(
+            component
+            for component, product_id in inventory.components.items()
+            if product_id == args.product_id
+        )
+    emit(payload, json_output=args.json)
+    return 0
 
 
 def cmd_component_configure(args: argparse.Namespace) -> int:
@@ -1131,20 +1161,9 @@ def _status_components(selector: Optional[str], *, include_disabled: bool) -> li
 def _human_status(payload: list[dict[str, Any]]) -> None:
     """Render shared status records with semantic text and color."""
 
-    columns = (
-        ("condition", "CONDITION"),
-        ("lifecycle", "LIFECYCLE"),
-        ("desired_lifecycle", "DESIRED"),
-        ("health", "HEALTH"),
-        ("component", "COMPONENT"),
-        ("host", "HOST"),
-        ("execution_user", "RUN_AS"),
-        ("driver", "DRIVER"),
-        ("component_version", "COMPONENT_VERSION"),
-        ("toolkit_version", "TOOLKIT_VERSION"),
-        ("drift", "DRIFT"),
-    )
-    from .llmops_ui import status_cell_style
+    from .llmops_ui import STATUS_COLUMNS, status_cell_style
+
+    columns = STATUS_COLUMNS
 
     table = Table(show_header=True, header_style="bold", box=None, pad_edge=False)
     for _, header in columns:
@@ -1219,16 +1238,9 @@ def _observed_runtime(observation: Any) -> str:
     return matches[-1] if matches else ""
 
 
-def _component_version(component: Any, observation: Any) -> str:
-    """Return the observed component release or an adapter-provided profile version."""
+def _component_version(component: Any, observation: Any, profile: dict[str, Any]) -> str:
+    """Return an adapter-provided product version when inventory is unavailable."""
 
-    observed = _observed_runtime(observation)
-    if observed:
-        return observed
-    try:
-        profile = load_profile(CURRENT_TOPOLOGY.paths, component)
-    except TopologyError:
-        return ""
     if profile.get("template_id") == "rtk":
         match = re.search(
             r"(?:^|\n)rtk\s+([^\s]+)",
@@ -1242,6 +1254,7 @@ def _component_version(component: Any, observation: Any) -> str:
 
 def _inspect_status(components: list[Any], args: argparse.Namespace) -> list[dict[str, Any]]:
     runner = ComponentRunner(CURRENT_TOPOLOGY)
+    product_inventory = ProductInventory.load(CURRENT_TOPOLOGY.paths.products_file)
     enabled = [component for component in components if component.enabled]
     workers = min(max(1, args.workers), max(1, len(enabled)))
     def inspect(component: Any) -> tuple[str, Any, str]:
@@ -1258,6 +1271,11 @@ def _inspect_status(components: list[Any], args: argparse.Namespace) -> list[dic
     desired_states = LifecycleStateStore(CURRENT_TOPOLOGY.paths.lifecycle_state_file).load()
     include_detail = args.verbose or (bool(args.selector) and len(components) == 1)
     for component in components:
+        try:
+            profile = load_profile(CURRENT_TOPOLOGY.paths, component)
+        except TopologyError:
+            profile = {}
+        product = product_inventory.resolve(component, profile)
         observation, error = by_component.get(component.qualified_id, (None, ""))
         if not component.enabled:
             lifecycle = "disabled"
@@ -1302,7 +1320,18 @@ def _inspect_status(components: list[Any], args: argparse.Namespace) -> list[dic
             "profile": component.profile,
             "tags": list(component.tags),
             "returncode": None if result is None else result.returncode,
-            "component_version": "" if observation is None else _component_version(component, observation),
+            "component_version": (
+                product.installed_version
+                if product is not None
+                else "" if observation is None else _component_version(component, observation, profile)
+            ),
+            "product_id": "" if product is None else product.product_id,
+            "latest_version": "" if product is None else product.latest_version,
+            "update_state": "unknown" if product is None else product.update_state,
+            "version_source": "" if product is None else product.source,
+            "version_last_verified": "" if product is None else product.last_verified,
+            "version_last_updated": "" if product is None else product.last_updated,
+            "update_decision": "" if product is None else product.decision,
             **metadata,
             "desired_runtime": desired_runtime,
             "observed_runtime": observed_runtime,
@@ -2020,6 +2049,14 @@ def build_parser() -> argparse.ArgumentParser:
     status.add_argument("--local", action="store_true", help=argparse.SUPPRESS)
     status.set_defaults(func=cmd_status)
 
+    product = sub.add_parser("product")
+    product_sub = product.add_subparsers(dest="product_action", required=True)
+    product_list = product_sub.add_parser("list")
+    product_list.set_defaults(func=cmd_product)
+    product_show = product_sub.add_parser("show")
+    product_show.add_argument("product_id")
+    product_show.set_defaults(func=cmd_product)
+
     host = sub.add_parser("host")
     host_sub = host.add_subparsers(dest="host_action", required=True)
     host_list = host_sub.add_parser("list")
@@ -2314,6 +2351,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         ReconcileError,
         ConfigOperationError,
         TemplateError,
+        ProductInventoryError,
     ) as exc:
         if args.json:
             print(json.dumps({"ok": False, "error": str(exc)}, indent=2, sort_keys=True))
