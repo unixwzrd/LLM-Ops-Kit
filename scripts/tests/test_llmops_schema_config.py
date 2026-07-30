@@ -25,13 +25,23 @@ from llmops_kit.llmops_config_ops import (
 )
 from llmops_kit.llmops_drivers import ComponentRunner
 from llmops_kit.llmops_paths import resolve_paths
-from llmops_kit.llmops_templates import TemplateError, load_template_registry, validate_template_document
+from llmops_kit.llmops_templates import (
+    TemplateError,
+    load_template_registry,
+    parse_schema_value,
+    validate_template_document,
+)
 from llmops_kit.llmops_topology import load_profile
 
 from test_llmops_control import ControlFixture
 
 
 class SchemaConfigurationTests(ControlFixture):
+    def test_schema_value_parser_supports_integer_or_string_fields(self) -> None:
+        schema = {"type": ["integer", "string"]}
+        self.assertEqual(parse_schema_value(schema, "12"), 12)
+        self.assertEqual(parse_schema_value(schema, "auto"), "auto")
+
     def prepare_v1(self) -> None:
         """Convert the canonical fixture into a raw migration-only v1 input."""
 

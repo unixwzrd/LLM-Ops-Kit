@@ -4,6 +4,8 @@
 
 ### Beta release readiness
 
+- Reworked schema-generated Textual component forms into labeled groups with canonical field paths and explicit persistent **Save**, **Save & Restart**, and **Cancel** actions; restart-aware saves use detached operations and leave intentionally stopped components stopped.
+- Prevented unchanged Textual forms from materializing schema defaults, added expected-authority-hash protection to form submissions, and corrected typed parsing for JSON Schema fields whose type is a union such as integer-or-string.
 - Restricted model-proxy chat-template rendering to actual chat-completion requests, recording body-bearing model-discovery calls as diagnostic skips instead of false `No messages provided` template errors.
 - Added correlated, human-readable model response blocks to the rendered-prompt log, reconstructing streamed reasoning, visible content, split tool calls, finish reasons, usage, and timings while the raw log and proxy transport remain byte-for-byte unchanged.
 - Made rendered diagnostics append one atomic request-ID-correlated exchange with the exact template output, reconstructed model response, explicit SSE/HTTP completion boundary, labeled upstream reasoning, and opt-in `-t`/`--show-reasoning` source-reasoning visibility without changing proxy traffic.

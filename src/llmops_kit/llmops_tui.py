@@ -58,6 +58,9 @@ def schema_configure_command(
     component: str,
     assignments: list[str],
     unsets: list[str],
+    *,
+    expected_hash: str = "",
+    restart_affected: bool = False,
 ) -> str:
     """Render one schema-aware component mutation for review and automation."""
 
@@ -66,6 +69,10 @@ def schema_configure_command(
         argv.extend(("--set", assignment))
     for path in unsets:
         argv.extend(("--unset", path))
+    if expected_hash:
+        argv.extend(("--expected-hash", expected_hash))
+    if restart_affected:
+        argv.append("--restart-affected")
     argv.extend(("--apply", "--yes"))
     return shlex.join(argv)
 
@@ -138,14 +145,25 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
 
         BINDINGS = [("escape", "cancel", "Cancel")]
 
-        def __init__(self, command: str, plan: list[dict[str, str]]) -> None:
+        def __init__(
+            self,
+            command: str,
+            plan: list[dict[str, str]],
+            *,
+            title: str = "Confirm operation",
+            confirm_label: str = "Run",
+            confirm_variant: str = "error",
+        ) -> None:
             super().__init__()
             self.command = command
             self.plan = plan
+            self.dialog_title = title
+            self.confirm_label = confirm_label
+            self.confirm_variant = confirm_variant
 
         def compose(self) -> ComposeResult:
             with Vertical(classes="dialog", id="confirm-dialog"):
-                yield Label("Confirm operation", classes="dialog-title")
+                yield Label(self.dialog_title, classes="dialog-title")
                 yield Static(self.command, id="equivalent-command", classes="equivalent-command")
                 yield Static(
                     "\n".join(f"{item['action']}  {item['component']}" for item in self.plan),
@@ -153,7 +171,7 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                 )
                 with Horizontal(classes="dialog-actions"):
                     yield Button("Cancel", id="cancel")
-                    yield Button("Run", id="run", variant="error")
+                    yield Button(self.confirm_label, id="run", variant=self.confirm_variant)
 
         def on_button_pressed(self, event: Any) -> None:
             self.dismiss(event.button.id == "run")
@@ -190,7 +208,7 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
         def action_cancel(self) -> None:
             self.dismiss("cancel")
 
-    class SchemaEditComponent(ModalScreen[Optional[dict[str, list[str]]]]):
+    class SchemaEditComponent(ModalScreen[Optional[dict[str, Any]]]):
         """Generate a component/profile editor from the shared JSON schemas."""
 
         BINDINGS = [("escape", "cancel", "Cancel")]
@@ -236,6 +254,17 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                     provider_template = registry.get(provider.template_id)
                     if provider_template is not None:
                         row["allowed"] = sorted(provider_template.endpoints.get("provides", {}))
+            self.initial_values = [self._initial_value(row) for row in self.rows]
+
+        @staticmethod
+        def _initial_value(row: dict[str, Any]) -> Any:
+            value = row.get("current")
+            if value is None:
+                value = row.get("default")
+            allowed = row.get("allowed")
+            if allowed and value not in allowed:
+                return allowed[0]
+            return value
 
         @staticmethod
         def _display_value(row: dict[str, Any]) -> str:
@@ -252,19 +281,25 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
             with Vertical(classes="dialog schema-dialog", id="schema-edit-dialog"):
                 yield Label(f"Configure {self.component.qualified_id}", classes="dialog-title")
                 yield Static(
-                    "Desired-state edit only. Host changes do not relocate executables, models, or data.",
+                    "Saved changes are persistent and remain active after future restarts. "
+                    "Host changes update desired state only; they do not relocate executables, models, or data.",
                     classes="warning",
                 )
                 with Vertical(id="schema-fields"):
+                    previous_group = ""
                     for index, row in enumerate(self.rows):
-                        label = row["path"] + (" *" if row.get("required") else "")
-                        yield Label(label)
+                        group = str(row.get("group") or "General")
+                        if group != previous_group:
+                            yield Static(group, classes="field-group")
+                            previous_group = group
+                        field_name = row["path"].rsplit(".", 1)[-1].replace("_", " ").title()
+                        label = field_name + (" *" if row.get("required") else "")
+                        yield Label(label, classes="field-label")
+                        yield Static(row["path"], classes="field-path")
                         if row.get("description"):
                             yield Static(str(row["description"]), classes="field-help")
                         widget_id = f"schema-field-{index}"
-                        value = row.get("current")
-                        if value is None:
-                            value = row.get("default")
+                        value = self.initial_values[index]
                         if row.get("type") == "boolean":
                             yield Checkbox("Enabled", value=bool(value), id=widget_id)
                         elif row.get("allowed"):
@@ -278,7 +313,8 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                             yield Static("This field participates in a mutually exclusive constraint.", classes="constraint-help")
                 with Horizontal(classes="dialog-actions"):
                     yield Button("Cancel", id="cancel")
-                    yield Button("Review", id="review", variant="primary")
+                    yield Button("Save", id="save")
+                    yield Button("Save & Restart", id="save-restart", variant="primary")
 
         def on_select_changed(self, event: Any) -> None:
             try:
@@ -317,6 +353,8 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
             if event.button.id == "cancel":
                 self.dismiss(None)
                 return
+            if event.button.id not in {"save", "save-restart"}:
+                return
             assignments: list[str] = []
             unsets: list[str] = []
             for index, row in enumerate(self.rows):
@@ -328,6 +366,7 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                 else:
                     raw = self.query_one(widget_id, Input).value.strip()
                 current = row.get("current")
+                initial = self.initial_values[index]
                 if not raw and current is not None and not row.get("required"):
                     unsets.append(row["path"])
                     continue
@@ -343,10 +382,16 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                     )
                     relative = row["path"].split(".", 1)[1]
                     parsed = parse_schema_value(schema_node(node_schema, relative), raw)
-                if parsed != current:
+                if parsed != initial:
                     encoded = json.dumps(parsed, separators=(",", ":")) if isinstance(parsed, (dict, list)) else str(parsed).lower() if isinstance(parsed, bool) else str(parsed)
                     assignments.append(f"{row['path']}={encoded}")
-            self.dismiss({"assignments": assignments, "unsets": unsets})
+            self.dismiss(
+                {
+                    "assignments": assignments,
+                    "unsets": unsets,
+                    "restart_affected": event.button.id == "save-restart",
+                }
+            )
 
         def action_cancel(self) -> None:
             self.dismiss(None)
@@ -1018,6 +1063,9 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
         #catalog-table { height: 1fr; }
         #catalog-detail { height: 7; border-top: solid #6f8ea3; padding: 1; }
         .field-help { color: #b8c5d1; }
+        .field-group { margin: 1 0 0 0; padding: 0 1; background: #243444; color: #ffffff; text-style: bold; }
+        .field-label { margin-top: 1; color: #f5f7fa; text-style: bold; }
+        .field-path { color: #8aa6ba; }
         .constraint-help { color: #ffd166; margin-bottom: 1; }
         """
         BINDINGS = [
@@ -1143,6 +1191,10 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
 
         async def inspect(self) -> None:
             selected_id = self._selected_id()
+            self.topology = llmops_cli.build_topology(config_home=config_home, inventory=inventory)
+            llmops_cli.CURRENT_TOPOLOGY = self.topology
+            self.desired_topology = llmops_cli.desired_topology(config_home)
+            self._apply_branding()
             args = argparse.Namespace(
                 selector=None,
                 all=True,
@@ -1164,6 +1216,7 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                 "restart": "restarting",
                 "update": "updating",
                 "reconcile": "reconciling",
+                "configure": "reconciling",
             }
             for item in payload:
                 operation = active_operations.get(str(item.get("component", "")))
@@ -1378,31 +1431,51 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                 unsets=changes["unsets"],
                 apply=False,
             )
+            restart_affected = bool(changes["restart_affected"])
+            plan["restart_affected"] = restart_affected
             command = schema_configure_command(
                 component.qualified_id,
                 changes["assignments"],
                 changes["unsets"],
+                expected_hash=plan["authority_hash"],
+                restart_affected=restart_affected,
             )
+            review_plan = [
+                {"action": "save persistent configuration", "component": component.qualified_id}
+            ]
+            if restart_affected:
+                review_plan.extend(
+                    {"action": "restart if running", "component": item}
+                    for item in plan["affected_components"]
+                )
             approved = await self.push_screen_wait(
                 ConfirmOperation(
                     command,
-                    [{"action": "configure", "component": item} for item in plan["affected_components"]],
+                    review_plan,
+                    title="Confirm persistent configuration",
+                    confirm_label="Save & Restart" if restart_affected else "Save",
+                    confirm_variant="primary",
                 )
             )
             if not approved:
                 return
-            result = await asyncio.to_thread(
-                configure_component_schema,
-                self.desired_topology,
-                component.qualified_id,
-                assignments=changes["assignments"],
-                unsets=changes["unsets"],
-                apply=True,
-                expected_hash=plan["authority_hash"],
+            argv = shlex.split(command)[1:]
+            if config_home:
+                argv = ["--config-home", str(self.desired_topology.paths.config_home), *argv]
+            operation = dispatch(
+                self.desired_topology.paths,
+                argv=argv,
+                action="configure",
+                target=component.qualified_id,
+                command=command,
+                plan=review_plan,
+                host=component.host,
             )
-            self.query_one("#detail", Static).update(json.dumps(result, indent=2, sort_keys=True))
-            self.desired_topology = llmops_cli.desired_topology(config_home)
-            await self.inspect()
+            self.query_one("#detail", Static).update(
+                f"Configuration operation queued: {operation['operation_id']}\n{command}\n"
+                "Saved changes are persistent. The operation continues independently if the TUI exits."
+            )
+            self.action_refresh()
 
         def action_edit(self) -> None:
             component = self.selected_component()

@@ -14,7 +14,12 @@ from llmops_kit import llmops_cli
 from llmops_kit.llmops_init import initialize
 from llmops_kit.llmops_executor import MutationPlan, Operation
 from llmops_kit.llmops_paths import resolve_paths
-from llmops_kit.llmops_tui import CONDITION_STYLES, build_application, equivalent_command
+from llmops_kit.llmops_tui import (
+    CONDITION_STYLES,
+    build_application,
+    equivalent_command,
+    schema_configure_command,
+)
 from llmops_kit.llmops_ui import (
     UiPreferences,
     load_ui_preferences,
@@ -29,6 +34,24 @@ class TuiContractTests(unittest.TestCase):
             equivalent_command("restart", "example:model"),
             "llmops component restart example:model",
         )
+
+    def test_schema_commands_distinguish_save_from_save_and_restart(self) -> None:
+        saved = schema_configure_command(
+            "example:model",
+            ["profile.runtime.port=11434"],
+            [],
+            expected_hash="abc123",
+        )
+        restarted = schema_configure_command(
+            "example:model",
+            ["profile.runtime.port=11434"],
+            [],
+            expected_hash="abc123",
+            restart_affected=True,
+        )
+        self.assertIn("--expected-hash abc123", saved)
+        self.assertNotIn("--restart-affected", saved)
+        self.assertIn("--restart-affected", restarted)
 
     def test_shared_status_preserves_authority_only_semantics(self) -> None:
         catalog = {
@@ -100,6 +123,68 @@ class TuiContractTests(unittest.TestCase):
 
 
 class TuiApplicationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_schema_editor_saves_persistently_and_optionally_restarts(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            paths = resolve_paths(
+                {
+                    "HOME": str(root),
+                    "LLMOPS_CONFIG_HOME": str(root / "config"),
+                    "LLMOPS_DATA_HOME": str(root / "data"),
+                    "LLMOPS_STATE_HOME": str(root / "state"),
+                    "LLMOPS_CACHE_HOME": str(root / "cache"),
+                }
+            )
+            initialize(paths, preset="single-host", user="operator")
+            app = build_application(str(paths.config_home), None)
+            queued = {"operation_id": "20260730T120000Z-abcdef123456", "state": "queued"}
+            with mock.patch("llmops_kit.llmops_tui.dispatch", return_value=queued) as detached:
+                async with app.run_test(size=(140, 44)) as pilot:
+                    await pilot.pause(1)
+                    await pilot.click("#action-configure")
+                    await pilot.pause()
+                    editor = app.screen
+                    self.assertIn("persistent", str(editor.query_one(".warning").render()).lower())
+                    self.assertTrue(editor.query(".field-group"))
+                    self.assertIsNotNone(editor.query_one("#save"))
+                    self.assertIsNotNone(editor.query_one("#save-restart"))
+                    enabled_index = next(
+                        index
+                        for index, row in enumerate(editor.rows)
+                        if row["path"] == "component.enabled"
+                    )
+                    editor.query_one(f"#schema-field-{enabled_index}").value = not bool(
+                        editor.initial_values[enabled_index]
+                    )
+                    await pilot.click("#save")
+                    await pilot.pause()
+                    command = str(app.screen.query_one("#equivalent-command").render())
+                    self.assertNotIn("--restart-affected", command)
+                    self.assertIn("--expected-hash", command)
+                    await pilot.click("#cancel")
+                    await pilot.pause()
+
+                    await pilot.click("#action-configure")
+                    await pilot.pause()
+                    editor = app.screen
+                    enabled_index = next(
+                        index
+                        for index, row in enumerate(editor.rows)
+                        if row["path"] == "component.enabled"
+                    )
+                    editor.query_one(f"#schema-field-{enabled_index}").value = not bool(
+                        editor.initial_values[enabled_index]
+                    )
+                    await pilot.click("#save-restart")
+                    await pilot.pause()
+                    command = str(app.screen.query_one("#equivalent-command").render())
+                    self.assertIn("--restart-affected", command)
+                    self.assertIn("Save & Restart", str(app.screen.query_one("#run").render()))
+                    await pilot.click("#run")
+                    await pilot.pause()
+                    self.assertTrue(detached.called)
+                    self.assertIn("--restart-affected", detached.call_args.kwargs["argv"])
+
     async def test_headless_views_and_mutation_cancellation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

@@ -66,6 +66,8 @@ Independent remote edits are reported as drift and are never merged automaticall
 
 Versioned JSON Schema service templates drive CLI validation and Textual forms. A trusted peer forwards schema mutations and the TUI to the designated desired-state authority rather than editing a deployed snapshot.
 
+The Textual editor groups schema fields and treats accepted edits as persistent desired state. **Save** writes without disruption; **Save & Restart** writes and restarts only affected components that are currently intended to run; **Cancel** makes no change. Both save actions show the equivalent CLI command and complete impact plan before confirmation.
+
 ## Documentation
 
 - [Quickstart](docs/QUICKSTART.md)

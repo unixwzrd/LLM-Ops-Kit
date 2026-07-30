@@ -1,7 +1,7 @@
 # Textual Console
 
 **Created**: 2026-07-20
-**Updated**: 2026-07-21
+**Updated**: 2026-07-30
 
 Back: [Documentation index](./INDEX.md)
 
@@ -57,6 +57,14 @@ Common lifecycle and navigation actions are also clickable in the action bar. `E
 Every lifecycle or configuration mutation displays its ordered plan and equivalent `llmops` command before confirmation. Confirmed long-running lifecycle and toolkit-update actions are recorded under the operational state root and executed by a detached short-lived worker. The TUI shows `starting`, `stopping`, `restarting`, `updating`, or `reconciling` while the operation is active. Exiting the TUI does not cancel or wait for the operation; use `llmops operation list` and `llmops operation show` to inspect it.
 
 Automatic refresh defaults to 15 seconds and pauses while a modal, edit, confirmation, or mutation is active. Local preferences are stored in `~/.config/llm-ops/ui.json` and are excluded from reconciled configuration identity. Shared organization and site labels are stored in canonical `config.json`, validated, backed up, and reconciled normally.
+
+The component editor groups related schema fields and shows both a friendly label and the exact canonical field path. Every accepted edit is persistent:
+
+- **Save** validates and stores the configuration without restarting anything.
+- **Save & Restart** validates and stores the configuration, then restarts only affected components that are currently intended to run. Intentionally stopped components remain stopped.
+- **Cancel** closes the editor without writing or restarting anything.
+
+The review dialog shows the exact equivalent CLI command, changed values, affected components, and restart impact before either save action. Merely opening and saving an unchanged form does not materialize template defaults or create configuration drift.
 
 The component editor changes desired state only. Changing a component's host does not provision its executable, transfer data, or perform a service cutover.
 

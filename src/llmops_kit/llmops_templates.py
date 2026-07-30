@@ -257,28 +257,33 @@ def parse_schema_value(node: Mapping[str, Any], raw: str) -> Any:
     """Parse one CLI value according to its declared JSON Schema type."""
 
     declared = node.get("type")
-    try:
-        if declared == "boolean":
-            if raw.lower() not in {"true", "false"}:
-                raise ValueError("expected true or false")
-            value: Any = raw.lower() == "true"
-        elif declared == "integer":
-            value = int(raw)
-        elif declared == "number":
-            value = float(raw)
-        elif declared in {"array", "object"}:
-            value = json.loads(raw)
-        elif declared == "null":
-            if raw.lower() != "null":
-                raise ValueError("expected null")
-            value = None
-        else:
-            value = raw
-        Draft202012Validator(node).validate(value)
-        return value
-    except (ValueError, json.JSONDecodeError, ValidationError) as exc:
-        message = exc.message if isinstance(exc, ValidationError) else str(exc)
-        raise TemplateError(f"invalid value {raw!r}: {message}") from exc
+    choices = declared if isinstance(declared, list) else [declared]
+    errors: list[Exception] = []
+    for candidate in choices:
+        try:
+            if candidate == "boolean":
+                if raw.lower() not in {"true", "false"}:
+                    raise ValueError("expected true or false")
+                value: Any = raw.lower() == "true"
+            elif candidate == "integer":
+                value = int(raw)
+            elif candidate == "number":
+                value = float(raw)
+            elif candidate in {"array", "object"}:
+                value = json.loads(raw)
+            elif candidate == "null":
+                if raw.lower() != "null":
+                    raise ValueError("expected null")
+                value = None
+            else:
+                value = raw
+            Draft202012Validator(node).validate(value)
+            return value
+        except (ValueError, json.JSONDecodeError, ValidationError) as exc:
+            errors.append(exc)
+    exc = errors[-1]
+    message = exc.message if isinstance(exc, ValidationError) else str(exc)
+    raise TemplateError(f"invalid value {raw!r}: {message}") from exc
 
 
 def set_dotted(document: dict[str, Any], path: str, value: Any) -> None:
