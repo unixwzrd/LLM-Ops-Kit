@@ -22,6 +22,7 @@ MODEL_PROXY_PYTHON_BIN="${MODEL_PROXY_PYTHON_BIN:-${LLMOPS_PYTHON_BIN:-}}"
 MODEL_PROXY_LOG_ROTATE_SECONDS="${MODEL_PROXY_LOG_ROTATE_SECONDS:-86400}"
 MODEL_PROXY_LOG_ROTATE_KEEP="${MODEL_PROXY_LOG_ROTATE_KEEP:-5}"
 MODEL_PROXY_CHAT_TEMPLATE="${MODEL_PROXY_CHAT_TEMPLATE:-}"
+MODEL_PROXY_SHOW_REASONING="${MODEL_PROXY_SHOW_REASONING:-false}"
 
 # Accept GNU-style action aliases (e.g. `model-proxy --status`).
 case "$action" in
@@ -278,6 +279,14 @@ start_proxy() {
   if [[ -n "$MODEL_PROXY_CHAT_TEMPLATE" ]] && ! arg_value --chat-template >/dev/null 2>&1; then
     extra_args=(--chat-template "$MODEL_PROXY_CHAT_TEMPLATE" "${extra_args[@]}")
   fi
+
+  case "${MODEL_PROXY_SHOW_REASONING,,}" in
+    1|true|yes|on)
+      if ! arg_value -t --show-reasoning >/dev/null 2>&1 && ! arg_value --show-source-reasoning >/dev/null 2>&1; then
+        extra_args=(-t "${extra_args[@]}")
+      fi
+      ;;
+  esac
 
   nohup "${proxy_cmd[@]}" "${extra_args[@]}" > "$LOG_OUT" 2> "$LOG_ERR" &
   pid="$!"

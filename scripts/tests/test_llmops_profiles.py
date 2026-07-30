@@ -47,6 +47,22 @@ class ProfileTests(unittest.TestCase):
             {"MODEL_PROXY_LISTEN_PORT": "11434"},
         )
 
+    def test_model_proxy_reasoning_diagnostic_is_schema_bound(self) -> None:
+        values = service_values(
+            "model-proxy",
+            {
+                "runtime": {
+                    "listen_host": "127.0.0.1",
+                    "listen_port": 11434,
+                    "upstream_host": "model.local",
+                    "upstream_port": 11434,
+                },
+                "logging": {"show_reasoning": True},
+            },
+        )
+
+        self.assertEqual(values["MODEL_PROXY_SHOW_REASONING"], "1")
+
     def test_runtime_environment_references_are_resolved_explicitly(self) -> None:
         self.assertEqual(resolve_references({"API_KEY": "env:MODEL_API_KEY"}, {"MODEL_API_KEY": "value"}), {"API_KEY": "value"})
         with self.assertRaisesRegex(ProfileError, "unresolved environment reference"):

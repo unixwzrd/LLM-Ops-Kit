@@ -201,7 +201,12 @@ def _pretty_tool_arguments(arguments: str) -> str:
     return json.dumps(parsed, ensure_ascii=False, indent=2)
 
 
-def format_model_response_for_diagnostics(response_text: str | None, response_json: Any) -> str:
+def format_model_response_for_diagnostics(
+    response_text: str | None,
+    response_json: Any,
+    *,
+    transport_complete: bool = True,
+) -> str:
     """Render OpenAI JSON or SSE as a compact, human-readable model exchange."""
 
     events, mode = _response_events(response_text, response_json)
@@ -257,7 +262,15 @@ def format_model_response_for_diagnostics(response_text: str | None, response_js
     if not choices:
         return response_text or json.dumps(response_json, ensure_ascii=False, indent=2)
 
-    lines = [f"[model response: {mode}]", ""]
+    if not transport_complete:
+        boundary = "incomplete transport"
+    elif mode == "stream" and response_text and any(
+        line.strip() == "data: [DONE]" for line in response_text.splitlines()
+    ):
+        boundary = "SSE [DONE]"
+    else:
+        boundary = "HTTP response complete"
+    lines = [f"[model response: {mode}]", f"[response boundary: {boundary}]", ""]
     multiple_choices = len(choices) > 1
     for index in sorted(choices):
         choice = choices[index]
@@ -265,7 +278,15 @@ def format_model_response_for_diagnostics(response_text: str | None, response_js
             lines.extend([f"[choice {index}]", ""])
         reasoning = "".join(choice["reasoning"])
         if reasoning:
-            lines.extend(["<think>", reasoning, "</think>", ""])
+            lines.extend(
+                [
+                    "[model reasoning: returned by upstream]",
+                    "<think>",
+                    reasoning,
+                    "</think>",
+                    "",
+                ]
+            )
         content = "".join(choice["content"])
         if content:
             lines.extend([content, ""])
@@ -284,6 +305,53 @@ def format_model_response_for_diagnostics(response_text: str | None, response_js
     if timings is not None:
         lines.extend(["[timings]", json.dumps(timings, ensure_ascii=False, indent=2), ""])
     return "\n".join(lines).rstrip()
+
+
+def format_source_reasoning_for_diagnostics(
+    payload: Any,
+    rendered_prompt: str | None,
+) -> str | None:
+    """Describe request-history reasoning without changing the rendered prompt."""
+
+    if not isinstance(payload, dict) or not isinstance(payload.get("messages"), list):
+        return None
+
+    sections: list[str] = [
+        "[source reasoning diagnostic: not sent upstream by this diagnostic]",
+        "[the selected chat template controls whether each source appears in the rendered prompt]",
+        "",
+    ]
+    found = False
+    for index, message in enumerate(payload["messages"]):
+        if not isinstance(message, dict) or message.get("role") != "assistant":
+            continue
+        reasoning = ""
+        source = ""
+        for key in ("reasoning_content", "reasoning", "analysis"):
+            value = message.get(key)
+            if isinstance(value, str) and value.strip():
+                reasoning = value.strip()
+                source = key
+                break
+        if not reasoning:
+            content = message.get("content")
+            if isinstance(content, str) and "<think>" in content and "</think>" in content:
+                reasoning = content.split("<think>", 1)[1].split("</think>", 1)[0].strip()
+                source = "content:<think>"
+        if not reasoning:
+            continue
+        found = True
+        visibility = (
+            "present" if rendered_prompt is not None and reasoning in rendered_prompt else "omitted"
+        )
+        sections.extend(
+            [
+                f"[assistant message {index}; source={source}; rendered_prompt={visibility}]",
+                reasoning,
+                "",
+            ]
+        )
+    return "\n".join(sections).rstrip() if found else None
 
 
 def _normalize_tool_call_arguments(value: Any) -> Any:
@@ -421,6 +489,19 @@ def render_input_payloads(args: argparse.Namespace) -> int:
                 "RENDERED_PROMPT",
                 rendered_prompt,
             )
+            if args.show_source_reasoning:
+                source_reasoning = format_source_reasoning_for_diagnostics(
+                    payload,
+                    rendered_prompt,
+                )
+                if source_reasoning:
+                    helper._write_framed_log(
+                        rendered_prompt_log_path,
+                        ts,
+                        request_id,
+                        f"SOURCE_REASONING_DIAGNOSTIC request_id={request_id}",
+                        source_reasoning,
+                    )
         elif chat_template_path and rendered_prompt_error:
             helper._write_framed_log(
                 rendered_prompt_log_path,
@@ -585,6 +666,7 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
     raw_request_log_path: Path | None = None
     rendered_prompt_log_path: Path | None = None
     raw_response_log_path: Path | None = None
+    show_source_reasoning: bool = False
     log_rotate_seconds: int = 86400
     log_rotate_keep: int = 5
     _log_writers: dict[str, RotatingLogWriter] = {}
@@ -653,6 +735,7 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
         upstream_url = urljoin(self.upstream_base.rstrip("/") + "/", self.path.lstrip("/"))
         rendered_prompt: str | None = None
         rendered_prompt_error: str | None = None
+        source_reasoning: str | None = None
 
         render_eligible, render_reason = classify_chat_render_request(
             self.command,
@@ -667,6 +750,11 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
                 chat_template_error=self.chat_template_error,
                 chat_template_max_chars=self.chat_template_max_chars,
             )
+            if self.show_source_reasoning and rendered_prompt is not None:
+                source_reasoning = format_source_reasoning_for_diagnostics(
+                    req_json,
+                    rendered_prompt,
+                )
 
         request_text_log = req_text
 
@@ -695,15 +783,7 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
             "RAW_REQUEST",
             request_text_log,
         )
-        if self.chat_template_path and rendered_prompt is not None:
-            self._write_framed_log(
-                self.rendered_prompt_log_path,
-                request_start_ts,
-                request_id,
-                "RENDERED_PROMPT",
-                rendered_prompt,
-            )
-        elif self.chat_template_path and rendered_prompt_error:
+        if self.chat_template_path and rendered_prompt_error:
             self._write_framed_log(
                 self.rendered_prompt_log_path,
                 request_start_ts,
@@ -738,6 +818,7 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
         resp_headers: dict[str, str] = {}
         error_text: str | None = None
         client_disconnected = False
+        upstream_eof = False
         resp_capture = bytearray()
 
         def _capture_chunk(chunk: bytes) -> None:
@@ -760,6 +841,7 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
                 while True:
                     chunk = resp.read(self.stream_chunk_size)
                     if not chunk:
+                        upstream_eof = True
                         break
                     _capture_chunk(chunk)
                     try:
@@ -841,13 +923,24 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
             ts_end=response_end_ts,
         )
         if self.chat_template_path and render_eligible:
-            diagnostic_response = format_model_response_for_diagnostics(resp_text, resp_json)
+            diagnostic_response = format_model_response_for_diagnostics(
+                resp_text,
+                resp_json,
+                transport_complete=upstream_eof and not client_disconnected,
+            )
+            exchange_parts = [
+                "[rendered prompt: exact template output]",
+                rendered_prompt or "[rendered prompt unavailable]",
+            ]
+            if source_reasoning:
+                exchange_parts.extend(["", source_reasoning])
+            exchange_parts.extend(["", "[upstream model response]", diagnostic_response])
             self._write_framed_log(
                 self.rendered_prompt_log_path,
                 request_start_ts,
                 request_id,
-                f"MODEL_RESPONSE request_id={request_id} status={status}",
-                diagnostic_response,
+                f"MODEL_EXCHANGE request_id={request_id} status={status}",
+                "\n".join(exchange_parts),
                 ts_end=response_end_ts,
             )
 
@@ -940,6 +1033,14 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--rendered-prompt-log", default=f"{default_log_dir}/model-proxy.rendered.log", help="Optional plain-text framed log path for rendered_prompt per request_start")
     p.add_argument("--raw-response-log", help="Optional plain-text framed log path for response body per request_end")
     p.add_argument(
+        "-t",
+        "--show-reasoning",
+        "--show-source-reasoning",
+        dest="show_source_reasoning",
+        action="store_true",
+        help="Log assistant reasoning from request history in a separate diagnostic-only frame",
+    )
+    p.add_argument(
         "--log-rotate-seconds",
         type=int,
         default=int(os.environ.get("MODEL_PROXY_LOG_ROTATE_SECONDS", "86400")),
@@ -1002,6 +1103,7 @@ def main() -> int:
     ProxyTapHandler.raw_request_log_path = raw_request_log_path
     ProxyTapHandler.rendered_prompt_log_path = Path(os.path.expanduser(args.rendered_prompt_log)) if args.rendered_prompt_log else None
     ProxyTapHandler.raw_response_log_path = raw_response_log_path
+    ProxyTapHandler.show_source_reasoning = bool(args.show_source_reasoning)
 
     if args.chat_template:
         (

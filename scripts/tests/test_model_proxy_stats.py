@@ -7,6 +7,8 @@ import json
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import sys
+import tempfile
+from types import SimpleNamespace
 
 SCRIPTS_DIR = Path(__file__).resolve().parents[1]
 if str(SCRIPTS_DIR) not in sys.path:
@@ -91,6 +93,79 @@ class ModelProxyStatsTests(unittest.TestCase):
         self.assertIsInstance(
             payload["messages"][0]["tool_calls"][0]["function"]["arguments"], str
         )
+
+    def test_source_reasoning_diagnostic_reports_template_visibility(self) -> None:
+        payload = {
+            "messages": [
+                {
+                    "role": "assistant",
+                    "reasoning_content": "preserved reasoning",
+                    "content": "first answer",
+                },
+                {
+                    "role": "assistant",
+                    "content": "<think>omitted reasoning</think>second answer",
+                },
+            ]
+        }
+
+        diagnostic = model_proxy_tap.format_source_reasoning_for_diagnostics(
+            payload,
+            "rendered prompt with preserved reasoning",
+        )
+
+        self.assertIsNotNone(diagnostic)
+        self.assertIn("not sent upstream by this diagnostic", diagnostic)
+        self.assertIn("source=reasoning_content; rendered_prompt=present", diagnostic)
+        self.assertIn("source=content:<think>; rendered_prompt=omitted", diagnostic)
+        self.assertIn("omitted reasoning", diagnostic)
+
+    def test_render_input_can_log_source_reasoning_diagnostic(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            payload_path = root / "payload.json"
+            template_path = root / "template.jinja"
+            rendered_log = root / "rendered.log"
+            payload_path.write_text(
+                json.dumps(
+                    {
+                        "messages": [
+                            {
+                                "role": "assistant",
+                                "reasoning_content": "offline private reasoning",
+                                "content": "answer",
+                            },
+                            {"role": "user", "content": "continue"},
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            template_path.write_text(
+                "{{ messages[-1].content }}",
+                encoding="utf-8",
+            )
+            args = SimpleNamespace(
+                log=str(root / "proxy.ndjson"),
+                rendered_prompt_log=str(rendered_log),
+                raw_log=None,
+                raw_request_log=str(root / "raw.log"),
+                raw_response_log=None,
+                chat_template=str(template_path),
+                chat_template_max_chars=0,
+                log_rotate_seconds=0,
+                log_rotate_keep=0,
+                log_fsync=False,
+                render_input=str(payload_path),
+                show_source_reasoning=True,
+            )
+
+            self.assertEqual(model_proxy_tap.render_input_payloads(args), 0)
+
+            diagnostic_log = rendered_log.read_text(encoding="utf-8")
+            self.assertIn("SOURCE_REASONING_DIAGNOSTIC", diagnostic_log)
+            self.assertIn("rendered_prompt=omitted", diagnostic_log)
+            self.assertIn("offline private reasoning", diagnostic_log)
 
     def test_render_prompt_from_payload_uses_normalized_tool_call_arguments(self) -> None:
         payload = {
@@ -558,6 +633,7 @@ class ProxyTapPassthroughTests(unittest.TestCase):
         Handler.chat_template_max_chars = 200000
         Handler.chat_template_renderer = renderer
         Handler.chat_template_error = None
+        Handler.show_source_reasoning = False
         Handler.raw_request_log_path = log_dir / "proxy.raw.log"
         Handler.rendered_prompt_log_path = log_dir / "proxy.rendered.log"
         Handler.raw_response_log_path = log_dir / "proxy.raw.log"
@@ -586,6 +662,7 @@ class ProxyTapPassthroughTests(unittest.TestCase):
                 f"http://127.0.0.1:{upstream.server_port}",
                 FakeRenderer(),
             )
+            proxy_handler.show_source_reasoning = True
             proxy, proxy_thread = self._start_server(proxy_handler)
             self.addCleanup(proxy.shutdown)
             self.addCleanup(proxy.server_close)
@@ -595,6 +672,7 @@ class ProxyTapPassthroughTests(unittest.TestCase):
                 "messages": [
                     {
                         "role": "assistant",
+                        "reasoning_content": "historical reasoning",
                         "tool_calls": [
                             {
                                 "type": "function",
@@ -631,6 +709,8 @@ class ProxyTapPassthroughTests(unittest.TestCase):
 
             rendered_log = (log_dir / "proxy.rendered.log").read_text(encoding="utf-8")
             self.assertIn("rendered:dict:print('hi')", rendered_log)
+            self.assertIn("source=reasoning_content; rendered_prompt=omitted", rendered_log)
+            self.assertIn("historical reasoning", rendered_log)
 
     def test_response_body_passes_through_unchanged_and_jsonl_stays_raw(self) -> None:
         _CaptureHandler.received_bodies = []
@@ -691,11 +771,18 @@ class ProxyTapPassthroughTests(unittest.TestCase):
             self.assertIn(upstream_response.decode("utf-8"), raw_log)
 
             rendered_log = (log_dir / "proxy.rendered.log").read_text(encoding="utf-8")
-            self.assertIn("=== RENDERED_PROMPT START", rendered_log)
-            self.assertIn("=== MODEL_RESPONSE request_id=", rendered_log)
+            self.assertIn("=== MODEL_EXCHANGE request_id=", rendered_log)
             self.assertIn("status=200 START", rendered_log)
+            self.assertIn("[rendered prompt: exact template output]", rendered_log)
+            self.assertIn("rendered only", rendered_log)
+            self.assertIn("[upstream model response]", rendered_log)
             self.assertIn("[model response: json]", rendered_log)
+            self.assertIn("[response boundary: HTTP response complete]", rendered_log)
             self.assertIn("plain upstream response", rendered_log)
+            self.assertLess(
+                rendered_log.index("[rendered prompt: exact template output]"),
+                rendered_log.index("[upstream model response]"),
+            )
             self.assertNotIn(upstream_response.decode("utf-8"), rendered_log)
 
     def test_non_chat_request_is_not_rendered_as_a_template_error(self) -> None:
@@ -741,7 +828,7 @@ class ProxyTapPassthroughTests(unittest.TestCase):
             self.assertIn("RENDER_SKIPPED method=POST path=/api/show", rendered_log)
             self.assertIn("non-chat request", rendered_log)
             self.assertNotIn("TEMPLATE_ERROR", rendered_log)
-            self.assertNotIn("MODEL_RESPONSE", rendered_log)
+            self.assertNotIn("MODEL_EXCHANGE", rendered_log)
 
     def test_streaming_model_response_is_logged_without_rewriting(self) -> None:
         _CaptureHandler.received_bodies = []
@@ -788,6 +875,8 @@ class ProxyTapPassthroughTests(unittest.TestCase):
 
             rendered_log = (log_dir / "proxy.rendered.log").read_text(encoding="utf-8")
             self.assertIn("[model response: stream]", rendered_log)
+            self.assertIn("[response boundary: SSE [DONE]]", rendered_log)
+            self.assertIn("[model reasoning: returned by upstream]", rendered_log)
             self.assertIn("<think>\nthinking\n</think>", rendered_log)
             self.assertIn('<tool_call name="terminal" id="call-1">', rendered_log)
             self.assertIn('"command": "echo hi"', rendered_log)

@@ -30,12 +30,21 @@ Render mode is an advanced diagnostic on the host that owns the proxy component:
 ~/.local/llm-ops/bin/model-proxy render --input <payload.json> --chat-template <template.jinja>
 ```
 
+Model responses in the rendered diagnostic log label reasoning returned by the
+upstream model separately from visible response content and tool calls. To audit
+historical assistant reasoning supplied by a client, start the proxy with
+`-t`, `--show-reasoning`, or `--show-source-reasoning`. This adds a
+diagnostic-only section showing whether each source reasoning block appears in
+the selected template output. It does not add reasoning to the rendered prompt,
+alter proxy traffic, or change the verbatim raw request and response logs.
+
 This internal driver command writes the same raw and rendered diagnostic artifacts without starting the listener. Use `-` as the input path to read JSON from standard input.
 
 ## Traffic Behavior
 
 - The original request body is always forwarded byte-for-byte unchanged.
 - A chat template creates derived logging artifacts; it does not rewrite upstream traffic.
+- Each completed rendered-log exchange contains one request ID, the exact template output, the reconstructed model response, and an explicit SSE or HTTP response boundary.
 - The proxy has no request-rewriting mode. Context optimization belongs in the model's selected chat template.
 - Logs may contain prompts and responses and must be protected as operational data.
 

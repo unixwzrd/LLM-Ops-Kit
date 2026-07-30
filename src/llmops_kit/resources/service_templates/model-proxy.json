@@ -26,11 +26,12 @@
       "template": {"type": "object", "properties": {"path": {"type": "string", "x-llmops-ui": {"group": "Prompt", "order": 10, "widget": "path"}}}},
       "logging": {"type": "object", "properties": {
         "rotate_seconds": {"type": "integer", "minimum": 60, "default": 86400, "x-llmops-ui": {"group": "Logging", "order": 10, "widget": "duration"}},
-        "rotate_keep": {"type": "integer", "minimum": 1, "default": 5, "x-llmops-ui": {"group": "Logging", "order": 20, "widget": "number"}}
+        "rotate_keep": {"type": "integer", "minimum": 1, "default": 5, "x-llmops-ui": {"group": "Logging", "order": 20, "widget": "number"}},
+        "show_reasoning": {"type": "boolean", "default": false, "description": "Log source assistant reasoning in diagnostic-only rendered exchanges", "x-llmops-ui": {"group": "Logging", "order": 30, "widget": "checkbox"}}
       }}
     }
   },
-  "defaults": {"schema_version": 2, "template_id": "model-proxy", "name": "model-proxy", "runtime": {"listen_host": "127.0.0.1", "listen_port": 11434, "upstream_host": "127.0.0.1", "upstream_port": 11434}, "logging": {"rotate_seconds": 86400, "rotate_keep": 5}},
+  "defaults": {"schema_version": 2, "template_id": "model-proxy", "name": "model-proxy", "runtime": {"listen_host": "127.0.0.1", "listen_port": 11434, "upstream_host": "127.0.0.1", "upstream_port": 11434}, "logging": {"rotate_seconds": 86400, "rotate_keep": 5, "show_reasoning": false}},
   "bindings": {"resolver": "model-proxy"},
   "endpoints": {"provides": {"openai": {"scheme": "http", "host_path": "runtime.listen_host", "port_path": "runtime.listen_port"}}, "requires": {"upstream": {"protocol": "openai", "host_path": "runtime.upstream_host", "port_path": "runtime.upstream_port", "lifecycle_dependency": true}}},
   "logs": {"service": {}, "raw-request": {}, "rendered-prompt": {}, "raw-response": {}},

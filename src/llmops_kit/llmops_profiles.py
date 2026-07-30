@@ -165,6 +165,7 @@ def service_values(name: str, profile: dict[str, Any]) -> dict[str, str]:
                 "MODEL_PROXY_CHAT_TEMPLATE": template.get("path"),
                 "MODEL_PROXY_LOG_ROTATE_SECONDS": logging.get("rotate_seconds"),
                 "MODEL_PROXY_LOG_ROTATE_KEEP": logging.get("rotate_keep"),
+                "MODEL_PROXY_SHOW_REASONING": _bool(logging.get("show_reasoning", False)),
             }
         )
     if name == "tts-bridge":
