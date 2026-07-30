@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import os
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -257,6 +258,19 @@ class InstallerTests(unittest.TestCase):
             )
             self.assertEqual(tui.returncode, 2)
             self.assertIn("Textual is not installed", tui.stdout)
+
+    def test_shipped_shell_scripts_are_compatible_with_macos_bash(self) -> None:
+        unsupported_case_expansion = re.compile(r"\$\{[^}\n]+(?:,,|\^\^)[^}\n]*\}")
+        for path in (REPO_ROOT / "scripts").rglob("*"):
+            if not path.is_file():
+                continue
+            text = path.read_text(encoding="utf-8", errors="ignore")
+            if not text.startswith("#!") or "bash" not in text.splitlines()[0]:
+                continue
+            self.assertIsNone(
+                unsupported_case_expansion.search(text),
+                f"{path.relative_to(REPO_ROOT)} uses Bash 4 case expansion",
+            )
 
     def test_model_restart_archives_existing_log(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

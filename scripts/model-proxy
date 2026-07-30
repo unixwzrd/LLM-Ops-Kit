@@ -280,8 +280,8 @@ start_proxy() {
     extra_args=(--chat-template "$MODEL_PROXY_CHAT_TEMPLATE" "${extra_args[@]}")
   fi
 
-  case "${MODEL_PROXY_SHOW_REASONING,,}" in
-    1|true|yes|on)
+  case "$MODEL_PROXY_SHOW_REASONING" in
+    1|true|TRUE|True|yes|YES|Yes|on|ON|On)
       if ! arg_value -t --show-reasoning >/dev/null 2>&1 && ! arg_value --show-source-reasoning >/dev/null 2>&1; then
         extra_args=(-t "${extra_args[@]}")
       fi
