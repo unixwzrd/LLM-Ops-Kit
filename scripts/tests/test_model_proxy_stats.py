@@ -694,7 +694,9 @@ class ProxyTapPassthroughTests(unittest.TestCase):
             self.assertIn("=== RENDERED_PROMPT START", rendered_log)
             self.assertIn("=== MODEL_RESPONSE request_id=", rendered_log)
             self.assertIn("status=200 START", rendered_log)
-            self.assertIn(upstream_response.decode("utf-8"), rendered_log)
+            self.assertIn("[model response: json]", rendered_log)
+            self.assertIn("plain upstream response", rendered_log)
+            self.assertNotIn(upstream_response.decode("utf-8"), rendered_log)
 
     def test_non_chat_request_is_not_rendered_as_a_template_error(self) -> None:
         _CaptureHandler.received_bodies = []
@@ -745,7 +747,8 @@ class ProxyTapPassthroughTests(unittest.TestCase):
         _CaptureHandler.received_bodies = []
         upstream_response = (
             b'data: {"choices":[{"delta":{"reasoning_content":"thinking"}}]}\n\n'
-            b'data: {"choices":[{"delta":{"tool_calls":[{"function":{"name":"terminal"}}]}}]}\n\n'
+            b'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call-1","function":{"name":"ter","arguments":"{\\"command\\":\\"ec"}}]}}]}\n\n'
+            b'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"name":"minal","arguments":"ho hi\\"}"}}]},"finish_reason":"tool_calls"}]}\n\n'
             b'data: [DONE]\n\n'
         )
         _CaptureHandler.response_body = upstream_response
@@ -784,9 +787,15 @@ class ProxyTapPassthroughTests(unittest.TestCase):
                 self.assertEqual(response.read(), upstream_response)
 
             rendered_log = (log_dir / "proxy.rendered.log").read_text(encoding="utf-8")
-            self.assertIn(upstream_response.decode("utf-8"), rendered_log)
-            self.assertIn('"reasoning_content":"thinking"', rendered_log)
-            self.assertIn('"name":"terminal"', rendered_log)
+            self.assertIn("[model response: stream]", rendered_log)
+            self.assertIn("<think>\nthinking\n</think>", rendered_log)
+            self.assertIn('<tool_call name="terminal" id="call-1">', rendered_log)
+            self.assertIn('"command": "echo hi"', rendered_log)
+            self.assertIn("[finish_reason: tool_calls]", rendered_log)
+            self.assertNotIn(upstream_response.decode("utf-8"), rendered_log)
+
+            raw_log = (log_dir / "proxy.raw.log").read_text(encoding="utf-8")
+            self.assertIn(upstream_response.decode("utf-8"), raw_log)
 
     def test_no_proxy_added_truncation_markers_in_logs(self) -> None:
         _CaptureHandler.received_bodies = []

@@ -5,7 +5,7 @@
 ### Beta release readiness
 
 - Restricted model-proxy chat-template rendering to actual chat-completion requests, recording body-bearing model-discovery calls as diagnostic skips instead of false `No messages provided` template errors.
-- Added correlated model response blocks to the rendered-prompt log, including exact streaming reasoning and tool-call chunks, while preserving byte-for-byte passive request and response forwarding.
+- Added correlated, human-readable model response blocks to the rendered-prompt log, reconstructing streamed reasoning, visible content, split tool calls, finish reasons, usage, and timings while the raw log and proxy transport remain byte-for-byte unchanged.
 - Added a reconciled product-release manifest with explicit component bindings, real managed-product versions, latest-release metadata, update disposition, and `llmops product list/show` inspection.
 - Included role-filtered product manifests in immutable configuration snapshots so every observing runtime reports the same release identity without receiving unrelated component bindings.
 - Added a manifest-selected observed-runtime version strategy for toolkit-owned processes, keeping a running older proxy or bridge release visible until deliberate restart.

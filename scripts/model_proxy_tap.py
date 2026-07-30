@@ -144,6 +144,148 @@ def classify_chat_render_request(method: str, path: str, payload: Any) -> tuple[
     return True, "chat request"
 
 
+def _response_events(response_text: str | None, response_json: Any) -> tuple[list[dict[str, Any]], str]:
+    if isinstance(response_json, dict):
+        return [response_json], "json"
+    if not response_text:
+        return [], "empty"
+
+    events: list[dict[str, Any]] = []
+    saw_sse = False
+    for line in response_text.splitlines():
+        if not line.startswith("data:"):
+            continue
+        saw_sse = True
+        data = line[5:].strip()
+        if not data or data == "[DONE]":
+            continue
+        try:
+            event = json.loads(data)
+        except Exception:
+            continue
+        if isinstance(event, dict):
+            events.append(event)
+    return events, "stream" if saw_sse else "text"
+
+
+def _append_tool_call_fragment(
+    tool_calls: dict[int, dict[str, str]],
+    fragment: dict[str, Any],
+    fallback_index: int,
+) -> None:
+    index = fragment.get("index", fallback_index)
+    if not isinstance(index, int):
+        index = fallback_index
+    target = tool_calls.setdefault(index, {"id": "", "name": "", "arguments": ""})
+    call_id = fragment.get("id")
+    if isinstance(call_id, str):
+        target["id"] += call_id
+    function = fragment.get("function")
+    if not isinstance(function, dict):
+        function = fragment
+    name = function.get("name")
+    if isinstance(name, str):
+        target["name"] += name
+    arguments = function.get("arguments")
+    if isinstance(arguments, str):
+        target["arguments"] += arguments
+    elif arguments is not None:
+        target["arguments"] += json.dumps(arguments, ensure_ascii=False)
+
+
+def _pretty_tool_arguments(arguments: str) -> str:
+    try:
+        parsed = json.loads(arguments)
+    except Exception:
+        return arguments
+    return json.dumps(parsed, ensure_ascii=False, indent=2)
+
+
+def format_model_response_for_diagnostics(response_text: str | None, response_json: Any) -> str:
+    """Render OpenAI JSON or SSE as a compact, human-readable model exchange."""
+
+    events, mode = _response_events(response_text, response_json)
+    if not events:
+        return response_text or "[empty model response]"
+
+    choices: dict[int, dict[str, Any]] = {}
+    usage: dict[str, Any] | None = None
+    timings: dict[str, Any] | None = None
+    for event in events:
+        if isinstance(event.get("usage"), dict):
+            usage = event["usage"]
+        if isinstance(event.get("timings"), dict):
+            timings = event["timings"]
+        event_choices = event.get("choices")
+        if not isinstance(event_choices, list):
+            continue
+        for fallback_index, choice in enumerate(event_choices):
+            if not isinstance(choice, dict):
+                continue
+            index = choice.get("index", fallback_index)
+            if not isinstance(index, int):
+                index = fallback_index
+            target = choices.setdefault(
+                index,
+                {"reasoning": [], "content": [], "tool_calls": {}, "finish_reason": None},
+            )
+            message = choice.get("delta") if isinstance(choice.get("delta"), dict) else choice.get("message")
+            if not isinstance(message, dict):
+                message = choice
+            for key in ("reasoning_content", "reasoning", "analysis"):
+                value = message.get(key)
+                if isinstance(value, str) and value:
+                    target["reasoning"].append(value)
+                    break
+            content = message.get("content")
+            if isinstance(content, str) and content:
+                target["content"].append(content)
+            elif isinstance(choice.get("text"), str) and choice["text"]:
+                target["content"].append(choice["text"])
+            fragments = message.get("tool_calls")
+            if isinstance(fragments, list):
+                for tool_index, fragment in enumerate(fragments):
+                    if isinstance(fragment, dict):
+                        _append_tool_call_fragment(target["tool_calls"], fragment, tool_index)
+            function_call = message.get("function_call")
+            if isinstance(function_call, dict):
+                _append_tool_call_fragment(target["tool_calls"], function_call, 0)
+            finish_reason = choice.get("finish_reason")
+            if isinstance(finish_reason, str) and finish_reason:
+                target["finish_reason"] = finish_reason
+
+    if not choices:
+        return response_text or json.dumps(response_json, ensure_ascii=False, indent=2)
+
+    lines = [f"[model response: {mode}]", ""]
+    multiple_choices = len(choices) > 1
+    for index in sorted(choices):
+        choice = choices[index]
+        if multiple_choices:
+            lines.extend([f"[choice {index}]", ""])
+        reasoning = "".join(choice["reasoning"])
+        if reasoning:
+            lines.extend(["<think>", reasoning, "</think>", ""])
+        content = "".join(choice["content"])
+        if content:
+            lines.extend([content, ""])
+        for tool_index in sorted(choice["tool_calls"]):
+            tool_call = choice["tool_calls"][tool_index]
+            name = tool_call["name"] or "unknown"
+            call_id = f' id="{tool_call["id"]}"' if tool_call["id"] else ""
+            lines.append(f'<tool_call name="{name}"{call_id}>')
+            if tool_call["arguments"]:
+                lines.append(_pretty_tool_arguments(tool_call["arguments"]))
+            lines.extend(["</tool_call>", ""])
+        if choice["finish_reason"]:
+            lines.extend([f'[finish_reason: {choice["finish_reason"]}]', ""])
+    if usage is not None:
+        lines.extend(["[usage]", json.dumps(usage, ensure_ascii=False, indent=2), ""])
+    if timings is not None:
+        lines.extend(["[timings]", json.dumps(timings, ensure_ascii=False, indent=2), ""])
+    return "\n".join(lines).rstrip()
+
+
 def _normalize_tool_call_arguments(value: Any) -> Any:
     if isinstance(value, str):
         stripped = value.strip()
@@ -699,12 +841,13 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
             ts_end=response_end_ts,
         )
         if self.chat_template_path and render_eligible:
+            diagnostic_response = format_model_response_for_diagnostics(resp_text, resp_json)
             self._write_framed_log(
                 self.rendered_prompt_log_path,
                 request_start_ts,
                 request_id,
                 f"MODEL_RESPONSE request_id={request_id} status={status}",
-                resp_text,
+                diagnostic_response,
                 ts_end=response_end_ts,
             )
 
