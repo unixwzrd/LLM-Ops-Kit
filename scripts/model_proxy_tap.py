@@ -791,7 +791,7 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
                 "TEMPLATE_ERROR",
                 rendered_prompt_error,
             )
-        elif self.chat_template_path and request_body:
+        elif self.chat_template_path and request_body and not render_eligible:
             self._write_framed_log(
                 self.rendered_prompt_log_path,
                 request_start_ts,

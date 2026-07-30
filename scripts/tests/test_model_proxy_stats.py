@@ -772,6 +772,7 @@ class ProxyTapPassthroughTests(unittest.TestCase):
 
             rendered_log = (log_dir / "proxy.rendered.log").read_text(encoding="utf-8")
             self.assertIn("=== MODEL_EXCHANGE request_id=", rendered_log)
+            self.assertNotIn("RENDER_SKIPPED", rendered_log)
             self.assertIn("status=200 START", rendered_log)
             self.assertIn("[rendered prompt: exact template output]", rendered_log)
             self.assertIn("rendered only", rendered_log)
@@ -874,6 +875,7 @@ class ProxyTapPassthroughTests(unittest.TestCase):
                 self.assertEqual(response.read(), upstream_response)
 
             rendered_log = (log_dir / "proxy.rendered.log").read_text(encoding="utf-8")
+            self.assertNotIn("RENDER_SKIPPED", rendered_log)
             self.assertIn("[model response: stream]", rendered_log)
             self.assertIn("[response boundary: SSE [DONE]]", rendered_log)
             self.assertIn("[model reasoning: returned by upstream]", rendered_log)

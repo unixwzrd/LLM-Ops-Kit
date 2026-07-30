@@ -8,6 +8,7 @@
 - Added correlated, human-readable model response blocks to the rendered-prompt log, reconstructing streamed reasoning, visible content, split tool calls, finish reasons, usage, and timings while the raw log and proxy transport remain byte-for-byte unchanged.
 - Made rendered diagnostics append one atomic request-ID-correlated exchange with the exact template output, reconstructed model response, explicit SSE/HTTP completion boundary, labeled upstream reasoning, and opt-in `-t`/`--show-reasoning` source-reasoning visibility without changing proxy traffic.
 - Kept the schema-backed reasoning switch compatible with the Bash 3.2 interpreter selected by a direct macOS wrapper invocation.
+- Removed the misleading rendered-log skip preamble from eligible chat exchanges while retaining explicit skip records for non-chat diagnostics.
 - Added a reconciled product-release manifest with explicit component bindings, real managed-product versions, latest-release metadata, update disposition, and `llmops product list/show` inspection.
 - Included role-filtered product manifests in immutable configuration snapshots so every observing runtime reports the same release identity without receiving unrelated component bindings.
 - Added a manifest-selected observed-runtime version strategy for toolkit-owned processes, keeping a running older proxy or bridge release visible until deliberate restart.
