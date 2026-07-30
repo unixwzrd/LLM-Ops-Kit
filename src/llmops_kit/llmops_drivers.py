@@ -181,6 +181,16 @@ def _modelctl_log_path(topology: Topology, component: Component, profile: dict[s
     return str(topology.paths.logs_dir / f"{prefix}-{profile_name}.log")
 
 
+def _shell_path(path: str) -> str:
+    """Quote a path while allowing the execution user's home to resolve remotely."""
+
+    if path == "~":
+        return '"$HOME"'
+    if path.startswith("~/"):
+        return f'"$HOME"/{shlex.quote(path[2:])}'
+    return shlex.quote(path)
+
+
 def build_component_command(
     topology: Topology,
     component: Component,
@@ -197,13 +207,13 @@ def build_component_command(
     if component.driver == "modelctl":
         if action == "logs":
             log_path = _modelctl_log_path(topology, component, profile)
-            return f"tail -n 100 {shlex.quote(log_path)}"
+            return f"tail -n 100 {_shell_path(log_path)}"
         binary = _managed_binary(host, "modelctl")
         return f"{binary} {shlex.quote(component.profile)} {shlex.quote(action)}"
     if component.driver in {"model-proxy", "tts-bridge"}:
         if action == "logs":
             log_path = _log_path(topology, component, profile, log_channel)
-            return f"tail -n 100 {shlex.quote(log_path)}"
+            return f"tail -n 100 {_shell_path(log_path)}"
         binary = _managed_binary(host, component.driver)
         return f"{binary} {shlex.quote(action)}"
     if component.driver == "agent":
@@ -213,7 +223,7 @@ def build_component_command(
             if action == "logs":
                 log_path = profile.get("log_path")
                 if isinstance(log_path, str) and log_path:
-                    return f"tail -n 100 {shlex.quote(log_path)}"
+                    return f"tail -n 100 {_shell_path(log_path)}"
             raise DriverError(
                 f"{component.qualified_id}: agent profile does not define action: {action}"
             )
@@ -223,7 +233,7 @@ def build_component_command(
             log_path = profile.get("log_path", profile.get("stdout"))
             if not isinstance(log_path, str) or not log_path:
                 raise DriverError(f"{component.qualified_id}: profile does not define log_path")
-            return f"tail -n 100 {shlex.quote(log_path)}"
+            return f"tail -n 100 {_shell_path(log_path)}"
         return _launchd_command(profile, component, action)
     if component.driver in {"process", "command"}:
         if profile.get("template_id") == "rtk":
@@ -240,7 +250,7 @@ def build_component_command(
             if action == "logs":
                 log_path = profile.get("log_path")
                 if isinstance(log_path, str) and log_path:
-                    return f"tail -n 100 {shlex.quote(log_path)}"
+                    return f"tail -n 100 {_shell_path(log_path)}"
             raise DriverError(f"{component.qualified_id}: profile does not define action: {action}")
         return shlex.join(argv)
     if component.driver == "systemd":

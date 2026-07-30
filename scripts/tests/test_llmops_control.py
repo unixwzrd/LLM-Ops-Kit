@@ -148,7 +148,7 @@ class ControlFixture(unittest.TestCase):
         )
         self.write_json(
             self.paths.agents_dir / "sample-agent.json",
-            {"schema_version": 2, "template_id": "generic-agent", "name": "sample-agent", "actions": {action: ["/usr/bin/true"] for action in ("start", "stop", "restart", "status")}, "environment": {}},
+            {"schema_version": 2, "template_id": "generic-agent", "name": "sample-agent", "actions": {action: ["/usr/bin/true"] for action in ("start", "stop", "restart", "status")}, "environment": {}, "log_path": "~/.hermes/logs/gateway.log"},
         )
         self.write_json(
             self.paths.stacks_dir / "sample.json",
@@ -456,6 +456,11 @@ class TopologyTests(ControlFixture):
             log_channel="rendered-prompt",
         )
         self.assertIn(str(self.paths.logs_dir / "model-proxy.rendered.log"), command)
+
+    def test_log_path_expands_execution_user_home(self) -> None:
+        component = self.topology.resolve_component("agent")
+        command = build_component_command(self.topology, component, "logs")
+        self.assertEqual(command, 'tail -n 100 "$HOME"/.hermes/logs/gateway.log')
 
     def test_modelctl_tts_log_resolves_to_tts_server_log(self) -> None:
         component = self.topology.resolve_component("embedding")
