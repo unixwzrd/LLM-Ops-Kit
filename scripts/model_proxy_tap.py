@@ -852,6 +852,14 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
                         error_text = (error_text + " | " if error_text else "") + "ClientDisconnected"
                         break
 
+        except (BrokenPipeError, ConnectionResetError):
+            # The client may cancel while the upstream is still preparing its
+            # response. Treat a failed header write like a failed body write:
+            # close the upstream response and record cancellation, not a proxy
+            # or model failure.
+            client_disconnected = True
+            error_text = "ClientDisconnected"
+
         except HTTPError as e:
             status = int(e.code)
             resp_headers = dict(e.headers.items()) if e.headers else {}
@@ -928,6 +936,8 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
                 resp_json,
                 transport_complete=upstream_eof and not client_disconnected,
             )
+            if client_disconnected:
+                diagnostic_response += "\n\n[client disconnected; upstream response abandoned]"
             exchange_parts = [
                 "[rendered prompt: exact template output]",
                 rendered_prompt or "[rendered prompt unavailable]",

@@ -4,7 +4,10 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 import json
+import socket
+import struct
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import sys
 import tempfile
@@ -610,6 +613,23 @@ class _CaptureHandler(BaseHTTPRequestHandler):
         self.wfile.write(response_body)
 
 
+class _DelayedCaptureHandler(_CaptureHandler):
+    request_received = threading.Event()
+
+    def do_POST(self) -> None:
+        length = int(self.headers.get("Content-Length", "0"))
+        body = self.rfile.read(length)
+        type(self).received_bodies.append(body)
+        type(self).request_received.set()
+        time.sleep(0.1)
+        response_body = type(self).response_body
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(response_body)))
+        self.end_headers()
+        self.wfile.write(response_body)
+
+
 class ProxyTapPassthroughTests(unittest.TestCase):
     def _start_server(self, handler_class):
         server = HTTPServer(("127.0.0.1", 0), handler_class)
@@ -785,6 +805,66 @@ class ProxyTapPassthroughTests(unittest.TestCase):
                 rendered_log.index("[upstream model response]"),
             )
             self.assertNotIn(upstream_response.decode("utf-8"), rendered_log)
+
+    def test_disconnect_before_upstream_headers_is_not_a_proxy_500(self) -> None:
+        _DelayedCaptureHandler.received_bodies = []
+        _DelayedCaptureHandler.request_received = threading.Event()
+        _DelayedCaptureHandler.response_body = b'{"choices":[{"message":{"content":"late"}}]}'
+        upstream, upstream_thread = self._start_server(_DelayedCaptureHandler)
+        self.addCleanup(upstream.shutdown)
+        self.addCleanup(upstream.server_close)
+        self.addCleanup(upstream_thread.join, 1)
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_dir = Path(tmpdir)
+
+            class FakeRenderer:
+                def render(self, **context):
+                    return "rendered canceled prompt"
+
+            proxy_handler = self._make_proxy_handler(
+                log_dir,
+                f"http://127.0.0.1:{upstream.server_port}",
+                FakeRenderer(),
+            )
+            proxy, proxy_thread = self._start_server(proxy_handler)
+            self.addCleanup(proxy.shutdown)
+            self.addCleanup(proxy.server_close)
+            self.addCleanup(proxy_thread.join, 1)
+
+            body = b'{"messages":[{"role":"user","content":"cancel me"}],"stream":true}'
+            request = (
+                b"POST /v1/chat/completions HTTP/1.1\r\n"
+                + f"Host: 127.0.0.1:{proxy.server_port}\r\n".encode()
+                + b"Content-Type: application/json\r\n"
+                + f"Content-Length: {len(body)}\r\nConnection: close\r\n\r\n".encode()
+                + body
+            )
+            client = socket.create_connection(("127.0.0.1", proxy.server_port), timeout=2)
+            client.sendall(request)
+            self.assertTrue(_DelayedCaptureHandler.request_received.wait(2))
+            client.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
+            client.close()
+
+            deadline = time.monotonic() + 3
+            events = []
+            while time.monotonic() < deadline:
+                path = log_dir / "proxy.ndjson"
+                if path.exists():
+                    events = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+                    if any(event.get("event") == "request_end" for event in events):
+                        break
+                time.sleep(0.02)
+
+            request_end = next(event for event in events if event.get("event") == "request_end")
+            self.assertEqual(request_end["response_status"], 200)
+            self.assertEqual(request_end["error"], "ClientDisconnected")
+            self.assertTrue(request_end["client_disconnected"])
+            rendered_log = (log_dir / "proxy.rendered.log").read_text(encoding="utf-8")
+            self.assertIn("[client disconnected; upstream response abandoned]", rendered_log)
+            self.assertNotIn("Broken pipe", rendered_log)
+            self.assertNotIn("status=500", rendered_log)
 
     def test_non_chat_request_is_not_rendered_as_a_template_error(self) -> None:
         _CaptureHandler.received_bodies = []

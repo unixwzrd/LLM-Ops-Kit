@@ -4,6 +4,7 @@
 
 ### Beta release readiness
 
+- Classified a client disconnect that occurs while awaiting upstream response headers as a canceled exchange instead of a proxy-generated HTTP 500, and made rendered diagnostics label the abandoned upstream response without exposing a misleading broken-pipe model response.
 - Reworked schema-generated Textual component forms into labeled groups with canonical field paths and explicit persistent **Save**, **Save & Restart**, and **Cancel** actions; restart-aware saves use detached operations and leave intentionally stopped components stopped.
 - Prevented unchanged Textual forms from materializing schema defaults, added expected-authority-hash protection to form submissions, and corrected typed parsing for JSON Schema fields whose type is a union such as integer-or-string.
 - Restricted model-proxy chat-template rendering to actual chat-completion requests, recording body-bearing model-discovery calls as diagnostic skips instead of false `No messages provided` template errors.
