@@ -56,6 +56,7 @@ Back: [Documentation index](./INDEX.md)
 - [ ] Extend guided initialization with optional host and executable discovery. Fresh topology creation is now available through templates in the CLI and TUI without manual JSON editing.
 - [ ] Expand schema coverage for product-specific fields discovered during beta operation; unknown extension fields remain preserved and available through advanced CLI file input.
 - [ ] Add explicit manual/standalone/launchd lifecycle ownership and crash-only restart policies that never override an intentional operator stop.
+- [ ] Make managed launchd lifecycle symmetric: after `component stop` unloads a job with `bootout`, `component start` must `bootstrap` its installed plist before `kickstart`. Add an acceptance test that stops, starts, and restarts an initially loaded job without leaving a blocked operation or orchestrator lock holder.
 - [ ] Add mutating stack creation and membership editing. Full-screen membership, dependencies, and connection inspection are complete.
 - [ ] Add deterministic corrective suggestions from active probes to the TUI. The beta TUI shows configuration validation only.
 - [ ] Add a correlated model-proxy diagnostic exchange browser. The beta exposes component logs without modifying proxy traffic.

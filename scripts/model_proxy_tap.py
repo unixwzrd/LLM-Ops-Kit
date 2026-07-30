@@ -36,6 +36,15 @@ except Exception:  # pragma: no cover - optional dependency at runtime
     jinja2 = None
 
 
+CHAT_COMPLETION_PATHS = frozenset(
+    {
+        "/api/chat",
+        "/chat/completions",
+        "/v1/chat/completions",
+    }
+)
+
+
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -119,6 +128,20 @@ def render_prompt_from_payload(
         rendered_prompt_error = chat_template_error
 
     return rendered_prompt, rendered_prompt_error
+
+
+def classify_chat_render_request(method: str, path: str, payload: Any) -> tuple[bool, str]:
+    """Return whether a proxied request is eligible for chat-template diagnostics."""
+
+    request_path = path.split("?", 1)[0]
+    if method.upper() != "POST" or request_path not in CHAT_COMPLETION_PATHS:
+        return False, "non-chat request"
+    if not isinstance(payload, dict):
+        return False, "chat request has no JSON object body"
+    messages = payload.get("messages")
+    if not isinstance(messages, list) or not messages:
+        return False, "chat request has no messages"
+    return True, "chat request"
 
 
 def _normalize_tool_call_arguments(value: Any) -> Any:
@@ -489,13 +512,19 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
         rendered_prompt: str | None = None
         rendered_prompt_error: str | None = None
 
-        rendered_prompt, rendered_prompt_error = render_prompt_from_payload(
+        render_eligible, render_reason = classify_chat_render_request(
+            self.command,
+            self.path,
             req_json,
-            chat_template_renderer=self.chat_template_renderer,
-            chat_template_path=self.chat_template_path,
-            chat_template_error=self.chat_template_error,
-            chat_template_max_chars=self.chat_template_max_chars,
         )
+        if render_eligible:
+            rendered_prompt, rendered_prompt_error = render_prompt_from_payload(
+                req_json,
+                chat_template_renderer=self.chat_template_renderer,
+                chat_template_path=self.chat_template_path,
+                chat_template_error=self.chat_template_error,
+                chat_template_max_chars=self.chat_template_max_chars,
+            )
 
         request_text_log = req_text
 
@@ -539,6 +568,14 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
                 request_id,
                 "TEMPLATE_ERROR",
                 rendered_prompt_error,
+            )
+        elif self.chat_template_path and request_body:
+            self._write_framed_log(
+                self.rendered_prompt_log_path,
+                request_start_ts,
+                request_id,
+                f"RENDER_SKIPPED method={self.command} path={self.path}",
+                render_reason,
             )
 
         fwd_headers: dict[str, str] = {}
@@ -661,6 +698,15 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
             resp_text,
             ts_end=response_end_ts,
         )
+        if self.chat_template_path and render_eligible:
+            self._write_framed_log(
+                self.rendered_prompt_log_path,
+                request_start_ts,
+                request_id,
+                f"MODEL_RESPONSE request_id={request_id} status={status}",
+                resp_text,
+                ts_end=response_end_ts,
+            )
 
         self._write_log(
             {

@@ -1179,7 +1179,10 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
             )
             if len(self.screen_stack) != 1:
                 return
-            table = self.query_one("#components", DataTable)
+            tables = self.query("#components")
+            if not tables:
+                return
+            table = tables.first(DataTable)
             table.clear()
             if self.view == "components":
                 from .llmops_ui import STATUS_COLUMNS

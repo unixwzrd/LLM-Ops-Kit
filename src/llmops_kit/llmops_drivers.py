@@ -14,9 +14,11 @@ from typing import Any, Optional
 
 try:
     from llmops_inventory import HostRecord
+    from llmops_profiles import model_values
     from llmops_topology import Component, Topology, TopologyError, load_profile
 except ModuleNotFoundError:  # pragma: no cover
     from .llmops_inventory import HostRecord
+    from .llmops_profiles import model_values
     from .llmops_topology import Component, Topology, TopologyError, load_profile
 
 
@@ -166,6 +168,19 @@ def _log_path(topology: Topology, component: Component, profile: dict[str, Any],
     return path
 
 
+def _modelctl_log_path(topology: Topology, component: Component, profile: dict[str, Any]) -> str:
+    """Resolve the service log produced by modelctl for the profile type."""
+
+    configured = profile.get("log_path")
+    if isinstance(configured, str) and configured:
+        return configured
+    values = model_values(profile)
+    model_type = values.get("MODEL_TYPE", str(profile.get("type", ""))).casefold()
+    prefix = "tts-server" if model_type == "tts" else "llama-server"
+    profile_name = component.profile.replace(".", "_")
+    return str(topology.paths.logs_dir / f"{prefix}-{profile_name}.log")
+
+
 def build_component_command(
     topology: Topology,
     component: Component,
@@ -181,9 +196,7 @@ def build_component_command(
     profile = load_profile(topology.paths, component)
     if component.driver == "modelctl":
         if action == "logs":
-            log_path = profile.get("log_path")
-            if not isinstance(log_path, str) or not log_path:
-                log_path = str(topology.paths.logs_dir / f"llama-server-{component.profile.replace('.', '_')}.log")
+            log_path = _modelctl_log_path(topology, component, profile)
             return f"tail -n 100 {shlex.quote(log_path)}"
         binary = _managed_binary(host, "modelctl")
         return f"{binary} {shlex.quote(component.profile)} {shlex.quote(action)}"
@@ -457,6 +470,8 @@ class ComponentRunner:
             health = "not-applicable"
         else:
             health = "healthy" if health_result.ok else "degraded"
+        if component.driver in {"model-proxy", "tts-bridge", "modelctl"} and not result.ok:
+            health = "degraded"
         return ComponentObservation(
             lifecycle,
             health,

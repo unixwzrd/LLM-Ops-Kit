@@ -457,6 +457,50 @@ class TopologyTests(ControlFixture):
         )
         self.assertIn(str(self.paths.logs_dir / "model-proxy.rendered.log"), command)
 
+    def test_modelctl_tts_log_resolves_to_tts_server_log(self) -> None:
+        component = self.topology.resolve_component("embedding")
+        component = replace(component, profile="QwenTTS")
+        self.write_json(
+            self.paths.models_dir / "QwenTTS.json",
+            {
+                "schema_version": 2,
+                "template_id": "modelctl",
+                "name": "QwenTTS",
+                "type": "tts",
+                "environment": {"MODEL_TYPE": "tts"},
+            },
+        )
+        command = build_component_command(self.topology, component, "logs")
+        self.assertIn(str(self.paths.logs_dir / "tts-server-QwenTTS.log"), command)
+
+    @mock.patch("llmops_kit.llmops_drivers.ComponentRunner.probe_health")
+    @mock.patch("llmops_kit.llmops_drivers.ComponentRunner.status")
+    def test_running_typed_driver_status_failure_is_degraded(
+        self,
+        status: mock.Mock,
+        probe_health: mock.Mock,
+    ) -> None:
+        component = self.topology.resolve_component("proxy")
+        status.return_value = CommandResult(
+            component.qualified_id,
+            "status",
+            "model-proxy status",
+            1,
+            "model-proxy: running pid=123\nupstream_health=down",
+            "",
+        )
+        probe_health.return_value = CommandResult(
+            component.qualified_id,
+            "health",
+            "curl listener",
+            0,
+            "",
+            "",
+        )
+        observation = ComponentRunner(self.topology).inspect(component)
+        self.assertEqual(observation.lifecycle, "running")
+        self.assertEqual(observation.health, "degraded")
+
     def test_observed_runtime_uses_live_process_command(self) -> None:
         component = self.topology.resolve_component("proxy")
         lifecycle = CommandResult(component.qualified_id, "status", "status", 0, "model-proxy: running pid=42", "")

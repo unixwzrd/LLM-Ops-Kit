@@ -690,6 +690,104 @@ class ProxyTapPassthroughTests(unittest.TestCase):
             self.assertIn(request_body.decode("utf-8"), raw_log)
             self.assertIn(upstream_response.decode("utf-8"), raw_log)
 
+            rendered_log = (log_dir / "proxy.rendered.log").read_text(encoding="utf-8")
+            self.assertIn("=== RENDERED_PROMPT START", rendered_log)
+            self.assertIn("=== MODEL_RESPONSE request_id=", rendered_log)
+            self.assertIn("status=200 START", rendered_log)
+            self.assertIn(upstream_response.decode("utf-8"), rendered_log)
+
+    def test_non_chat_request_is_not_rendered_as_a_template_error(self) -> None:
+        _CaptureHandler.received_bodies = []
+        upstream_response = b'{"error":"not found"}'
+        _CaptureHandler.response_body = upstream_response
+        upstream, upstream_thread = self._start_server(_CaptureHandler)
+        self.addCleanup(upstream.shutdown)
+        self.addCleanup(upstream.server_close)
+        self.addCleanup(upstream_thread.join, 1)
+        import tempfile
+        from urllib.request import Request, urlopen
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_dir = Path(tmpdir)
+
+            class ExplodingRenderer:
+                def render(self, **context):
+                    raise AssertionError("non-chat requests must not reach the template")
+
+            proxy_handler = self._make_proxy_handler(
+                log_dir,
+                f"http://127.0.0.1:{upstream.server_port}",
+                ExplodingRenderer(),
+            )
+            proxy, proxy_thread = self._start_server(proxy_handler)
+            self.addCleanup(proxy.shutdown)
+            self.addCleanup(proxy.server_close)
+            self.addCleanup(proxy_thread.join, 1)
+
+            request_body = b'{"name":"Qwen3.6"}'
+            request = Request(
+                f"http://127.0.0.1:{proxy.server_port}/api/show",
+                data=request_body,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urlopen(request, timeout=5) as response:
+                self.assertEqual(response.read(), upstream_response)
+
+            self.assertEqual(_CaptureHandler.received_bodies, [request_body])
+            rendered_log = (log_dir / "proxy.rendered.log").read_text(encoding="utf-8")
+            self.assertIn("RENDER_SKIPPED method=POST path=/api/show", rendered_log)
+            self.assertIn("non-chat request", rendered_log)
+            self.assertNotIn("TEMPLATE_ERROR", rendered_log)
+            self.assertNotIn("MODEL_RESPONSE", rendered_log)
+
+    def test_streaming_model_response_is_logged_without_rewriting(self) -> None:
+        _CaptureHandler.received_bodies = []
+        upstream_response = (
+            b'data: {"choices":[{"delta":{"reasoning_content":"thinking"}}]}\n\n'
+            b'data: {"choices":[{"delta":{"tool_calls":[{"function":{"name":"terminal"}}]}}]}\n\n'
+            b'data: [DONE]\n\n'
+        )
+        _CaptureHandler.response_body = upstream_response
+        upstream, upstream_thread = self._start_server(_CaptureHandler)
+        self.addCleanup(upstream.shutdown)
+        self.addCleanup(upstream.server_close)
+        self.addCleanup(upstream_thread.join, 1)
+        import tempfile
+        from urllib.request import Request, urlopen
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_dir = Path(tmpdir)
+
+            class FakeRenderer:
+                def render(self, **context):
+                    return "rendered streaming prompt"
+
+            proxy_handler = self._make_proxy_handler(
+                log_dir,
+                f"http://127.0.0.1:{upstream.server_port}",
+                FakeRenderer(),
+            )
+            proxy, proxy_thread = self._start_server(proxy_handler)
+            self.addCleanup(proxy.shutdown)
+            self.addCleanup(proxy.server_close)
+            self.addCleanup(proxy_thread.join, 1)
+
+            request_body = b'{"messages":[{"role":"user","content":"hello"}],"stream":true}'
+            request = Request(
+                f"http://127.0.0.1:{proxy.server_port}/v1/chat/completions",
+                data=request_body,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urlopen(request, timeout=5) as response:
+                self.assertEqual(response.read(), upstream_response)
+
+            rendered_log = (log_dir / "proxy.rendered.log").read_text(encoding="utf-8")
+            self.assertIn(upstream_response.decode("utf-8"), rendered_log)
+            self.assertIn('"reasoning_content":"thinking"', rendered_log)
+            self.assertIn('"name":"terminal"', rendered_log)
+
     def test_no_proxy_added_truncation_markers_in_logs(self) -> None:
         _CaptureHandler.received_bodies = []
         upstream_response = json.dumps(
