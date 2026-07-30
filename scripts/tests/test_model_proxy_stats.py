@@ -21,6 +21,12 @@ import model_proxy_tap
 
 
 class ModelProxyStatsTests(unittest.TestCase):
+    def test_human_log_timestamp_matches_marktime_utc_style(self) -> None:
+        self.assertEqual(
+            model_proxy_tap.format_human_utc_timestamp("2026-07-30T13:06:47.209312+00:00"),
+            "2026-07-30 13:06:47.209 UTC",
+        )
+
     def test_extract_response_stats_collects_usage_and_timings(self) -> None:
         payload = {
             "choices": [{"finish_reason": "stop"}, {"finish_reason": "length"}],

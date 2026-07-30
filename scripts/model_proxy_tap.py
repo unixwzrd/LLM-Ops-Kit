@@ -49,6 +49,19 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def format_human_utc_timestamp(value: str) -> str:
+    """Render an ISO timestamp consistently for human-readable log frames."""
+
+    try:
+        parsed = datetime.fromisoformat(value)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        rendered = parsed.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")
+        return f"{rendered[:-3]} UTC"
+    except (TypeError, ValueError):
+        return value
+
+
 def decode_body(data: bytes) -> tuple[str | None, Any | None]:
     if not data:
         return None, None
@@ -702,12 +715,14 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
         text = body or ""
         end_ts = ts_end or ts_start
         payload = [
-            f"=== {label} START {ts_start} ===\n",
+            f"=== {label} START {format_human_utc_timestamp(ts_start)} ===\n",
             text,
         ]
         if not text.endswith("\n"):
             payload.append("\n")
-        payload.append(f"=== {label} END {end_ts} ===\n\n")
+        payload.append(
+            f"=== {label} END {format_human_utc_timestamp(end_ts)} ===\n\n"
+        )
         self._writer_for(path).write("".join(payload))
 
     @classmethod
