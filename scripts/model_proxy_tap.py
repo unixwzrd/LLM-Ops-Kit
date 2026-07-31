@@ -806,6 +806,20 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
                 "TEMPLATE_ERROR",
                 rendered_prompt_error,
             )
+        elif self.chat_template_path and render_eligible:
+            request_parts = [
+                "[rendered prompt: exact template output]",
+                rendered_prompt or "[rendered prompt unavailable]",
+            ]
+            if source_reasoning:
+                request_parts.extend(["", source_reasoning])
+            self._write_framed_log(
+                self.rendered_prompt_log_path,
+                request_start_ts,
+                request_id,
+                f"MODEL_EXCHANGE_REQUEST request_id={request_id}",
+                "\n".join(request_parts),
+            )
         elif self.chat_template_path and request_body and not render_eligible:
             self._write_framed_log(
                 self.rendered_prompt_log_path,
@@ -953,19 +967,12 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
             )
             if client_disconnected:
                 diagnostic_response += "\n\n[client disconnected; upstream response abandoned]"
-            exchange_parts = [
-                "[rendered prompt: exact template output]",
-                rendered_prompt or "[rendered prompt unavailable]",
-            ]
-            if source_reasoning:
-                exchange_parts.extend(["", source_reasoning])
-            exchange_parts.extend(["", "[upstream model response]", diagnostic_response])
             self._write_framed_log(
                 self.rendered_prompt_log_path,
                 request_start_ts,
                 request_id,
-                f"MODEL_EXCHANGE request_id={request_id} status={status}",
-                "\n".join(exchange_parts),
+                f"MODEL_EXCHANGE_RESPONSE request_id={request_id} status={status}",
+                "\n".join(["[upstream model response]", diagnostic_response]),
                 ts_end=response_end_ts,
             )
 

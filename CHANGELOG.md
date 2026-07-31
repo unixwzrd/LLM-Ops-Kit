@@ -4,6 +4,7 @@
 
 ### Beta release readiness
 
+- Split rendered proxy diagnostics into immediately flushed, request-ID-correlated request and response frames so long-running model calls appear in the log before completion.
 - Resolved `~/` log paths against the component execution user's remote home, allowing host-qualified log inspection for launchd, agent, process, model, proxy, and bridge components.
 - Classified a client disconnect that occurs while awaiting upstream response headers as a canceled exchange instead of a proxy-generated HTTP 500, and made rendered diagnostics label the abandoned upstream response without exposing a misleading broken-pipe model response.
 - Standardized human-readable model-proxy raw and rendered frame timestamps as `YYYY-MM-DD HH:MM:SS.mmm UTC`, matching model mark-time logs while retaining ISO-8601 timestamps in machine-readable NDJSON.

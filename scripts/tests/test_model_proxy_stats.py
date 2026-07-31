@@ -12,6 +12,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import sys
 import tempfile
 from types import SimpleNamespace
+from urllib.request import Request, urlopen
 
 SCRIPTS_DIR = Path(__file__).resolve().parents[1]
 if str(SCRIPTS_DIR) not in sys.path:
@@ -636,6 +637,25 @@ class _DelayedCaptureHandler(_CaptureHandler):
         self.wfile.write(response_body)
 
 
+class _BlockingCaptureHandler(_CaptureHandler):
+    request_received = threading.Event()
+    release_response = threading.Event()
+
+    def do_POST(self) -> None:
+        length = int(self.headers.get("Content-Length", "0"))
+        body = self.rfile.read(length)
+        type(self).received_bodies.append(body)
+        type(self).request_received.set()
+        if not type(self).release_response.wait(2):
+            raise TimeoutError("test did not release upstream response")
+        response_body = type(self).response_body
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(response_body)))
+        self.end_headers()
+        self.wfile.write(response_body)
+
+
 class ProxyTapPassthroughTests(unittest.TestCase):
     def _start_server(self, handler_class):
         server = HTTPServer(("127.0.0.1", 0), handler_class)
@@ -797,7 +817,8 @@ class ProxyTapPassthroughTests(unittest.TestCase):
             self.assertIn(upstream_response.decode("utf-8"), raw_log)
 
             rendered_log = (log_dir / "proxy.rendered.log").read_text(encoding="utf-8")
-            self.assertIn("=== MODEL_EXCHANGE request_id=", rendered_log)
+            self.assertIn("=== MODEL_EXCHANGE_REQUEST request_id=", rendered_log)
+            self.assertIn("=== MODEL_EXCHANGE_RESPONSE request_id=", rendered_log)
             self.assertNotIn("RENDER_SKIPPED", rendered_log)
             self.assertIn("status=200 START", rendered_log)
             self.assertIn("[rendered prompt: exact template output]", rendered_log)
@@ -811,6 +832,69 @@ class ProxyTapPassthroughTests(unittest.TestCase):
                 rendered_log.index("[upstream model response]"),
             )
             self.assertNotIn(upstream_response.decode("utf-8"), rendered_log)
+
+    def test_rendered_request_is_flushed_before_upstream_response_completes(self) -> None:
+        _BlockingCaptureHandler.received_bodies = []
+        _BlockingCaptureHandler.request_received = threading.Event()
+        _BlockingCaptureHandler.release_response = threading.Event()
+        _BlockingCaptureHandler.response_body = json.dumps(
+            {"choices": [{"message": {"role": "assistant", "content": "done"}}]}
+        ).encode("utf-8")
+        upstream, upstream_thread = self._start_server(_BlockingCaptureHandler)
+        self.addCleanup(upstream.shutdown)
+        self.addCleanup(upstream.server_close)
+        self.addCleanup(upstream_thread.join, 1)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_dir = Path(tmpdir)
+
+            class FakeRenderer:
+                def render(self, **context):
+                    return "prompt visible before response"
+
+            proxy_handler = self._make_proxy_handler(
+                log_dir,
+                f"http://127.0.0.1:{upstream.server_port}",
+                FakeRenderer(),
+            )
+            proxy, proxy_thread = self._start_server(proxy_handler)
+            self.addCleanup(proxy.shutdown)
+            self.addCleanup(proxy.server_close)
+            self.addCleanup(proxy_thread.join, 1)
+
+            result: dict[str, bytes | Exception] = {}
+
+            def make_request() -> None:
+                try:
+                    request = Request(
+                        f"http://127.0.0.1:{proxy.server_port}/v1/chat/completions",
+                        data=b'{"messages":[{"role":"user","content":"hello"}]}',
+                        headers={"Content-Type": "application/json"},
+                        method="POST",
+                    )
+                    with urlopen(request, timeout=5) as response:
+                        result["body"] = response.read()
+                except Exception as exc:
+                    result["error"] = exc
+
+            client = threading.Thread(target=make_request, daemon=True)
+            client.start()
+            self.assertTrue(_BlockingCaptureHandler.request_received.wait(2))
+
+            rendered_log = (log_dir / "proxy.rendered.log").read_text(encoding="utf-8")
+            self.assertIn("MODEL_EXCHANGE_REQUEST request_id=", rendered_log)
+            self.assertIn("prompt visible before response", rendered_log)
+            self.assertNotIn("MODEL_EXCHANGE_RESPONSE request_id=", rendered_log)
+
+            _BlockingCaptureHandler.release_response.set()
+            client.join(5)
+            self.assertFalse(client.is_alive())
+            self.assertNotIn("error", result)
+            self.assertEqual(result.get("body"), _BlockingCaptureHandler.response_body)
+
+            rendered_log = (log_dir / "proxy.rendered.log").read_text(encoding="utf-8")
+            self.assertIn("MODEL_EXCHANGE_RESPONSE request_id=", rendered_log)
+            self.assertIn("done", rendered_log)
 
     def test_disconnect_before_upstream_headers_is_not_a_proxy_500(self) -> None:
         _DelayedCaptureHandler.received_bodies = []

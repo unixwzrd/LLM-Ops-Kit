@@ -44,7 +44,7 @@ This internal driver command writes the same raw and rendered diagnostic artifac
 
 - The original request body is always forwarded byte-for-byte unchanged.
 - A chat template creates derived logging artifacts; it does not rewrite upstream traffic.
-- Each completed rendered-log exchange contains one request ID, the exact template output, the reconstructed model response, and an explicit SSE or HTTP response boundary.
+- Each rendered-log exchange uses two correlated frames with one request ID. `MODEL_EXCHANGE_REQUEST` is flushed when the request is submitted and contains the exact template output; `MODEL_EXCHANGE_RESPONSE` is flushed when the upstream response completes and contains the reconstructed response plus an explicit SSE or HTTP boundary.
 - The proxy has no request-rewriting mode. Context optimization belongs in the model's selected chat template.
 - Logs may contain prompts and responses and must be protected as operational data.
 
