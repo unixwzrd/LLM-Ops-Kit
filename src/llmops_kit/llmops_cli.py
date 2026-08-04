@@ -5,9 +5,11 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import csv
 import hashlib
 import json
 import os
+import pwd
 import re
 import shlex
 import shutil
@@ -199,6 +201,44 @@ def emit(payload: Any, *, json_output: bool) -> None:
             print(f"{key}={value}")
         return
     print(payload)
+
+
+def emit_tsv(rows: list[dict[str, Any]]) -> None:
+    """Print dictionaries as a conventional header-bearing TSV table."""
+
+    if not rows:
+        return
+    fieldnames = list(rows[0])
+    writer = csv.DictWriter(
+        sys.stdout,
+        fieldnames=fieldnames,
+        dialect="excel-tab",
+        lineterminator="\n",
+        extrasaction="ignore",
+    )
+    writer.writeheader()
+    writer.writerows(rows)
+
+
+def emit_product_history(rows: list[dict[str, Any]]) -> None:
+    """Render product installation history for an operator terminal."""
+
+    table = Table(show_header=True, header_style="bold")
+    columns = (
+        ("product_id", "Product"),
+        ("installed_version", "Installed version"),
+        ("recorded_at", "Recorded"),
+        ("previous_version", "Previous version"),
+        ("host", "Host"),
+        ("execution_user", "Run as"),
+        ("validation", "Validation"),
+        ("rollback", "Rollback"),
+    )
+    for _, heading in columns:
+        table.add_column(heading)
+    for row in rows:
+        table.add_row(*(str(row.get(field, "")) for field, _ in columns))
+    Console().print(table)
 
 
 def operation_payload(operations: list[Any]) -> list[dict[str, str]]:
@@ -1058,6 +1098,15 @@ def cmd_product(args: argparse.Namespace) -> int:
     inventory = ProductInventory.load(CURRENT_TOPOLOGY.paths.products_file)
     if args.product_action == "list":
         payload = [inventory.products[key].as_dict() for key in sorted(inventory.products)]
+    elif args.product_action == "history":
+        payload = [
+            entry.as_dict()
+            for entry in inventory.history
+            if not args.product_id or entry.product_id == args.product_id
+        ]
+        if getattr(args, "newest", False):
+            newest = {item["product_id"]: item for item in payload}
+            payload = [newest[product_id] for product_id in sorted(newest)]
     else:
         try:
             payload = inventory.products[args.product_id].as_dict()
@@ -1068,7 +1117,19 @@ def cmd_product(args: argparse.Namespace) -> int:
             for component, product_id in inventory.components.items()
             if product_id == args.product_id
         )
-    emit(payload, json_output=args.json)
+        payload["history"] = [
+            entry.as_dict()
+            for entry in inventory.history
+            if entry.product_id == args.product_id
+        ]
+    if getattr(args, "tsv", False):
+        if args.json:
+            raise ProductInventoryError("product history --tsv cannot be combined with --json")
+        emit_tsv(payload)
+    elif args.product_action == "history" and not args.json:
+        emit_product_history(payload)
+    else:
+        emit(payload, json_output=args.json)
     return 0
 
 
@@ -1756,6 +1817,19 @@ def _remote_status(
     return [item for item in payload if isinstance(item, dict)], ""
 
 
+def _is_local_status_host(
+    host_name: str,
+    host: Optional[dict[str, Any]],
+    current_host: Optional[str],
+) -> bool:
+    """Return whether status can safely read this host's local mutable state."""
+
+    if host_name != current_host:
+        return False
+    target_user = "" if host is None else str(host.get("user", ""))
+    return not target_user or target_user == pwd.getpwuid(os.geteuid()).pw_name
+
+
 def _catalog_status(args: argparse.Namespace, catalog: dict[str, Any]) -> list[dict[str, Any]]:
     selected = _catalog_components(catalog, args.selector, include_disabled=args.all)
     by_host: dict[str, list[dict[str, Any]]] = {}
@@ -1769,7 +1843,8 @@ def _catalog_status(args: argparse.Namespace, catalog: dict[str, Any]) -> list[d
     current_host = _current_snapshot_host()
 
     def inspect_host(host_name: str) -> tuple[str, list[dict[str, Any]], str]:
-        if host_name == current_host:
+        host = hosts.get(host_name)
+        if _is_local_status_host(host_name, host, current_host):
             local_ids = {str(item.get("id")) for item in by_host[host_name]}
             local = [
                 component
@@ -1777,7 +1852,6 @@ def _catalog_status(args: argparse.Namespace, catalog: dict[str, Any]) -> list[d
                 if component.qualified_id in local_ids
             ]
             return host_name, _inspect_status(local, args), ""
-        host = hosts.get(host_name)
         if host is None:
             return host_name, [], f"observer catalog has no host record for {host_name}"
         if host.get("peer_observable", True) is False:
@@ -2062,6 +2136,16 @@ def build_parser() -> argparse.ArgumentParser:
     product_show = product_sub.add_parser("show")
     product_show.add_argument("product_id")
     product_show.set_defaults(func=cmd_product)
+    product_history = product_sub.add_parser("history")
+    product_history.add_argument("product_id", nargs="?")
+    product_history.add_argument("-t", "--tsv", action="store_true")
+    product_history.add_argument(
+        "-n",
+        "--newest",
+        action="store_true",
+        help="show only the newest history entry for each selected product",
+    )
+    product_history.set_defaults(func=cmd_product)
 
     host = sub.add_parser("host")
     host_sub = host.add_subparsers(dest="host_action", required=True)

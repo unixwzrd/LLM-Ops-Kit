@@ -46,15 +46,48 @@ class ProductRelease:
 
 
 @dataclass(frozen=True)
+class ProductHistoryEntry:
+    """One evidenced product installation or selection event."""
+
+    product_id: str
+    installed_version: str
+    recorded_at: str
+    previous_version: str = ""
+    stack: str = ""
+    host: str = ""
+    execution_user: str = ""
+    operation_id: str = ""
+    artifact_identity: str = ""
+    validation: str = ""
+    rollback: str = ""
+
+    def as_dict(self) -> dict[str, str]:
+        return {
+            "product_id": self.product_id,
+            "installed_version": self.installed_version,
+            "recorded_at": self.recorded_at,
+            "previous_version": self.previous_version,
+            "stack": self.stack,
+            "host": self.host,
+            "execution_user": self.execution_user,
+            "operation_id": self.operation_id,
+            "artifact_identity": self.artifact_identity,
+            "validation": self.validation,
+            "rollback": self.rollback,
+        }
+
+
+@dataclass(frozen=True)
 class ProductInventory:
     """Validated product releases and component bindings."""
 
     products: Mapping[str, ProductRelease]
     components: Mapping[str, str]
+    history: tuple[ProductHistoryEntry, ...] = ()
 
     @classmethod
     def empty(cls) -> "ProductInventory":
-        return cls(products={}, components={})
+        return cls(products={}, components={}, history=())
 
     @classmethod
     def load(cls, path: Path) -> "ProductInventory":
@@ -68,8 +101,15 @@ class ProductInventory:
             raise ProductInventoryError(f"{path}: product inventory schema_version must be 1")
         raw_products = document.get("products", {})
         raw_components = document.get("components", {})
-        if not isinstance(raw_products, dict) or not isinstance(raw_components, dict):
-            raise ProductInventoryError(f"{path}: products and components must be objects")
+        raw_history = document.get("history", [])
+        if (
+            not isinstance(raw_products, dict)
+            or not isinstance(raw_components, dict)
+            or not isinstance(raw_history, list)
+        ):
+            raise ProductInventoryError(
+                f"{path}: products and components must be objects and history must be an array"
+            )
         products: dict[str, ProductRelease] = {}
         for product_id, raw in raw_products.items():
             if not isinstance(product_id, str) or not product_id or not isinstance(raw, dict):
@@ -110,9 +150,42 @@ class ProductInventory:
                     f"{path}: component {component!r} references unknown product {product_id!r}"
                 )
             components[component] = product_id
-        return cls(products=products, components=components)
+        history: list[ProductHistoryEntry] = []
+        history_fields = (
+            "installed_version",
+            "recorded_at",
+            "previous_version",
+            "stack",
+            "host",
+            "execution_user",
+            "operation_id",
+            "artifact_identity",
+            "validation",
+            "rollback",
+        )
+        for index, raw in enumerate(raw_history):
+            if not isinstance(raw, dict):
+                raise ProductInventoryError(f"{path}: history[{index}] must be an object")
+            product_id = raw.get("product_id")
+            if not isinstance(product_id, str) or product_id not in products:
+                raise ProductInventoryError(
+                    f"{path}: history[{index}].product_id references an unknown product"
+                )
+            values = {key: raw.get(key, "") for key in history_fields}
+            if any(not isinstance(value, str) for value in values.values()):
+                raise ProductInventoryError(
+                    f"{path}: history[{index}] values must be strings"
+                )
+            if not values["installed_version"] or not values["recorded_at"]:
+                raise ProductInventoryError(
+                    f"{path}: history[{index}] requires installed_version and recorded_at"
+                )
+            history.append(ProductHistoryEntry(product_id=product_id, **values))
+        return cls(products=products, components=components, history=tuple(history))
 
-    def resolve(self, component: Any, profile: Mapping[str, Any]) -> Optional[ProductRelease]:
+    def resolve(
+        self, component: Any, profile: Mapping[str, Any]
+    ) -> Optional[ProductRelease]:
         product_id = self.components.get(component.qualified_id)
         if not product_id:
             configured = profile.get("product_id", "")

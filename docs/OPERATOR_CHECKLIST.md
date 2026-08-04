@@ -25,6 +25,9 @@ Back: [Documentation index](./INDEX.md)
 - [ ] Confirm the equivalent command shown by `llmops tui` before mutation.
 - [ ] Review component logs after restart using the appropriate channel and verify the reported host, execution user, path, and readiness.
 - [ ] Use `llmops operation list` and `llmops operation show <operation-id>` for lifecycle work dispatched from the TUI.
+- [ ] Add one disabled component through the TUI Service Catalog and confirm placement, essential settings, required connections, inferred dependencies, equivalent CLI, and authority hash before applying.
+- [ ] Import one reviewed local template through the Service Catalog and confirm the planned destination and equivalent `llmops template import` command before applying.
+- [ ] Edit an existing component and verify Reset Section, Revert All, Cancel, Save, and Save & Restart preserve hidden advanced values and report shared-profile impact.
 - [ ] For tool components, run their read-only Verify, telemetry, version, or metrics actions before approving any integration mutation.
 
 ## Synchronize

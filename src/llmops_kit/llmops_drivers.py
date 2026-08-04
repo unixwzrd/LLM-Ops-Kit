@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import json
+import os
+import pwd
 import re
 import shlex
 import subprocess
@@ -266,7 +268,14 @@ class ComponentRunner:
 
     def _host(self, component: Component) -> HostRecord:
         host = self.topology.hosts[component.host]
-        return replace(host, user=component.execution_user) if component.execution_user else host
+        target_user = component.execution_user or host.user
+        effective_user = pwd.getpwuid(os.geteuid()).pw_name
+        updates: dict[str, str] = {}
+        if component.execution_user:
+            updates["user"] = component.execution_user
+        if host.transport == "local" and target_user != effective_user:
+            updates["transport"] = "ssh"
+        return replace(host, **updates) if updates else host
 
     def run(
         self,

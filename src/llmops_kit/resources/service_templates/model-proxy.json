@@ -1,7 +1,7 @@
 {
   "template_version": 1,
   "id": "model-proxy",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "adapter": "model-proxy",
   "profile_kind": "service",
   "component_kind": "proxy",
@@ -17,16 +17,16 @@
       "template_id": {"type": "string", "const": "model-proxy", "default": "model-proxy"},
       "name": {"type": "string", "minLength": 1, "x-llmops-ui": {"group": "Identity", "order": 10}},
       "runtime": {"type": "object", "required": ["listen_host", "listen_port", "upstream_host", "upstream_port"], "properties": {
-        "python_bin": {"type": "string", "x-llmops-ui": {"group": "Runtime", "order": 10, "widget": "path"}},
+        "python_bin": {"type": "string", "x-llmops-ui": {"group": "Runtime", "order": 10, "widget": "path", "advanced": true}},
         "listen_host": {"type": "string", "default": "127.0.0.1", "x-llmops-ui": {"group": "Listener", "order": 10}},
-        "listen_port": {"type": "integer", "minimum": 1, "maximum": 65535, "default": 11434, "x-llmops-ui": {"group": "Listener", "order": 20, "widget": "number"}},
+        "listen_port": {"type": "integer", "minimum": 1, "maximum": 65535, "default": 11434, "x-llmops-ui": {"group": "Listener", "order": 20, "widget": "number", "unit": "TCP port"}},
         "upstream_host": {"type": "string", "default": "127.0.0.1", "x-llmops-ui": {"group": "Upstream", "order": 10}},
-        "upstream_port": {"type": "integer", "minimum": 1, "maximum": 65535, "default": 11434, "x-llmops-ui": {"group": "Upstream", "order": 20, "widget": "number"}}
+        "upstream_port": {"type": "integer", "minimum": 1, "maximum": 65535, "default": 11434, "x-llmops-ui": {"group": "Upstream", "order": 20, "widget": "number", "unit": "TCP port"}}
       }},
       "template": {"type": "object", "properties": {"path": {"type": "string", "x-llmops-ui": {"group": "Prompt", "order": 10, "widget": "path"}}}},
       "logging": {"type": "object", "properties": {
-        "rotate_seconds": {"type": "integer", "minimum": 60, "default": 86400, "x-llmops-ui": {"group": "Logging", "order": 10, "widget": "duration"}},
-        "rotate_keep": {"type": "integer", "minimum": 1, "default": 5, "x-llmops-ui": {"group": "Logging", "order": 20, "widget": "number"}},
+        "rotate_seconds": {"type": "integer", "minimum": 60, "default": 86400, "x-llmops-ui": {"group": "Logging", "order": 10, "widget": "duration", "unit": "seconds", "advanced": true}},
+        "rotate_keep": {"type": "integer", "minimum": 1, "default": 5, "x-llmops-ui": {"group": "Logging", "order": 20, "widget": "number", "advanced": true}},
         "show_reasoning": {"type": "boolean", "default": false, "description": "Log source assistant reasoning in diagnostic-only rendered exchanges", "x-llmops-ui": {"group": "Logging", "order": 30, "widget": "checkbox"}}
       }}
     }

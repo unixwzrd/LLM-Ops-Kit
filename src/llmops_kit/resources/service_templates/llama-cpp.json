@@ -1,7 +1,7 @@
 {
   "template_version": 1,
   "id": "llama-cpp",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "adapter": "llama-cpp",
   "profile_kind": "model",
   "component_kind": "model",
@@ -15,17 +15,17 @@
     "properties": {
       "schema_version": {"type": "integer", "const": 2, "default": 2},
       "template_id": {"type": "string", "const": "llama-cpp", "default": "llama-cpp"},
-      "name": {"type": "string", "minLength": 1, "x-llmops-ui": {"group": "Identity", "order": 10}},
-      "type": {"type": "string", "enum": ["llm", "embedding"], "default": "llm", "x-llmops-ui": {"group": "Identity", "order": 20, "widget": "select"}},
-      "model_path": {"type": "string", "minLength": 1, "x-llmops-ui": {"group": "Model", "order": 10, "widget": "path"}},
+      "name": {"type": "string", "minLength": 1, "x-llmops-ui": {"group": "Identity", "order": 10, "label": "Profile name"}},
+      "type": {"type": "string", "enum": ["llm", "embedding"], "default": "llm", "x-llmops-ui": {"group": "Identity", "order": 20, "widget": "select", "label": "Model role"}},
+      "model_path": {"type": "string", "minLength": 1, "x-llmops-ui": {"group": "Model", "order": 10, "widget": "path", "label": "Model file", "help": "Absolute or home-relative path to the GGUF model."}},
       "runtime": {
         "type": "object",
         "required": ["host", "port"],
         "properties": {
           "binary": {"type": "string", "default": "llama-server", "x-llmops-ui": {"group": "Runtime", "order": 10, "widget": "path"}},
           "host": {"type": "string", "default": "127.0.0.1", "x-llmops-ui": {"group": "Runtime", "order": 20}},
-          "port": {"type": "integer", "minimum": 1, "maximum": 65535, "default": 11434, "x-llmops-ui": {"group": "Runtime", "order": 30, "widget": "number"}},
-          "threads": {"type": ["integer", "string"], "default": "auto", "x-llmops-ui": {"group": "Runtime", "order": 40}}
+          "port": {"type": "integer", "minimum": 1, "maximum": 65535, "default": 11434, "x-llmops-ui": {"group": "Runtime", "order": 30, "widget": "number", "unit": "TCP port"}},
+          "threads": {"type": ["integer", "string"], "default": "auto", "x-llmops-ui": {"group": "Runtime", "order": 40, "advanced": true}}
         }
       },
       "llama": {
@@ -33,8 +33,8 @@
         "properties": {
           "ctx_size": {"type": "integer", "minimum": 512, "default": 32768, "x-llmops-ui": {"group": "Inference", "order": 10, "widget": "number"}},
           "gpu_layers": {"type": ["integer", "string"], "default": "auto", "x-llmops-ui": {"group": "Inference", "order": 20}},
-          "batch_size": {"type": "integer", "minimum": 1, "default": 2048, "x-llmops-ui": {"group": "Inference", "order": 30, "widget": "number"}},
-          "ubatch_size": {"type": "integer", "minimum": 1, "default": 512, "x-llmops-ui": {"group": "Inference", "order": 40, "widget": "number"}}
+          "batch_size": {"type": "integer", "minimum": 1, "default": 2048, "x-llmops-ui": {"group": "Inference", "order": 30, "widget": "number", "advanced": true}},
+          "ubatch_size": {"type": "integer", "minimum": 1, "default": 512, "x-llmops-ui": {"group": "Inference", "order": 40, "widget": "number", "advanced": true}}
         }
       },
       "template": {
@@ -47,12 +47,12 @@
       "server": {
         "type": "object",
         "properties": {
-          "cache_prompt": {"type": "boolean", "default": true, "x-llmops-ui": {"group": "Server", "order": 10, "widget": "checkbox"}},
-          "spec_type": {"type": "string", "enum": ["none", "ngram", "mtp", "draft-model"], "default": "none", "x-llmops-ui": {"group": "Speculation", "order": 10, "widget": "select"}},
-          "spec_ngram_size_n": {"type": "integer", "minimum": 0, "x-llmops-ui": {"group": "Speculation", "order": 20, "widget": "number"}},
-          "spec_ngram_size_m": {"type": "integer", "minimum": 0, "x-llmops-ui": {"group": "Speculation", "order": 30, "widget": "number"}},
-          "draft_model": {"type": "string", "x-llmops-ui": {"group": "Speculation", "order": 40, "widget": "path"}},
-          "mtp_model": {"type": "string", "x-llmops-ui": {"group": "Speculation", "order": 50, "widget": "path"}},
+          "cache_prompt": {"type": "boolean", "default": true, "x-llmops-ui": {"group": "Server", "order": 10, "widget": "checkbox", "advanced": true}},
+          "spec_type": {"type": "string", "enum": ["none", "ngram", "mtp", "draft-model"], "default": "none", "x-llmops-ui": {"group": "Speculation", "order": 10, "widget": "select", "advanced": true}},
+          "spec_ngram_size_n": {"type": "integer", "minimum": 0, "x-llmops-ui": {"group": "Speculation", "order": 20, "widget": "number", "advanced": true}},
+          "spec_ngram_size_m": {"type": "integer", "minimum": 0, "x-llmops-ui": {"group": "Speculation", "order": 30, "widget": "number", "advanced": true}},
+          "draft_model": {"type": "string", "x-llmops-ui": {"group": "Speculation", "order": 40, "widget": "path", "advanced": true}},
+          "mtp_model": {"type": "string", "x-llmops-ui": {"group": "Speculation", "order": 50, "widget": "path", "advanced": true}},
           "extra_flags": {"type": "array", "items": {"type": "string"}, "default": [], "x-llmops-ui": {"group": "Advanced", "order": 100, "widget": "argv", "advanced": true}}
         },
         "allOf": [

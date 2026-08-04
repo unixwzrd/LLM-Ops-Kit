@@ -1,5 +1,29 @@
 # LLM-Ops-Kit Engineering Evidence
 
+## Incremental Beta Candidate - 2026-08-04
+
+Candidate `0.9.0b40` extends the schema invariant into the complete component-creation path. The Textual Service Catalog now selects a reviewed template, captures placement and execution identity, renders essential typed fields, resolves required endpoint references, infers dependencies, and displays the same authority-bound mutation plan and CLI command used by automation. New components remain disabled until an operator explicitly starts them.
+
+Existing-component editing uses the same flattened schema records. Grouping and advanced disclosure are presentation only: hidden non-default values remain in the candidate document. Reset and revert act on the editor's immutable opening snapshot; Save persists without lifecycle action, while Save & Restart adds the explicit shared restart operation.
+
+```mermaid
+flowchart LR
+    Template["Reviewed service template"] --> Fields["Shared typed field records"]
+    Fields --> CLI["CLI set, unset, and add"]
+    Fields --> TUI["TUI wizard and grouped editor"]
+    CLI --> Candidate["Complete candidate configuration"]
+    TUI --> Candidate
+    Candidate --> Validate["Schema and graph validation"]
+    Validate --> Authority["Authority hash check and transactional write"]
+    Authority --> Reconcile["Selected-host reconciliation"]
+```
+
+The ordinary product-history view is presentation over the authority-owned installation ledger, not component status. Rich tables, JSON, headered TSV, and newest-only output select the same records. Source trees are never synchronized between hosts; only verified immutable release artifacts and reconciled desired-state snapshots cross host boundaries.
+
+MLXForge and Secrets-Kit remain outside this beta candidate. Their future integration points are deliberately narrow: MLXForge must first expose accepted version, health, lifecycle, endpoint, model-operation, configuration, and log contracts; Secrets-Kit must expose opaque provider references without secret values or a hard runtime dependency.
+
+The locked CPython 3.12 UV environment passed shell syntax, ShellCheck, Python compilation, and all 189 source regressions on 2026-08-04. The suite includes Textual 1.0.0 Pilot coverage for the four wizard steps, local template import, grouped editing, advanced disclosure, reset/revert, shared-profile warnings, Save versus Save & Restart, and review evidence. This is source acceptance; clean-archive installation and the scheduled two-user lifecycle window remain separate release gates.
+
 - **Evidence updated:** 2026-07-23
 - **Accepted live candidate:** `0.9.0b21`
 - **Current source candidate:** `0.9.0b22`

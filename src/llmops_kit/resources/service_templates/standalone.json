@@ -1,7 +1,7 @@
 {
   "template_version": 1,
   "id": "standalone",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "adapter": "standalone",
   "profile_kind": "service",
   "component_kind": "service",
@@ -16,12 +16,12 @@
       "schema_version": {"type": "integer", "const": 2, "default": 2},
       "template_id": {"type": "string", "const": "standalone", "default": "standalone"},
       "name": {"type": "string", "minLength": 1, "x-llmops-ui": {"group": "Identity", "order": 10}},
-      "working_directory": {"type": "string", "x-llmops-ui": {"group": "Runtime", "order": 10, "widget": "path"}},
+      "working_directory": {"type": "string", "x-llmops-ui": {"group": "Runtime", "order": 10, "widget": "path", "label": "Working directory"}},
       "actions": {"type": "object", "required": ["start", "stop", "status"], "properties": {
-        "start": {"type": "array", "minItems": 1, "items": {"type": "string"}, "x-llmops-ui": {"group": "Lifecycle", "order": 10, "widget": "argv"}},
-        "stop": {"type": "array", "minItems": 1, "items": {"type": "string"}, "x-llmops-ui": {"group": "Lifecycle", "order": 20, "widget": "argv"}},
-        "restart": {"type": "array", "minItems": 1, "items": {"type": "string"}, "x-llmops-ui": {"group": "Lifecycle", "order": 30, "widget": "argv"}},
-        "status": {"type": "array", "minItems": 1, "items": {"type": "string"}, "x-llmops-ui": {"group": "Lifecycle", "order": 40, "widget": "argv"}}
+        "start": {"type": "array", "minItems": 1, "items": {"type": "string"}, "x-llmops-ui": {"group": "Lifecycle", "order": 10, "widget": "argv", "label": "Start command"}},
+        "stop": {"type": "array", "minItems": 1, "items": {"type": "string"}, "x-llmops-ui": {"group": "Lifecycle", "order": 20, "widget": "argv", "label": "Stop command"}},
+        "restart": {"type": "array", "minItems": 1, "items": {"type": "string"}, "x-llmops-ui": {"group": "Lifecycle", "order": 30, "widget": "argv", "label": "Restart command", "advanced": true}},
+        "status": {"type": "array", "minItems": 1, "items": {"type": "string"}, "x-llmops-ui": {"group": "Lifecycle", "order": 40, "widget": "argv", "label": "Status command"}}
       }},
       "environment": {"type": "object", "additionalProperties": {"type": "string"}, "default": {}, "x-llmops-ui": {"group": "Environment", "order": 10, "advanced": true}},
       "log_path": {"type": "string", "x-llmops-ui": {"group": "Logging", "order": 10, "widget": "path"}}

@@ -68,7 +68,22 @@ Textual refresh and theme preferences live separately in `ui.json`. That host-lo
   "components": {
     "local-ai:chat": "llama-cpp",
     "local-ai:embedding": "llama-cpp"
-  }
+  },
+  "history": [
+    {
+      "product_id": "llama-cpp",
+      "installed_version": "build 1057 / c5a4a0bb8",
+      "recorded_at": "2026-07-27",
+      "previous_version": "build 1000",
+      "stack": "local-ai",
+      "host": "model-host",
+      "execution_user": "operator",
+      "operation_id": "upgrade-2026-07-27",
+      "artifact_identity": "c5a4a0bb8",
+      "validation": "chat and embedding checks passed",
+      "rollback": "previous locally compiled binary"
+    }
+  ]
 }
 ```
 
@@ -81,6 +96,27 @@ llmops component version local-ai:chat
 ```
 
 The product inventory is desired state and is reconciled with the topology. It does not probe or mutate upstream packages by itself.
+
+`history` is an optional append-only installation and selection ledger. Trusted
+control snapshots retain the complete ledger; role-filtered component-host
+snapshots omit it. Inspect the ledger with:
+
+```bash
+llmops product history
+llmops product history llama-cpp
+llmops product history --newest
+llmops product history --newest --tsv
+llmops product show llama-cpp
+```
+
+`-n`/`--newest` selects the newest ledger entry per product, or the single
+newest entry when a product ID is supplied. `-t`/`--tsv` emits a conventional
+header row followed by unprefixed tab-separated values. The flags compose as
+`llmops product history -n -t`; TSV and JSON output are mutually exclusive.
+
+History records must be backed by an installation operation, immutable runtime,
+artifact manifest, or retained acceptance evidence. Unknown previous versions
+remain empty rather than being inferred.
 
 `version_strategy` defaults to `manifest`. Use `observed-runtime` only when the managed product is the immutable LLM-Ops-Kit process itself, such as model-proxy or tts-bridge. That keeps a still-running older process visible until it is deliberately restarted while the selected toolkit and latest product release remain separate fields.
 

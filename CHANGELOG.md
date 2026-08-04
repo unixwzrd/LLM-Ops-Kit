@@ -2,8 +2,20 @@
 
 ## Unreleased
 
+- Replaced the TUI's one-page Add Component modal with a schema-driven four-step placement, settings, connections, and review flow that creates disabled components and displays inferred dependencies before mutation.
+- Added grouped full-screen component editing with hidden advanced fields, per-field validation, reset/revert controls, shared-profile impact warnings, and persistent Save versus explicit Save & Restart actions.
+- Added reviewed local-template import to the TUI Service Catalog using the same authority hash, transaction, validation, plan, and equivalent CLI contract as `llmops template import`.
+- Added labels, help, units, grouping, advanced disclosure, and structured argument editing metadata to the initial llama.cpp/modelctl, model-proxy, TTS bridge, standalone, launchd, SSH tunnel, and external HTTP templates.
+- Rendered ordinary product history as a Rich table while preserving JSON, headered TSV, and newest-per-product output.
+- Corrected standalone topology validation so optional restart commands are validated when present but are not required when start, stop, and status are valid.
+- Forced installer environment creation to use the application-owned UV-managed CPython even when the invoking shell has Conda or another virtual environment activated.
+- Corrected aggregate status on same-machine cross-user control invocations by using remote status whenever the snapshot host's execution user differs from the invoking user. This keeps desired lifecycle state aligned with the component owner's state file.
+- Added a validated, authority-owned append-only product installation ledger with trusted-controller reconciliation, role-filtered omission, product detail/history inspection, artifact identity, validation evidence, and rollback provenance.
+- Added header-bearing TSV output and newest-per-product selection to `llmops product history` through `-t`/`--tsv` and `-n`/`--newest`.
+
 ### Beta release readiness
 
+- Routed nominally local component operations through the configured SSH control endpoint when the component execution user differs from the invoking OS account, preventing cross-user CLI and TUI actions from accidentally running the caller's local wrappers.
 - Split rendered proxy diagnostics into immediately flushed, request-ID-correlated request and response frames so long-running model calls appear in the log before completion.
 - Resolved `~/` log paths against the component execution user's remote home, allowing host-qualified log inspection for launchd, agent, process, model, proxy, and bridge components.
 - Classified a client disconnect that occurs while awaiting upstream response headers as a canceled exchange instead of a proxy-generated HTTP 500, and made rendered diagnostics label the abandoned upstream response without exposing a misleading broken-pipe model response.

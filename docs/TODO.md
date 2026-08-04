@@ -54,6 +54,7 @@ Back: [Documentation index](./INDEX.md)
 
 - [ ] Add catalog-wide `component logs list/read/follow` commands and a full-screen scrollable TUI log viewer with adapter-declared channels, remote host/user resolution, path identity, refresh, and follow controls.
 - [ ] Extend guided initialization with optional host and executable discovery. Fresh topology creation is now available through templates in the CLI and TUI without manual JSON editing.
+- [x] Replace the single Add Component modal with a four-step placement, settings, connections, and review flow; add grouped editing, advanced disclosure, reset/revert controls, and reviewed local-template import.
 - [ ] Expand schema coverage for product-specific fields discovered during beta operation; unknown extension fields remain preserved and available through advanced CLI file input.
 - [ ] Add explicit manual/standalone/launchd lifecycle ownership and crash-only restart policies that never override an intentional operator stop.
 - [ ] Make managed launchd lifecycle symmetric: after `component stop` unloads a job with `bootout`, `component start` must `bootstrap` its installed plist before `kickstart`. Add an acceptance test that stops, starts, and restarts an initially loaded job without leaving a blocked operation or orchestrator lock holder.
@@ -66,14 +67,18 @@ Back: [Documentation index](./INDEX.md)
 - [ ] Add the loopback static WebUI over the same control library after the TUI stabilizes.
 - [ ] Add stateless component relocation with adapter preflight, cutover, dependent endpoint update, and rollback. Do not treat a desired-state host edit as provisioning.
 - [ ] Add component-native update check/plan/apply commands after provider backup, rollback, and post-update health contracts pass acceptance.
+- [x] Add a validated authority-owned append-only product installation ledger to the reconciled manifest, retain it on trusted control snapshots, and expose it through product details and `llmops product history` without expanding the default status table.
+- [ ] Append installation history automatically from component-native update and rollback operations after their provider contracts pass acceptance.
 - [ ] Run the bounded Hermes RTK canary after explicit approval, capture owned-file backups, compare diagnostics and token reduction, and prove disable/rollback before retaining the hook.
 
 ## Integration Roadmap
 
 - [ ] Add an early-alpha MLXForge engine adapter after inference and lifecycle contracts stabilize.
+- [ ] Review and commit MLXForge's accepted Q3 Phase A correction before authorizing further qualification or adapter implementation.
+- [ ] Perform a fresh read-only Secrets-Kit blocker audit, then resume only its highest authorized blocker under existing review gates.
 - [ ] Add systemd and complete Debian/Rocky acceptance before declaring Linux support.
 - [ ] Add optional recipes for Hermes, OpenClaw, Mnemosyne, RTK, and Headroom without making them core dependencies.
 - [ ] Add a TTS Bridge provider contract for operator-supplied local or remote OpenAI-compatible speech endpoints; never ship voices or credentials.
-- [ ] Integrate Secrets-Kit through explicit provider references after its release contract stabilizes, then retire plaintext `.env` injection.
+- [ ] Integrate Secrets-Kit through opaque provider references after its standalone release and rollback contracts stabilize, then retire plaintext `.env` injection.
 - [ ] Publish an adapter SDK with a template, manifest schema, compatibility policy, conformance suite, test doubles, and uninstall contract.
 - [ ] Add authenticated adapter catalog metadata before third-party installation is supported.

@@ -1,7 +1,7 @@
 {
   "template_version": 1,
   "id": "tts-bridge",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "adapter": "tts-bridge",
   "profile_kind": "service",
   "component_kind": "bridge",
@@ -17,17 +17,17 @@
       "template_id": {"type": "string", "const": "tts-bridge", "default": "tts-bridge"},
       "name": {"type": "string", "minLength": 1, "x-llmops-ui": {"group": "Identity", "order": 10}},
       "runtime": {"type": "object", "required": ["host", "port", "upstream_base"], "properties": {
-        "python_bin": {"type": "string", "x-llmops-ui": {"group": "Runtime", "order": 10, "widget": "path"}},
+        "python_bin": {"type": "string", "x-llmops-ui": {"group": "Runtime", "order": 10, "widget": "path", "advanced": true}},
         "host": {"type": "string", "default": "127.0.0.1", "x-llmops-ui": {"group": "Listener", "order": 10}},
-        "port": {"type": "integer", "minimum": 1, "maximum": 65535, "default": 11436, "x-llmops-ui": {"group": "Listener", "order": 20, "widget": "number"}},
-        "upstream_base": {"type": "string", "format": "uri", "default": "http://127.0.0.1:11437/v1", "x-llmops-ui": {"group": "Upstream", "order": 10}}
+        "port": {"type": "integer", "minimum": 1, "maximum": 65535, "default": 11436, "x-llmops-ui": {"group": "Listener", "order": 20, "widget": "number", "unit": "TCP port"}},
+        "upstream_base": {"type": "string", "format": "uri", "default": "http://127.0.0.1:11437/v1", "x-llmops-ui": {"group": "Upstream", "order": 10, "label": "TTS provider base URL"}}
       }},
       "paths": {"type": "object", "properties": {
         "config_dir": {"type": "string", "x-llmops-ui": {"group": "Voice Configuration", "order": 10, "widget": "path"}},
         "voice_map_config": {"type": "string", "x-llmops-ui": {"group": "Voice Configuration", "order": 20, "widget": "path"}},
         "samples_dir": {"type": "string", "x-llmops-ui": {"group": "Voice Configuration", "order": 30, "widget": "path"}}
       }},
-      "logging": {"type": "object", "properties": {"rotate_seconds": {"type": "integer", "minimum": 60, "default": 86400}, "rotate_keep": {"type": "integer", "minimum": 1, "default": 5}}}
+      "logging": {"type": "object", "properties": {"rotate_seconds": {"type": "integer", "minimum": 60, "default": 86400, "x-llmops-ui": {"group": "Logging", "order": 10, "widget": "duration", "unit": "seconds", "advanced": true}}, "rotate_keep": {"type": "integer", "minimum": 1, "default": 5, "x-llmops-ui": {"group": "Logging", "order": 20, "widget": "number", "advanced": true}}}}
     }
   },
   "defaults": {"schema_version": 2, "template_id": "tts-bridge", "name": "tts-bridge", "runtime": {"host": "127.0.0.1", "port": 11436, "upstream_base": "http://127.0.0.1:11437/v1"}, "paths": {}, "logging": {"rotate_seconds": 86400, "rotate_keep": 5}},

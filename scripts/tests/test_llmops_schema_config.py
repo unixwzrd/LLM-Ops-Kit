@@ -27,6 +27,7 @@ from llmops_kit.llmops_drivers import ComponentRunner
 from llmops_kit.llmops_paths import resolve_paths
 from llmops_kit.llmops_templates import (
     TemplateError,
+    flatten_schema,
     load_template_registry,
     parse_schema_value,
     validate_template_document,
@@ -402,6 +403,39 @@ class SchemaConfigurationTests(ControlFixture):
 
 
 class LocalTemplateSafetyTests(unittest.TestCase):
+    def test_ui_metadata_is_validated_and_exposed_to_shared_forms(self) -> None:
+        schema = {
+            "type": "object",
+            "properties": {
+                "timeout": {
+                    "type": "integer",
+                    "default": 30,
+                    "x-llmops-ui": {
+                        "label": "Startup timeout",
+                        "help": "Maximum readiness wait.",
+                        "placeholder": "30",
+                        "unit": "seconds",
+                        "step": "settings",
+                        "group": "Health",
+                        "widget": "duration",
+                    },
+                }
+            },
+        }
+        row = flatten_schema(schema)[0]
+        self.assertEqual(row["label"], "Startup timeout")
+        self.assertEqual(row["help"], "Maximum readiness wait.")
+        self.assertEqual(row["unit"], "seconds")
+        self.assertEqual(row["step"], "settings")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths({"HOME": tmp, "LLMOPS_CONFIG_HOME": str(Path(tmp) / "config")})
+            document = load_template_registry(paths)["standalone"].as_dict()
+            document.pop("source", None)
+            document["profile_schema"]["properties"]["name"]["x-llmops-ui"]["step"] = "invalid"
+            with self.assertRaisesRegex(TemplateError, "unsupported UI step"):
+                validate_template_document(document, source="test")
+
     def test_local_template_rejects_shell_string_actions(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             paths = resolve_paths({"HOME": tmp, "LLMOPS_CONFIG_HOME": str(Path(tmp) / "config")})

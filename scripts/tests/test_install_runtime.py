@@ -68,6 +68,8 @@ class InstallerTests(unittest.TestCase):
                 "LLMOPS_STATE_HOME": str(state),
                 "LLMOPS_CACHE_HOME": str(cache),
                 "LLMOPS_UV_BIN": shutil.which("uv") or "uv",
+                "CONDA_PREFIX": str(home / "operator-conda"),
+                "VIRTUAL_ENV": str(home / "operator-venv"),
             }
             source = self.release_source(home, "installer-test")
             common = [
@@ -85,6 +87,10 @@ class InstallerTests(unittest.TestCase):
             self.run_command(common + ["--release-id", "release-1"], env)
             self.assertEqual((install / "current").resolve(), (install / "releases" / "release-1").resolve())
             self.assertFalse((install / "previous").exists())
+            pyvenv = (install / "current" / "app" / "pyvenv.cfg").read_text(encoding="utf-8")
+            self.assertIn(str(install / "python"), pyvenv)
+            if env.get("CONDA_PREFIX"):
+                self.assertNotIn(env["CONDA_PREFIX"], pyvenv)
             self.assertTrue((public_bin / "llmops").is_symlink())
             help_result = self.run_command([str(public_bin / "llmops"), "--help"], env)
             self.assertIn("Show aggregate local and remote component status", help_result.stdout)

@@ -1,7 +1,7 @@
 # Textual Console
 
 **Created**: 2026-07-20
-**Updated**: 2026-07-30
+**Updated**: 2026-08-04
 
 Back: [Documentation index](./INDEX.md)
 
@@ -60,6 +60,10 @@ Automatic refresh defaults to 15 seconds and pauses while a modal, edit, confirm
 
 The component editor groups related schema fields and shows both a friendly label and the exact canonical field path. Every accepted edit is persistent:
 
+- Advanced fields are hidden initially, but their current values are retained. **Show advanced** exposes them without materializing defaults.
+- **Reset Section** restores the selected section to the values present when the editor opened.
+- **Revert All** restores every field in the form to its opening value.
+
 - **Save** validates and stores the configuration without restarting anything.
 - **Save & Restart** validates and stores the configuration, then restarts only affected components that are currently intended to run. Intentionally stopped components remain stopped.
 - **Cancel** closes the editor without writing or restarting anything.
@@ -70,7 +74,16 @@ The component editor changes desired state only. Changing a component's host doe
 
 ## Service Catalog And Details
 
-The Service Catalog is generated from the same versioned templates used by the CLI. Add Component selects a template, component identity, stack, host alias, execution user, reusable or new profile, lifecycle fields, endpoint connections, and dependencies. Template constraints are validated before a plan is shown. For llama.cpp, selecting n-gram speculation disables and clears draft-model or MTP fields that cannot coexist.
+The Service Catalog is generated from the same versioned templates used by the CLI. **Import local** accepts an operator-reviewed JSON template, validates and plans it, displays the equivalent `llmops template import` command, and writes it transactionally only after confirmation.
+
+Add Component is a four-step flow:
+
+1. Choose component identity, stack, host alias, execution user, and reusable or new profile.
+2. Configure essential service settings from the template schema.
+3. Connect required endpoints and review inferred lifecycle dependencies.
+4. Review validation, files, equivalent CLI, and restart impact before applying.
+
+New components are initially disabled. Advanced parameters remain available through **Configure** after creation. Template constraints are validated before a plan is shown. For llama.cpp, selecting n-gram speculation disables and clears draft-model or MTP fields that cannot coexist.
 
 The full-screen Details view shows effective component and profile values, value sources, execution identity, adapter and template, endpoints, dependencies, probes, timeouts, restart policy, runtime identity, versions, and log channels. Tool templates such as RTK expose their reviewed actions in the same view.
 

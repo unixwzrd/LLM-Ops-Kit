@@ -31,6 +31,9 @@ Record artifact version, SHA-256, host, architecture, timestamp, result, and evi
 - [ ] Run `doctor --probe`, `status --all --json`, component/stack plans, topology table/JSON/Mermaid output, and TUI startup.
 - [ ] Confirm a running component with failed readiness reports running lifecycle and degraded health, while an intentionally unobservable component reports authority-only observability.
 - [ ] Confirm arrow selection updates TUI details, automatic refresh pauses during dialogs, help/settings open, and active-dependent stop requires cascade or force.
+- [ ] Create a disabled component through all four Service Catalog steps and confirm required endpoints, inferred dependencies, affected files, authority hash, equivalent CLI, and no implicit restart.
+- [ ] Import a reviewed local generic-service template through the TUI, then add its component without editing JSON or changing core source.
+- [ ] Edit a shared profile and confirm the warning names every affected component; verify hidden advanced values survive Reset Section, Revert All, Save, and Save & Restart.
 
 ## Minimal Install
 

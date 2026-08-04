@@ -18,6 +18,7 @@ from unittest import mock
 from llmops_kit import __version__, entrypoint, llmops_cli
 from llmops_kit.entrypoint import tui_authority_command
 from llmops_kit.llmops_cli import _host_command as host_command
+from llmops_kit.llmops_cli import _is_local_status_host as is_local_status_host
 from llmops_kit.llmops_cli import _remote_status as remote_status
 from llmops_kit.llmops_cli import _status_components as status_components
 from llmops_kit.llmops_cli import _condition as condition
@@ -29,6 +30,7 @@ from llmops_kit.llmops_executor import Executor, ExecutionError, Operation, comp
 from llmops_kit.llmops_inventory import InventoryError, load_inventory
 from llmops_kit.llmops_lifecycle_state import LifecycleStateStore
 from llmops_kit.llmops_paths import resolve_paths
+from llmops_kit.llmops_products import ProductInventory
 from llmops_kit.llmops_topology import (
     Topology,
     TopologyError,
@@ -77,6 +79,10 @@ class FakeRunner:
 
 class ControlFixture(unittest.TestCase):
     def setUp(self) -> None:
+        user_patcher = mock.patch("llmops_kit.llmops_drivers.pwd.getpwuid")
+        current_user = user_patcher.start()
+        current_user.return_value.pw_name = "operator"
+        self.addCleanup(user_patcher.stop)
         self.tempdir = tempfile.TemporaryDirectory()
         self.root = Path(self.tempdir.name)
         self.config_home = self.root / "config"
@@ -214,12 +220,27 @@ class InventoryTests(ControlFixture):
                 "schema_version": 1,
                 "products": {
                     "llama-cpp": {"installed_version": "b1057", "update_state": "review"},
-                    "agent": {"installed_version": "1.0", "update_state": "current"},
+                    "agent": {
+                        "installed_version": "1.0",
+                        "update_state": "current",
+                    },
                 },
                 "components": {
                     "sample:chat": "llama-cpp",
                     "sample:agent": "agent",
                 },
+                "history": [
+                    {
+                        "product_id": "llama-cpp",
+                        "installed_version": "b1000",
+                        "recorded_at": "2026-07-20",
+                    },
+                    {
+                        "product_id": "llama-cpp",
+                        "installed_version": "b1057",
+                        "recorded_at": "2026-07-27",
+                    }
+                ],
             },
         )
         self.topology.hosts["model-host"] = replace(
@@ -227,10 +248,161 @@ class InventoryTests(ControlFixture):
         )
         self.topology.config.data["control"]["authority_host"] = "agent-host"
         destination = self.root / "snapshot"
-        write_host_snapshot(self.topology, host_name="model-host", destination=destination)
-        products = json.loads((destination / "products.json").read_text(encoding="utf-8"))
+        write_host_snapshot(
+            self.topology, host_name="model-host", destination=destination
+        )
+        products = json.loads(
+            (destination / "products.json").read_text(encoding="utf-8")
+        )
         self.assertEqual(products["components"], {"sample:chat": "llama-cpp"})
         self.assertEqual(set(products["products"]), {"llama-cpp"})
+        self.assertEqual(products["history"], [])
+
+    def test_trusted_snapshot_preserves_product_history(self) -> None:
+        self.write_json(
+            self.paths.products_file,
+            {
+                "schema_version": 1,
+                "products": {
+                    "llama-cpp": {
+                        "installed_version": "b1057",
+                        "update_state": "review",
+                    },
+                    "agent": {"installed_version": "1.0", "update_state": "current"},
+                },
+                "components": {
+                    "sample:chat": "llama-cpp",
+                    "sample:agent": "agent",
+                },
+                "history": [
+                    {
+                        "product_id": "llama-cpp",
+                        "installed_version": "b1057",
+                        "recorded_at": "2026-07-27",
+                        "previous_version": "b1000",
+                        "rollback": "previous binary",
+                    }
+                ],
+            },
+        )
+        destination = self.root / "trusted-snapshot"
+        write_host_snapshot(
+            self.topology, host_name="model-host", destination=destination
+        )
+        products = json.loads(
+            (destination / "products.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(set(products["products"]), {"agent", "llama-cpp"})
+        self.assertEqual(products["history"][0]["previous_version"], "b1000")
+        inventory = ProductInventory.load(destination / "products.json")
+        self.assertEqual(inventory.history[0].rollback, "previous binary")
+
+    def test_product_history_command_filters_product(self) -> None:
+        self.write_json(
+            self.paths.products_file,
+            {
+                "schema_version": 1,
+                "products": {
+                    "llama-cpp": {
+                        "installed_version": "b1057",
+                        "update_state": "review",
+                    },
+                    "agent": {"installed_version": "1.0", "update_state": "current"},
+                },
+                "components": {"sample:chat": "llama-cpp"},
+                "history": [
+                    {
+                        "product_id": "llama-cpp",
+                        "installed_version": "b1000",
+                        "recorded_at": "2026-07-20",
+                    },
+                    {
+                        "product_id": "llama-cpp",
+                        "installed_version": "b1057",
+                        "recorded_at": "2026-07-27",
+                    },
+                    {
+                        "product_id": "agent",
+                        "installed_version": "1.0",
+                        "recorded_at": "2026-07-26",
+                    },
+                ],
+            },
+        )
+        args = argparse.Namespace(
+            product_action="history", product_id="llama-cpp", json=True
+        )
+        output = io.StringIO()
+        with (
+            mock.patch.object(
+                llmops_cli, "CURRENT_TOPOLOGY", self.topology, create=True
+            ),
+            redirect_stdout(output),
+        ):
+            self.assertEqual(llmops_cli.cmd_product(args), 0)
+        payload = json.loads(output.getvalue())
+        self.assertEqual(
+            [item["installed_version"] for item in payload], ["b1000", "b1057"]
+        )
+
+        args = argparse.Namespace(
+            product_action="history",
+            product_id=None,
+            json=False,
+            newest=True,
+            tsv=True,
+        )
+        output = io.StringIO()
+        with (
+            mock.patch.object(
+                llmops_cli, "CURRENT_TOPOLOGY", self.topology, create=True
+            ),
+            redirect_stdout(output),
+        ):
+            self.assertEqual(llmops_cli.cmd_product(args), 0)
+        lines = output.getvalue().splitlines()
+        self.assertEqual(
+            lines[0].split("\t"),
+            [
+                "product_id",
+                "installed_version",
+                "recorded_at",
+                "previous_version",
+                "stack",
+                "host",
+                "execution_user",
+                "operation_id",
+                "artifact_identity",
+                "validation",
+                "rollback",
+            ],
+        )
+        self.assertEqual(len(lines), 3)
+        self.assertIn("agent\t1.0\t2026-07-26", lines[1])
+        self.assertIn("llama-cpp\tb1057\t2026-07-27", lines[2])
+        self.assertNotIn("product_id=", output.getvalue())
+
+        args = argparse.Namespace(
+            product_action="history",
+            product_id="llama-cpp",
+            json=False,
+            newest=False,
+            tsv=False,
+        )
+        output = io.StringIO()
+        with (
+            mock.patch.object(
+                llmops_cli, "CURRENT_TOPOLOGY", self.topology, create=True
+            ),
+            redirect_stdout(output),
+        ):
+            self.assertEqual(llmops_cli.cmd_product(args), 0)
+        rendered = output.getvalue()
+        self.assertIn("Product", rendered)
+        self.assertIn("Instal", rendered)
+        self.assertIn("version", rendered)
+        self.assertIn("b1057", rendered)
+        self.assertNotIn("product_id=", rendered)
 
     def test_public_entrypoint_reports_installed_version(self) -> None:
         output = io.StringIO()
@@ -273,6 +445,18 @@ class InventoryTests(ControlFixture):
         self.assertEqual(hosts["model-host"].transport, "local")
         self.assertEqual(hosts["model-host"].control_host, "model.local")
         self.assertEqual(hosts["model-host"].destination, "operator@model.local")
+
+    @mock.patch("llmops_kit.llmops_drivers.os.geteuid", return_value=501)
+    @mock.patch("llmops_kit.llmops_drivers.pwd.getpwuid")
+    def test_local_transport_uses_ssh_for_different_execution_user(self, getpwuid, _geteuid) -> None:
+        getpwuid.return_value.pw_name = "controller"
+        component = self.topology.resolve_component("sample:chat")
+
+        host = ComponentRunner(self.topology)._host(component)
+
+        self.assertEqual(host.user, "operator")
+        self.assertEqual(host.transport, "ssh")
+        self.assertEqual(host.control_host, "model.local")
 
     def test_inventory_rejects_duplicate_hosts(self) -> None:
         raw = json.loads(self.paths.inventory_file.read_text(encoding="utf-8"))
@@ -840,6 +1024,14 @@ class TopologyTests(ControlFixture):
         command = run.call_args.args[0]
         self.assertIn("operator@model.local", command)
         self.assertIn('"$HOME"/.local/bin/llmops status --host model-host --local --json', command[-1])
+
+    def test_snapshot_host_uses_remote_status_for_a_different_execution_user(self) -> None:
+        host = {"name": "model-host", "user": "service-user"}
+        with mock.patch("llmops_kit.llmops_cli.pwd.getpwuid") as current_user:
+            current_user.return_value.pw_name = "operator"
+            self.assertFalse(is_local_status_host("model-host", host, "model-host"))
+            host["user"] = "operator"
+            self.assertTrue(is_local_status_host("model-host", host, "model-host"))
 
     def test_host_snapshot_rejects_embedded_secret_values(self) -> None:
         profile = json.loads((self.paths.models_dir / "chat.json").read_text(encoding="utf-8"))

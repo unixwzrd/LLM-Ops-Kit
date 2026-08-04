@@ -20,6 +20,7 @@ from llmops_kit.llmops_tui import (
     equivalent_command,
     schema_configure_command,
 )
+from llmops_kit.llmops_templates import load_template_registry
 from llmops_kit.llmops_ui import (
     UiPreferences,
     load_ui_preferences,
@@ -123,6 +124,34 @@ class TuiContractTests(unittest.TestCase):
 
 
 class TuiApplicationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_schema_editor_warns_about_shared_profile_consumers(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            paths = resolve_paths(
+                {
+                    "HOME": str(root),
+                    "LLMOPS_CONFIG_HOME": str(root / "config"),
+                    "LLMOPS_DATA_HOME": str(root / "data"),
+                    "LLMOPS_STATE_HOME": str(root / "state"),
+                    "LLMOPS_CACHE_HOME": str(root / "cache"),
+                }
+            )
+            initialize(paths, preset="single-host", user="operator")
+            stack_path = paths.stacks_dir / "starter.json"
+            stack = json.loads(stack_path.read_text(encoding="utf-8"))
+            shared = dict(stack["components"][0])
+            shared["id"] = "chat-shadow"
+            stack["components"].append(shared)
+            stack_path.write_text(json.dumps(stack, indent=2) + "\n", encoding="utf-8")
+
+            app = build_application(str(paths.config_home), None)
+            async with app.run_test(size=(140, 44)) as pilot:
+                await pilot.pause(1)
+                await pilot.click("#action-configure")
+                await pilot.pause()
+                warning = str(app.screen.query_one("#shared-profile-warning").render())
+                self.assertIn("starter:chat-shadow", warning)
+
     async def test_schema_editor_saves_persistently_and_optionally_restarts(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -148,10 +177,25 @@ class TuiApplicationTests(unittest.IsolatedAsyncioTestCase):
                     self.assertTrue(editor.query(".field-group"))
                     self.assertIsNotNone(editor.query_one("#save"))
                     self.assertIsNotNone(editor.query_one("#save-restart"))
+                    advanced = list(editor.query(".advanced-field"))
+                    self.assertTrue(advanced)
+                    self.assertTrue(all(not field.display for field in advanced))
+                    await pilot.click("#toggle-advanced")
+                    await pilot.pause()
+                    self.assertTrue(all(field.display for field in advanced))
                     enabled_index = next(
                         index
                         for index, row in enumerate(editor.rows)
                         if row["path"] == "component.enabled"
+                    )
+                    editor.query_one(f"#schema-field-{enabled_index}").value = not bool(
+                        editor.initial_values[enabled_index]
+                    )
+                    await pilot.click("#revert-all")
+                    await pilot.pause()
+                    self.assertEqual(
+                        editor.query_one(f"#schema-field-{enabled_index}").value,
+                        bool(editor.initial_values[enabled_index]),
                     )
                     editor.query_one(f"#schema-field-{enabled_index}").value = not bool(
                         editor.initial_values[enabled_index]
@@ -175,11 +219,11 @@ class TuiApplicationTests(unittest.IsolatedAsyncioTestCase):
                     editor.query_one(f"#schema-field-{enabled_index}").value = not bool(
                         editor.initial_values[enabled_index]
                     )
-                    await pilot.click("#save-restart")
+                    editor.query_one("#save-restart").press()
                     await pilot.pause()
                     command = str(app.screen.query_one("#equivalent-command").render())
                     self.assertIn("--restart-affected", command)
-                    self.assertIn("Save & Restart", str(app.screen.query_one("#run").render()))
+                    self.assertEqual(str(app.screen.query_one("#run").label), "Save & Restart")
                     await pilot.click("#run")
                     await pilot.pause()
                     self.assertTrue(detached.called)
@@ -317,14 +361,33 @@ class TuiApplicationTests(unittest.IsolatedAsyncioTestCase):
                 await pilot.pause()
                 await pilot.click("#add")
                 await pilot.pause()
+                app.screen.query_one("#next-placement").press()
+                await pilot.pause()
+                self.assertIn("Component ID is required", str(app.screen.query_one("#add-error").render()))
                 app.screen.query_one("#add-id").value = "worker"
                 app.screen.query_one("#add-profile-name").value = "worker-profile"
+                await pilot.pause()
+                self.assertIn("Step 1 of 4", str(app.screen.query_one("#add-progress").render()))
+                app.screen.query_one("#next-placement").press()
+                await pilot.pause()
+                self.assertIn("Step 2 of 4", str(app.screen.query_one("#add-progress").render()))
+                app.screen.query_one("#next-settings").press()
+                await pilot.pause()
+                self.assertIn("Step 3 of 4", str(app.screen.query_one("#add-progress").render()))
+                app.screen.query_one("#next-connections").press()
+                await pilot.pause()
+                self.assertIn("Step 4 of 4", str(app.screen.query_one("#add-progress").render()))
+                self.assertIn("Initial lifecycle: disabled", str(app.screen.query_one("#add-review").render()))
                 await pilot.click("#review")
                 await pilot.pause()
                 self.assertIn(
                     "llmops component add worker --template standalone",
                     str(app.screen.query_one("#equivalent-command").render()),
                 )
+                review = str(app.screen.query_one(".dialog-body").render())
+                self.assertIn("worker-profile.json", review)
+                self.assertIn("authority hash", review)
+                self.assertIn("created disabled", review)
                 await pilot.click("#run")
                 await pilot.pause(1)
             topology = llmops_cli.build_topology(
@@ -334,7 +397,52 @@ class TuiApplicationTests(unittest.IsolatedAsyncioTestCase):
             component = topology.resolve_component("worker")
             self.assertEqual(component.template_id, "standalone")
             self.assertFalse(component.enabled)
-            self.assertTrue((paths.services_dir / "worker-profile.json").is_file())
+            profile_path = paths.services_dir / "worker-profile.json"
+            self.assertTrue(profile_path.is_file())
+            profile = json.loads(profile_path.read_text(encoding="utf-8"))
+            self.assertEqual(profile["actions"]["restart"], ["/usr/bin/true"])
+
+    async def test_service_catalog_imports_reviewed_local_template(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            paths = resolve_paths(
+                {
+                    "HOME": str(root),
+                    "LLMOPS_CONFIG_HOME": str(root / "config"),
+                    "LLMOPS_DATA_HOME": str(root / "data"),
+                    "LLMOPS_STATE_HOME": str(root / "state"),
+                    "LLMOPS_CACHE_HOME": str(root / "cache"),
+                }
+            )
+            initialize(paths, preset="single-host", user="operator")
+            document = load_template_registry(paths)["standalone"].as_dict()
+            document.pop("source", None)
+            document["id"] = "local-worker"
+            document["defaults"]["template_id"] = "local-worker"
+            document["profile_schema"]["properties"]["template_id"]["const"] = "local-worker"
+            document["profile_schema"]["properties"]["template_id"]["default"] = "local-worker"
+            source = root / "local-worker.json"
+            source.write_text(json.dumps(document), encoding="utf-8")
+            app = build_application(str(paths.config_home), None)
+            async with app.run_test(size=(140, 44)) as pilot:
+                await pilot.pause(1)
+                await pilot.click("#action-catalog")
+                await pilot.pause()
+                await pilot.click("#import")
+                await pilot.pause()
+                app.screen.query_one("#template-import-path").value = str(source)
+                await pilot.click("#review")
+                await pilot.pause()
+                self.assertIn(
+                    "llmops template import",
+                    str(app.screen.query_one("#equivalent-command").render()),
+                )
+                review = str(app.screen.query_one(".dialog-body").render())
+                self.assertIn("local-worker.json", review)
+                self.assertIn("authority hash", review)
+                await pilot.click("#run")
+                await pilot.pause(1)
+            self.assertTrue((paths.templates_dir / "local-worker.json").is_file())
 
     async def test_confirmed_lifecycle_action_dispatches_without_blocking_tui(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

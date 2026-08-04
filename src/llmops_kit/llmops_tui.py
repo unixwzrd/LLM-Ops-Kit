@@ -18,6 +18,7 @@ from .llmops_config_ops import (
     component_field_records,
     configure_component_schema,
     field_records,
+    import_template,
     provision_component,
     retire_component,
 )
@@ -26,7 +27,13 @@ from .llmops_executor import ExecutionError, Executor
 from .llmops_operations import ACTIVE_STATES, dispatch, list_records
 from .llmops_topology import TopologyError
 from .llmops_topology_view import project_topology
-from .llmops_templates import load_template_registry, parse_schema_value, schema_node, set_dotted
+from .llmops_templates import (
+    TemplateError,
+    load_template_registry,
+    parse_schema_value,
+    schema_node,
+    set_dotted,
+)
 from .llmops_ui import (
     CONDITION_STYLES,
     UiPreferences,
@@ -140,6 +147,89 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
         Tree,
     ) = _textual_types()
 
+    def field_title(row: dict[str, Any]) -> str:
+        """Return a human label while retaining the dotted path as secondary help."""
+
+        return str(
+            row.get("label")
+            or row["path"].rsplit(".", 1)[-1].replace("_", " ").title()
+        )
+
+    def display_schema_value(value: Any) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, (dict, list)):
+            return json.dumps(value, sort_keys=True)
+        return str(value)
+
+    def display_widget_value(row: dict[str, Any], value: Any) -> str:
+        """Render structured values in an operator-oriented form."""
+
+        if row.get("widget") == "argv" and isinstance(value, list):
+            return shlex.join(str(item) for item in value)
+        if row.get("type") == "object" and isinstance(value, dict):
+            tokens = []
+            for key, child in sorted(value.items()):
+                rendered = child if isinstance(child, str) else json.dumps(child, separators=(",", ":"))
+                tokens.append(f"{key}={rendered}")
+            return shlex.join(tokens)
+        return display_schema_value(value)
+
+    def parse_widget_value(row: dict[str, Any], node: dict[str, Any], raw: str) -> Any:
+        """Parse Textual form syntax before shared JSON Schema validation."""
+
+        if row.get("widget") == "argv":
+            return parse_schema_value(node, json.dumps(shlex.split(raw)))
+        if row.get("type") == "object":
+            mapping: dict[str, Any] = {}
+            for token in shlex.split(raw):
+                key, separator, value = token.partition("=")
+                if not separator or not key:
+                    raise TemplateError("Expected space-separated KEY=value entries")
+                try:
+                    mapping[key] = json.loads(value)
+                except json.JSONDecodeError:
+                    mapping[key] = value
+            return parse_schema_value(node, json.dumps(mapping, separators=(",", ":")))
+        return parse_schema_value(node, raw)
+
+    def schema_widget(row: dict[str, Any], value: Any, widget_id: str) -> Any:
+        """Build the supported Textual control declared by one schema field."""
+
+        if row.get("type") == "boolean" or row.get("widget") == "checkbox":
+            return Checkbox("Enabled", value=bool(value), id=widget_id)
+        if row.get("allowed"):
+            options = tuple((str(item), item) for item in row["allowed"])
+            selected = value if value in row["allowed"] else row["allowed"][0]
+            return Select(options, value=selected, id=widget_id)
+        input_type = "integer" if row.get("type") == "integer" else "number" if row.get("type") == "number" else "text"
+        return Input(
+            value=display_widget_value(row, value),
+            type=input_type,
+            placeholder=str(
+                row.get("placeholder")
+                or ("/path/to/program --flag value" if row.get("widget") == "argv" else "")
+                or ("KEY=value OTHER='value with spaces'" if row.get("type") == "object" else "")
+            ),
+            id=widget_id,
+        )
+
+    def widget_raw(screen: Any, row: dict[str, Any], widget_id: str) -> str:
+        if row.get("type") == "boolean" or row.get("widget") == "checkbox":
+            return "true" if screen.query_one(f"#{widget_id}", Checkbox).value else "false"
+        if row.get("allowed"):
+            return str(screen.query_one(f"#{widget_id}", Select).value)
+        return screen.query_one(f"#{widget_id}", Input).value.strip()
+
+    def set_widget_value(screen: Any, row: dict[str, Any], widget_id: str, value: Any) -> None:
+        if row.get("type") == "boolean" or row.get("widget") == "checkbox":
+            screen.query_one(f"#{widget_id}", Checkbox).value = bool(value)
+        elif row.get("allowed"):
+            allowed = row["allowed"]
+            screen.query_one(f"#{widget_id}", Select).value = value if value in allowed else allowed[0]
+        else:
+            screen.query_one(f"#{widget_id}", Input).value = display_widget_value(row, value)
+
     class ConfirmOperation(ModalScreen[bool]):
         """Show a reproducible command and require explicit confirmation."""
 
@@ -148,7 +238,7 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
         def __init__(
             self,
             command: str,
-            plan: list[dict[str, str]],
+            plan: list[dict[str, Any]],
             *,
             title: str = "Confirm operation",
             confirm_label: str = "Run",
@@ -162,11 +252,19 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
             self.confirm_variant = confirm_variant
 
         def compose(self) -> ComposeResult:
+            lines: list[str] = []
+            for item in self.plan:
+                lines.append(f"{item['action']}  {item['component']}")
+                for key, value in item.items():
+                    if key in {"action", "component"}:
+                        continue
+                    rendered = json.dumps(value, sort_keys=True) if isinstance(value, (dict, list)) else str(value)
+                    lines.append(f"  {key.replace('_', ' ')}: {rendered}")
             with Vertical(classes="dialog", id="confirm-dialog"):
                 yield Label(self.dialog_title, classes="dialog-title")
                 yield Static(self.command, id="equivalent-command", classes="equivalent-command")
                 yield Static(
-                    "\n".join(f"{item['action']}  {item['component']}" for item in self.plan),
+                    "\n".join(lines),
                     classes="dialog-body",
                 )
                 with Horizontal(classes="dialog-actions"):
@@ -209,7 +307,7 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
             self.dismiss("cancel")
 
     class SchemaEditComponent(ModalScreen[Optional[dict[str, Any]]]):
-        """Generate a component/profile editor from the shared JSON schemas."""
+        """Edit one component through grouped, schema-derived controls."""
 
         BINDINGS = [("escape", "cancel", "Cancel")]
 
@@ -255,6 +353,13 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                     if provider_template is not None:
                         row["allowed"] = sorted(provider_template.endpoints.get("provides", {}))
             self.initial_values = [self._initial_value(row) for row in self.rows]
+            self.groups = list(dict.fromkeys(str(row.get("group") or "General") for row in self.rows))
+            self.advanced_visible = False
+            self.shared_components = sorted(
+                item.qualified_id
+                for item in topology.all_components()
+                if item.profile == component.profile and item.qualified_id != component.qualified_id
+            )
 
         @staticmethod
         def _initial_value(row: dict[str, Any]) -> Any:
@@ -266,17 +371,6 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                 return allowed[0]
             return value
 
-        @staticmethod
-        def _display_value(row: dict[str, Any]) -> str:
-            value = row.get("current")
-            if value is None:
-                value = row.get("default")
-            if value is None:
-                return ""
-            if isinstance(value, (dict, list)):
-                return json.dumps(value, sort_keys=True)
-            return str(value)
-
         def compose(self) -> ComposeResult:
             with Vertical(classes="dialog schema-dialog", id="schema-edit-dialog"):
                 yield Label(f"Configure {self.component.qualified_id}", classes="dialog-title")
@@ -285,6 +379,23 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                     "Host changes update desired state only; they do not relocate executables, models, or data.",
                     classes="warning",
                 )
+                if self.shared_components:
+                    yield Static(
+                        "Shared profile. Saving profile fields also affects: "
+                        + ", ".join(self.shared_components),
+                        id="shared-profile-warning",
+                        classes="warning",
+                    )
+                with Horizontal(id="schema-tools"):
+                    yield Select(
+                        tuple((group, group) for group in self.groups),
+                        value=self.groups[0],
+                        id="schema-group",
+                    )
+                    yield Button("Reset section", id="reset-section")
+                    yield Button("Revert all", id="revert-all")
+                    yield Button("Show advanced", id="toggle-advanced")
+                yield Static("", id="schema-error-summary", classes="validation-error")
                 with Vertical(id="schema-fields"):
                     previous_group = ""
                     for index, row in enumerate(self.rows):
@@ -292,37 +403,86 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                         if group != previous_group:
                             yield Static(group, classes="field-group")
                             previous_group = group
-                        field_name = row["path"].rsplit(".", 1)[-1].replace("_", " ").title()
-                        label = field_name + (" *" if row.get("required") else "")
-                        yield Label(label, classes="field-label")
-                        yield Static(row["path"], classes="field-path")
-                        if row.get("description"):
-                            yield Static(str(row["description"]), classes="field-help")
-                        widget_id = f"schema-field-{index}"
-                        value = self.initial_values[index]
-                        if row.get("type") == "boolean":
-                            yield Checkbox("Enabled", value=bool(value), id=widget_id)
-                        elif row.get("allowed"):
-                            options = tuple((str(item), item) for item in row["allowed"])
-                            selected = value if value in row["allowed"] else row["allowed"][0]
-                            yield Select(options, value=selected, id=widget_id)
-                        else:
-                            input_type = "integer" if row.get("type") == "integer" else "text"
-                            yield Input(value=self._display_value(row), type=input_type, id=widget_id)
-                        if row.get("exclusions"):
-                            yield Static("This field participates in a mutually exclusive constraint.", classes="constraint-help")
+                        classes = "schema-field advanced-field" if row.get("advanced") else "schema-field"
+                        with Vertical(id=f"schema-row-{index}", classes=classes):
+                            suffix = f" ({row['unit']})" if row.get("unit") else ""
+                            label = field_title(row) + suffix + (" *" if row.get("required") else "")
+                            yield Label(label, classes="field-label")
+                            yield Static(
+                                f"{row['path']}  |  source: {row.get('source', 'unknown')}  |  "
+                                f"default: {display_schema_value(row.get('default')) or 'none'}",
+                                classes="field-path",
+                            )
+                            help_text = row.get("help") or row.get("description")
+                            if help_text:
+                                yield Static(str(help_text), classes="field-help")
+                            yield schema_widget(row, self.initial_values[index], f"schema-field-{index}")
+                            yield Static("", id=f"schema-error-{index}", classes="validation-error")
+                            if row.get("exclusions"):
+                                yield Static(
+                                    "This field participates in a mutually exclusive constraint.",
+                                    classes="constraint-help",
+                                )
                 with Horizontal(classes="dialog-actions"):
                     yield Button("Cancel", id="cancel")
                     yield Button("Save", id="save")
                     yield Button("Save & Restart", id="save-restart", variant="primary")
 
+        def on_mount(self) -> None:
+            self._show_advanced(False)
+
+        def _show_advanced(self, visible: bool) -> None:
+            self.advanced_visible = visible
+            for index, row in enumerate(self.rows):
+                if row.get("advanced"):
+                    self.query_one(f"#schema-row-{index}").display = visible
+            self.query_one("#toggle-advanced", Button).label = (
+                "Hide advanced" if visible else "Show advanced"
+            )
+
+        def _parse_row(self, index: int) -> Any:
+            row = self.rows[index]
+            raw = widget_raw(self, row, f"schema-field-{index}")
+            if not raw:
+                if row.get("required"):
+                    raise TemplateError("This field is required")
+                return None
+            if row["path"].startswith("connections."):
+                return parse_schema_value({"type": "string", "minLength": 1}, raw)
+            node_schema = (
+                llmops_cli.COMPONENT_SCHEMA
+                if row["path"].startswith("component.")
+                else load_template_registry(self.topology.paths)[self.component.template_id].profile_schema
+            )
+            relative = row["path"].split(".", 1)[1]
+            return parse_widget_value(row, schema_node(node_schema, relative), raw)
+
+        def _validate_row(self, index: int) -> bool:
+            error = self.query_one(f"#schema-error-{index}", Static)
+            try:
+                self._parse_row(index)
+            except TemplateError as exc:
+                error.update(str(exc))
+                return False
+            error.update("")
+            return True
+
+        def on_input_changed(self, event: Any) -> None:
+            identifier = str(event.input.id)
+            if not identifier.startswith("schema-field-"):
+                return
+            self._validate_row(int(identifier.removeprefix("schema-field-")))
+
         def on_select_changed(self, event: Any) -> None:
+            if event.select.id == "schema-group":
+                return
             try:
                 index = int(str(event.select.id).removeprefix("schema-field-"))
             except ValueError:
                 return
             if not 0 <= index < len(self.rows):
                 return
+            self._validate_row(index)
             if self.rows[index]["path"] != "profile.server.spec_type":
                 return
             disabled_by_mode = {
@@ -353,38 +513,53 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
             if event.button.id == "cancel":
                 self.dismiss(None)
                 return
+            if event.button.id == "toggle-advanced":
+                self._show_advanced(not self.advanced_visible)
+                return
+            if event.button.id in {"reset-section", "revert-all"}:
+                selected_group = str(self.query_one("#schema-group", Select).value)
+                for index, row in enumerate(self.rows):
+                    if event.button.id == "revert-all" or row.get("group") == selected_group:
+                        set_widget_value(
+                            self,
+                            row,
+                            f"schema-field-{index}",
+                            self.initial_values[index],
+                        )
+                        self.query_one(f"#schema-error-{index}", Static).update("")
+                self.query_one("#schema-error-summary", Static).update("")
+                return
             if event.button.id not in {"save", "save-restart"}:
                 return
             assignments: list[str] = []
             unsets: list[str] = []
+            valid = True
             for index, row in enumerate(self.rows):
-                widget_id = f"#schema-field-{index}"
-                if row.get("type") == "boolean":
-                    raw = "true" if self.query_one(widget_id, Checkbox).value else "false"
-                elif row.get("allowed"):
-                    raw = str(self.query_one(widget_id, Select).value)
-                else:
-                    raw = self.query_one(widget_id, Input).value.strip()
+                raw = widget_raw(self, row, f"schema-field-{index}")
                 current = row.get("current")
                 initial = self.initial_values[index]
                 if not raw and current is not None and not row.get("required"):
                     unsets.append(row["path"])
                     continue
                 if not raw:
+                    if row.get("required"):
+                        self.query_one(f"#schema-error-{index}", Static).update("This field is required")
+                        valid = False
                     continue
-                if row["path"].startswith("connections."):
-                    parsed = parse_schema_value({"type": "string", "minLength": 1}, raw)
-                else:
-                    node_schema = (
-                        llmops_cli.COMPONENT_SCHEMA
-                        if row["path"].startswith("component.")
-                        else load_template_registry(self.topology.paths)[self.component.template_id].profile_schema
-                    )
-                    relative = row["path"].split(".", 1)[1]
-                    parsed = parse_schema_value(schema_node(node_schema, relative), raw)
+                try:
+                    parsed = self._parse_row(index)
+                except TemplateError as exc:
+                    self.query_one(f"#schema-error-{index}", Static).update(str(exc))
+                    valid = False
+                    continue
                 if parsed != initial:
                     encoded = json.dumps(parsed, separators=(",", ":")) if isinstance(parsed, (dict, list)) else str(parsed).lower() if isinstance(parsed, bool) else str(parsed)
                     assignments.append(f"{row['path']}={encoded}")
+            if not valid:
+                self.query_one("#schema-error-summary", Static).update(
+                    "Correct the highlighted fields before saving."
+                )
+                return
             self.dismiss(
                 {
                     "assignments": assignments,
@@ -529,6 +704,7 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                 yield Static("Select a template to inspect or add.", id="catalog-detail")
                 with Horizontal(classes="dialog-actions"):
                     yield Button("Close", id="close")
+                    yield Button("Import local", id="import")
                     yield Button("Edit selected", id="edit", disabled=self.component is None)
                     yield Button("Clone selected", id="clone", disabled=self.component is None)
                     yield Button(
@@ -567,6 +743,9 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
             if event.button.id == "close":
                 self.dismiss(None)
                 return
+            if event.button.id == "import":
+                self.dismiss(("import", ""))
+                return
             if event.button.id in {"edit", "clone", "retire", "restore"}:
                 self.dismiss((str(event.button.id), self.component.qualified_id))
                 return
@@ -575,6 +754,39 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                 self.dismiss(("add", self.template_ids[row]))
 
         def action_close(self) -> None:
+            self.dismiss(None)
+
+    class TemplateImportScreen(ModalScreen[Optional[str]]):
+        """Collect one operator-reviewed local template path."""
+
+        BINDINGS = [("escape", "cancel", "Cancel")]
+
+        def compose(self) -> ComposeResult:
+            with Vertical(classes="dialog", id="template-import-dialog"):
+                yield Label("Import reviewed local template", classes="dialog-title")
+                yield Static(
+                    "The JSON file must use a registered adapter and cannot contain shell strings "
+                    "or executable callbacks.",
+                    classes="field-help",
+                )
+                yield Label("Template JSON path", classes="field-label")
+                yield Input(id="template-import-path", placeholder="~/templates/my-service.json")
+                yield Static("", id="template-import-error", classes="validation-error")
+                with Horizontal(classes="dialog-actions"):
+                    yield Button("Cancel", id="cancel")
+                    yield Button("Review import", id="review", variant="primary")
+
+        def on_button_pressed(self, event: Any) -> None:
+            if event.button.id == "cancel":
+                self.dismiss(None)
+                return
+            path = self.query_one("#template-import-path", Input).value.strip()
+            if not path:
+                self.query_one("#template-import-error", Static).update("A local JSON path is required.")
+                return
+            self.dismiss(path)
+
+        def action_cancel(self) -> None:
             self.dismiss(None)
 
     class CloneComponentScreen(ModalScreen[Optional[dict[str, Any]]]):
@@ -611,7 +823,7 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
             self.dismiss(None)
 
     class AddComponentScreen(ModalScreen[Optional[dict[str, Any]]]):
-        """Create one disabled component and optionally a new profile."""
+        """Guide creation through placement, settings, connections, and review."""
 
         BINDINGS = [("escape", "cancel", "Cancel")]
 
@@ -634,8 +846,12 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
             self.rows = [
                 row
                 for row in field_records(template, current=template.defaults)
-                if not row.get("read_only") and row["path"] != "profile.name"
+                if not row.get("read_only")
+                and not row.get("advanced")
+                and row["path"] != "profile.name"
             ]
+            self.step = 0
+            self.step_names = ("Placement", "Settings", "Connections", "Review")
             registry = load_template_registry(topology.paths)
             self.connection_options: dict[str, tuple[tuple[str, str], ...]] = {}
             for name, requirement in template.endpoints.get("requires", {}).items():
@@ -655,64 +871,153 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
             profile_options = (("Create new profile", "__new__"),) + tuple((name, name) for name in self.profiles)
             with Vertical(classes="dialog schema-dialog", id="add-component-dialog"):
                 yield Label(f"Add {self.template.template_id}", classes="dialog-title")
-                yield Label("Component ID")
-                yield Input(id="add-id")
-                yield Label("Stack")
-                yield Select(tuple((name, name) for name in sorted(self.topology.stacks)), value=sorted(self.topology.stacks)[0], id="add-stack")
-                yield Label("Host alias")
-                yield Select(tuple((name, name) for name in sorted(self.topology.hosts)), value=sorted(self.topology.hosts)[0], id="add-host")
-                yield Label("Execution user (blank uses inventory user)")
-                yield Input(id="add-user")
-                yield Label("Profile")
-                yield Select(profile_options, value="__new__", id="add-profile-mode")
-                yield Label("New profile name")
-                yield Input(id="add-profile-name")
-                for name, options in self.connection_options.items():
-                    yield Label(f"Required endpoint: {name}")
-                    if options:
-                        yield Select(options, value=options[0][1], id=f"add-connection-{name}")
-                    else:
-                        yield Static("No compatible provider is currently configured.", classes="warning")
-                with Vertical(id="add-profile-fields"):
-                    for index, row in enumerate(self.rows):
-                        yield Label(row["path"])
-                        value = row.get("current")
-                        if isinstance(value, (dict, list)):
-                            rendered = json.dumps(value, sort_keys=True)
+                yield Static("", id="add-progress", classes="wizard-progress")
+                yield Static("", id="add-error", classes="validation-error")
+                with Vertical(id="add-step-placement", classes="wizard-step"):
+                    yield Static("Identity and placement", classes="field-group")
+                    yield Static(
+                        f"Template lifecycle: {self.template.lifecycle}",
+                        classes="field-help",
+                    )
+                    yield Label("Component ID *", classes="field-label")
+                    yield Static("Stable ID within the selected stack.", classes="field-help")
+                    yield Input(id="add-id", placeholder="model-proxy")
+                    yield Label("Stack", classes="field-label")
+                    yield Select(tuple((name, name) for name in sorted(self.topology.stacks)), value=sorted(self.topology.stacks)[0], id="add-stack")
+                    yield Label("Host alias", classes="field-label")
+                    yield Static("A catalog alias, not necessarily a DNS hostname.", classes="field-help")
+                    yield Select(tuple((name, name) for name in sorted(self.topology.hosts)), value=sorted(self.topology.hosts)[0], id="add-host")
+                    yield Label("Execution user", classes="field-label")
+                    yield Static("Leave blank to use the inventory user for the selected host.", classes="field-help")
+                    yield Input(id="add-user")
+                    yield Label("Reusable profile", classes="field-label")
+                    yield Select(profile_options, value="__new__", id="add-profile-mode")
+                    yield Label("New profile name", classes="field-label", id="add-profile-name-label")
+                    yield Input(id="add-profile-name")
+                with Vertical(id="add-step-settings", classes="wizard-step"):
+                    yield Static("Essential service settings", classes="field-group")
+                    yield Static(
+                        "Advanced settings remain available from Configure after creation.",
+                        classes="field-help",
+                    )
+                    with Vertical(id="add-profile-fields"):
+                        previous_group = ""
+                        for index, row in enumerate(self.rows):
+                            group = str(row.get("group") or "General")
+                            if group != previous_group:
+                                yield Static(group, classes="field-group")
+                                previous_group = group
+                            suffix = f" ({row['unit']})" if row.get("unit") else ""
+                            yield Label(
+                                field_title(row) + suffix + (" *" if row.get("required") else ""),
+                                classes="field-label",
+                            )
+                            yield Static(row["path"], classes="field-path")
+                            help_text = row.get("help") or row.get("description")
+                            if help_text:
+                                yield Static(str(help_text), classes="field-help")
+                            yield schema_widget(row, row.get("current"), f"add-field-{index}")
+                            yield Static("", id=f"add-field-error-{index}", classes="validation-error")
+                with Vertical(id="add-step-connections", classes="wizard-step"):
+                    yield Static("Connections and inferred dependencies", classes="field-group")
+                    if not self.connection_options:
+                        yield Static("This template has no required endpoint connections.", classes="field-help")
+                    for name, options in self.connection_options.items():
+                        yield Label(f"Required endpoint: {name}", classes="field-label")
+                        if options:
+                            yield Select(options, value=options[0][1], id=f"add-connection-{name}")
                         else:
-                            rendered = "" if value is None else str(value)
-                        if row.get("type") == "boolean":
-                            yield Checkbox("Enabled", value=bool(value), id=f"add-field-{index}")
-                        elif row.get("allowed"):
-                            yield Select(tuple((str(item), item) for item in row["allowed"]), value=value, id=f"add-field-{index}")
-                        else:
-                            yield Input(value=rendered, id=f"add-field-{index}")
+                            yield Static(
+                                "No compatible provider is currently configured. Add the provider first.",
+                                id=f"add-connection-error-{name}",
+                                classes="validation-error",
+                            )
+                with Vertical(id="add-step-review", classes="wizard-step"):
+                    yield Static("Review", classes="field-group")
+                    yield Static("", id="add-review", classes="dialog-body")
                 with Horizontal(classes="dialog-actions"):
                     yield Button("Cancel", id="cancel")
+                    yield Button("Back", id="back")
+                    yield Button("Next", id="next-placement", variant="primary")
+                    yield Button("Next", id="next-settings", variant="primary")
+                    yield Button("Next", id="next-connections", variant="primary")
                     yield Button("Review", id="review", variant="primary")
 
-        def on_select_changed(self, event: Any) -> None:
-            if event.select.id == "add-profile-mode" and event.value != "__new__":
-                self.query_one("#add-profile-name", Input).value = str(event.value)
+        def on_mount(self) -> None:
+            self._show_step(0)
 
-        def on_button_pressed(self, event: Any) -> None:
-            if event.button.id == "cancel":
-                self.dismiss(None)
-                return
-            mode = str(self.query_one("#add-profile-mode", Select).value)
-            values: dict[str, Any] = {}
-            if mode == "__new__":
+        def _show_step(self, step: int) -> None:
+            self.step = max(0, min(step, len(self.step_names) - 1))
+            for index, name in enumerate(("placement", "settings", "connections", "review")):
+                self.query_one(f"#add-step-{name}").display = index == self.step
+            self.query_one("#add-progress", Static).update(
+                f"Step {self.step + 1} of {len(self.step_names)}: {self.step_names[self.step]}"
+            )
+            self.query_one("#back", Button).disabled = self.step == 0
+            for index, name in enumerate(("placement", "settings", "connections")):
+                self.query_one(f"#next-{name}", Button).display = self.step == index
+            self.query_one("#review", Button).display = self.step == len(self.step_names) - 1
+            self.query_one("#add-error", Static).update("")
+            if self.step == 3:
+                self._update_review()
+
+        def _using_new_profile(self) -> bool:
+            return str(self.query_one("#add-profile-mode", Select).value) == "__new__"
+
+        def _validate_step(self) -> bool:
+            if self.step == 0:
+                if not self.query_one("#add-id", Input).value.strip():
+                    self.query_one("#add-error", Static).update("Component ID is required.")
+                    return False
+                if self._using_new_profile() and not self.query_one("#add-profile-name", Input).value.strip():
+                    self.query_one("#add-error", Static).update("A new profile name is required.")
+                    return False
+            if self.step == 1 and self._using_new_profile():
+                valid = True
                 for index, row in enumerate(self.rows):
-                    node = schema_node(self.template.profile_schema, row["path"].removeprefix("profile."))
-                    if row.get("type") == "boolean":
-                        raw = "true" if self.query_one(f"#add-field-{index}", Checkbox).value else "false"
-                    elif row.get("allowed"):
-                        raw = str(self.query_one(f"#add-field-{index}", Select).value)
+                    raw = widget_raw(self, row, f"add-field-{index}")
+                    try:
+                        if not raw and row.get("required"):
+                            raise TemplateError("This field is required")
+                        if raw:
+                            node = schema_node(
+                                self.template.profile_schema,
+                                row["path"].removeprefix("profile."),
+                            )
+                            parse_widget_value(row, node, raw)
+                    except TemplateError as exc:
+                        self.query_one(f"#add-field-error-{index}", Static).update(str(exc))
+                        valid = False
                     else:
-                        raw = self.query_one(f"#add-field-{index}", Input).value.strip()
-                    if raw:
-                        set_dotted(values, row["path"].removeprefix("profile."), parse_schema_value(node, raw))
-            profile_name = self.query_one("#add-profile-name", Input).value.strip()
+                        self.query_one(f"#add-field-error-{index}", Static).update("")
+                if not valid:
+                    self.query_one("#add-error", Static).update("Correct the highlighted settings.")
+                    return False
+            if self.step == 2 and any(not options for options in self.connection_options.values()):
+                self.query_one("#add-error", Static).update(
+                    "Every required endpoint needs a compatible configured provider."
+                )
+                return False
+            return True
+
+        def _update_review(self) -> None:
+            mode = str(self.query_one("#add-profile-mode", Select).value)
+            connections = self._connections()
+            dependencies = sorted({item["component"] for item in connections.values()})
+            self.query_one("#add-review", Static).update(
+                f"Component: {self.query_one('#add-id', Input).value.strip()}\n"
+                f"Template: {self.template.template_id}\n"
+                f"Stack: {self.query_one('#add-stack', Select).value}\n"
+                f"Host: {self.query_one('#add-host', Select).value}\n"
+                f"Execution user: {self.query_one('#add-user', Input).value.strip() or 'inventory default'}\n"
+                f"Profile: {self.query_one('#add-profile-name', Input).value.strip() if mode == '__new__' else mode} "
+                f"({'create' if mode == '__new__' else 'reuse'})\n"
+                f"Connections: {json.dumps(connections, sort_keys=True) if connections else 'none'}\n"
+                f"Inferred dependencies: {', '.join(dependencies) or 'none'}\n"
+                "Initial lifecycle: disabled"
+            )
+
+        def _connections(self) -> dict[str, dict[str, str]]:
             connections: dict[str, dict[str, str]] = {}
             for name, options in self.connection_options.items():
                 if not options:
@@ -720,6 +1025,43 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                 selected = str(self.query_one(f"#add-connection-{name}", Select).value)
                 component_ref, _, endpoint = selected.rpartition("@")
                 connections[name] = {"component": component_ref, "endpoint": endpoint}
+            return connections
+
+        def on_select_changed(self, event: Any) -> None:
+            if event.select.id == "add-profile-mode":
+                creating = event.value == "__new__"
+                self.query_one("#add-profile-name", Input).disabled = not creating
+                if not creating:
+                    self.query_one("#add-profile-name", Input).value = str(event.value)
+                self.query_one("#add-profile-fields").display = creating
+
+        def on_button_pressed(self, event: Any) -> None:
+            if event.button.id == "cancel":
+                self.dismiss(None)
+                return
+            if event.button.id == "back":
+                self._show_step(self.step - 1)
+                return
+            if str(event.button.id).startswith("next-"):
+                if self._validate_step():
+                    self._show_step(self.step + 1)
+                return
+            if event.button.id != "review" or not self._validate_step():
+                return
+            mode = str(self.query_one("#add-profile-mode", Select).value)
+            values: dict[str, Any] = {}
+            if mode == "__new__":
+                for index, row in enumerate(self.rows):
+                    node = schema_node(self.template.profile_schema, row["path"].removeprefix("profile."))
+                    raw = widget_raw(self, row, f"add-field-{index}")
+                    if raw:
+                        set_dotted(
+                            values,
+                            row["path"].removeprefix("profile."),
+                            parse_widget_value(row, node, raw),
+                        )
+            profile_name = self.query_one("#add-profile-name", Input).value.strip()
+            connections = self._connections()
             self.dismiss(
                 {
                     "component_id": self.query_one("#add-id", Input).value.strip(),
@@ -1060,6 +1402,12 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
         #topology-detail { height: 8; border-top: solid #6f8ea3; padding: 1; }
         .schema-dialog, .details-dialog, .catalog-dialog { width: 95%; height: 95%; max-height: 95%; }
         #schema-fields, #add-profile-fields, .details-body { height: 1fr; overflow-y: auto; padding-right: 1; }
+        #schema-tools { height: 3; margin-bottom: 1; }
+        #schema-tools Select { width: 1fr; margin-right: 1; }
+        #schema-tools Button { min-width: 16; }
+        .schema-field { height: auto; }
+        .wizard-progress { height: 2; color: #b8d4e8; text-style: bold; }
+        .wizard-step { height: 1fr; overflow-y: auto; padding-right: 1; }
         #catalog-table { height: 1fr; }
         #catalog-detail { height: 7; border-top: solid #6f8ea3; padding: 1; }
         .field-help { color: #b8c5d1; }
@@ -1067,6 +1415,7 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
         .field-label { margin-top: 1; color: #f5f7fa; text-style: bold; }
         .field-path { color: #8aa6ba; }
         .constraint-help { color: #ffd166; margin-bottom: 1; }
+        .validation-error { color: #ff6b75; min-height: 1; }
         """
         BINDINGS = [
             ("r", "refresh", "Refresh"),
@@ -1225,6 +1574,11 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                     item["condition"] = "attention"
                     item["operation_id"] = operation.get("operation_id", "")
             self.status_by_id = {item["component"]: item for item in payload}
+            self._render_status(payload, selected_id)
+
+        def _render_status(self, payload: list[dict[str, Any]], selected_id: str) -> None:
+            """Render the current component or stack projection without another probe."""
+
             self.rows = (
                 self.topology.all_components()
                 if self.view == "components"
@@ -1547,6 +1901,62 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
             if selection is None:
                 return
             action, reference = selection
+            if action == "import":
+                source_value = await self.push_screen_wait(TemplateImportScreen())
+                if source_value is None:
+                    return
+                source = Path(source_value).expanduser()
+                try:
+                    plan = import_template(self.desired_topology.paths, source, apply=False)
+                except (ConfigOperationError, TemplateError) as exc:
+                    self.query_one("#detail", Static).update(f"Template import refused: {exc}")
+                    return
+                command = shlex.join(
+                    [
+                        "llmops",
+                        "template",
+                        "import",
+                        str(source),
+                        "--expected-hash",
+                        plan["authority_hash"],
+                        "--apply",
+                        "--yes",
+                    ]
+                )
+                approved = await self.push_screen_wait(
+                    ConfirmOperation(
+                        command,
+                        [
+                            {
+                                "action": "import reviewed template",
+                                "component": plan["template"],
+                                "validation": "passed",
+                                "destination": plan["destination"],
+                                "authority_hash": plan["authority_hash"],
+                                "restart_impact": "none",
+                            }
+                        ],
+                        confirm_label="Import",
+                        confirm_variant="primary",
+                    )
+                )
+                if not approved:
+                    return
+                try:
+                    result = await asyncio.to_thread(
+                        import_template,
+                        self.desired_topology.paths,
+                        source,
+                        apply=True,
+                        expected_hash=plan["authority_hash"],
+                    )
+                except (ConfigOperationError, TemplateError) as exc:
+                    self.query_one("#detail", Static).update(f"Template import failed: {exc}")
+                    return
+                self.query_one("#detail", Static).update(json.dumps(result, indent=2, sort_keys=True))
+                self.desired_topology = llmops_cli.desired_topology(config_home)
+                await self.inspect()
+                return
             if action == "edit":
                 component = self.desired_topology.resolve_component(reference)
                 await self.edit_component(component)
@@ -1670,7 +2080,26 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
             command_argv.extend(("--apply", "--yes"))
             command = shlex.join(command_argv)
             approved = await self.push_screen_wait(
-                ConfirmOperation(command, [{"action": "provision", "component": plan["component"]}])
+                ConfirmOperation(
+                    command,
+                    [
+                        {
+                            "action": "provision",
+                            "component": plan["component"],
+                            "validation": "passed",
+                            "files": plan["files"],
+                            "authority_hash": plan["authority_hash"],
+                            "connections": values["connections"],
+                            "inferred_dependencies": sorted(
+                                {
+                                    connection["component"]
+                                    for connection in values["connections"].values()
+                                }
+                            ),
+                            "restart_impact": "none; component is created disabled",
+                        }
+                    ],
+                )
             )
             if not approved:
                 return
@@ -1690,8 +2119,12 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
             self.run_worker(self.open_catalog(), exclusive=True)
 
         def action_toggle_view(self) -> None:
+            selected_id = self._selected_id()
             self.view = "stacks" if self.view == "components" else "components"
-            self.action_refresh()
+            if self.status_by_id:
+                self._render_status(list(self.status_by_id.values()), selected_id)
+            else:
+                self.action_refresh()
 
         def action_topology(self) -> None:
             self.push_screen(TopologyScreen(self.topology, self.status_by_id))

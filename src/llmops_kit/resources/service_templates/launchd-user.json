@@ -1,7 +1,7 @@
 {
   "template_version": 1,
   "id": "launchd-user",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "adapter": "launchd",
   "profile_kind": "service",
   "component_kind": "service",
@@ -21,7 +21,7 @@
       "working_directory": {"type": "string", "x-llmops-ui": {"group": "LaunchAgent", "order": 30, "widget": "path"}},
       "run_at_load": {"type": "boolean", "default": false, "x-llmops-ui": {"group": "Lifecycle", "order": 10, "widget": "checkbox"}},
       "keep_alive": {"type": "boolean", "default": false, "x-llmops-ui": {"group": "Lifecycle", "order": 20, "widget": "checkbox"}},
-      "environment": {"type": "object", "additionalProperties": {"type": "string"}, "default": {}},
+      "environment": {"type": "object", "additionalProperties": {"type": "string"}, "default": {}, "x-llmops-ui": {"group": "Environment", "order": 10, "advanced": true}},
       "stdout": {"type": "string", "x-llmops-ui": {"group": "Logging", "order": 10, "widget": "path"}},
       "stderr": {"type": "string", "x-llmops-ui": {"group": "Logging", "order": 20, "widget": "path"}}
     }

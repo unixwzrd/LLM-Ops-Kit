@@ -15,11 +15,13 @@ try:
     from llmops_config import LlmOpsConfig
     from llmops_inventory import HostRecord
     from llmops_paths import LlmOpsPaths
+    from llmops_products import ProductInventory, ProductInventoryError
     from llmops_profiles import ProfileError, model_values, service_values
 except ModuleNotFoundError:  # pragma: no cover
     from .llmops_config import LlmOpsConfig
     from .llmops_inventory import HostRecord
     from .llmops_paths import LlmOpsPaths
+    from .llmops_products import ProductInventory, ProductInventoryError
     from .llmops_profiles import ProfileError, model_values, service_values
 
 
@@ -453,12 +455,21 @@ def _validate_profile(component: Component, profile: dict[str, Any]) -> tuple[li
             if not isinstance(actions, dict):
                 errors.append(f"{component.qualified_id}: profile actions must be an object")
             else:
-                for action in ("start", "stop", "restart", "status"):
+                for action in ("start", "stop", "status"):
                     argv = actions.get(action)
                     if not isinstance(argv, list) or not argv or any(not isinstance(token, str) or not token for token in argv):
                         errors.append(
                             f"{component.qualified_id}: action {action} must be a nonempty argv array"
                         )
+                restart = actions.get("restart")
+                if restart is not None and (
+                    not isinstance(restart, list)
+                    or not restart
+                    or any(not isinstance(token, str) or not token for token in restart)
+                ):
+                    errors.append(
+                        f"{component.qualified_id}: action restart must be a nonempty argv array"
+                    )
         elif component.driver == "systemd":
             unit = profile.get("unit")
             if not isinstance(unit, str) or not unit.endswith(".service"):
@@ -658,12 +669,24 @@ def write_host_snapshot(topology: Topology, *, host_name: str, destination: Path
 
     if topology.paths.products_file.is_file():
         try:
+            ProductInventory.load(topology.paths.products_file)
+        except ProductInventoryError as exc:
+            raise TopologyError(str(exc)) from exc
+        try:
             product_data = json.loads(topology.paths.products_file.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             raise TopologyError(f"invalid product inventory {topology.paths.products_file}: {exc}") from exc
         products = product_data.get("products", {}) if isinstance(product_data, dict) else {}
         bindings = product_data.get("components", {}) if isinstance(product_data, dict) else {}
-        if product_data.get("schema_version") != 1 or not isinstance(products, dict) or not isinstance(bindings, dict):
+        history = (
+            product_data.get("history", []) if isinstance(product_data, dict) else []
+        )
+        if (
+            product_data.get("schema_version") != 1
+            or not isinstance(products, dict)
+            or not isinstance(bindings, dict)
+            or not isinstance(history, list)
+        ):
             raise TopologyError(f"invalid product inventory: {topology.paths.products_file}")
         available_ids = {item.qualified_id for item in available}
         filtered_bindings = {
@@ -671,7 +694,9 @@ def write_host_snapshot(topology: Topology, *, host_name: str, destination: Path
             for component, product_id in bindings.items()
             if component in available_ids
         }
-        referenced_products = set(filtered_bindings.values())
+        referenced_products = (
+            set(products) if host.trusted_control else set(filtered_bindings.values())
+        )
         missing = sorted(product_id for product_id in referenced_products if product_id not in products)
         if missing:
             raise TopologyError(
@@ -685,6 +710,7 @@ def write_host_snapshot(topology: Topology, *, host_name: str, destination: Path
             "schema_version": 1,
             "products": filtered_products,
             "components": dict(sorted(filtered_bindings.items())),
+            "history": history if host.trusted_control else [],
         }
         finding = _contains_secret_value(filtered_data)
         if finding:

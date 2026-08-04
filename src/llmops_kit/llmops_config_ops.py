@@ -347,6 +347,21 @@ def _profile_directory(paths: LlmOpsPaths, template: ServiceTemplate) -> Path:
     return paths.services_dir
 
 
+def _merge_profile_values(
+    defaults: Mapping[str, Any],
+    values: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Merge entered fields without dropping nested reviewed defaults."""
+
+    merged = copy.deepcopy(dict(defaults))
+    for key, value in values.items():
+        if isinstance(value, Mapping) and isinstance(merged.get(key), Mapping):
+            merged[key] = _merge_profile_values(merged[key], value)
+        else:
+            merged[key] = copy.deepcopy(value)
+    return merged
+
+
 def _transactional_files(
     paths: LlmOpsPaths,
     documents: Mapping[Path, Mapping[str, Any]],
@@ -1024,8 +1039,7 @@ def provision_component(
     if create_new_profile:
         if profile_path_value.exists():
             raise ConfigOperationError(f"profile already exists: {profile_name}")
-        profile_document = copy.deepcopy(template.defaults)
-        profile_document.update(copy.deepcopy(dict(profile_values or {})))
+        profile_document = _merge_profile_values(template.defaults, profile_values or {})
         profile_document.update(
             {"schema_version": 2, "template_id": template_id, "name": profile_name}
         )

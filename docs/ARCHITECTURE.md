@@ -81,7 +81,7 @@ observe -> metrics -> drift -> corrective_actions
 
 Canonical schema version 2 binds every component and reusable profile to a versioned service template. Templates use JSON Schema 2020-12 plus a constrained `x-llmops-ui` vocabulary for presentation only. They declare typed parameters, constraints, lifecycle ownership, argument arrays, endpoint contracts, readiness, timeouts, restart policy, logs, and reviewed adapter-owned actions.
 
-The CLI and TUI consume the same field model. Typed `--set` and `--unset`, generated forms, local-template import, endpoint wiring, and validation therefore cannot diverge into interface-specific configuration behavior. Local templates may select only registered adapters, argument arrays, and approved option sources; Python callbacks and shell strings are rejected.
+The CLI and TUI consume the same field model. Typed `--set` and `--unset`, the guided Add Component flow, grouped editing, local-template import, endpoint wiring, and validation therefore cannot diverge into interface-specific configuration behavior. Local templates may select only registered adapters, argument arrays, and approved option sources; Python callbacks and shell strings are rejected. Advanced fields may be hidden by an interface, but their existing values remain part of the candidate document and cannot be discarded by omission.
 
 Connections reference typed provider endpoints. A required endpoint implies a lifecycle dependency unless the template explicitly opts out. Address resolution occurs when target-specific snapshots are reconciled, so reusable profiles are not rewritten with one host's resolved address.
 
@@ -113,7 +113,7 @@ Precedence remains:
 shipped defaults -> global configuration -> referenced profile -> host override -> temporary CLI override
 ```
 
-Configuration contains secret references, never resolved secret values in plans, topology catalogs, interface state, or logs. Existing environment injection remains transitional. Secrets-Kit may later implement a provider interface without becoming a hard dependency.
+Configuration contains secret references, never resolved secret values in plans, topology catalogs, interface state, or logs. Existing environment injection remains transitional. A future Secrets-Kit provider contract may resolve a provider name, opaque reference, purpose, execution identity, and lifetime without exposing secret values or making Secrets-Kit a hard dependency.
 
 Lifecycle, readiness, SSH, and log timeouts are explicit canonical component values. They are consumed identically by CLI and TUI operations and never inferred from an interactive shell environment.
 

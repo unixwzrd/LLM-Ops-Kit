@@ -31,6 +31,7 @@ ALLOWED_UI_WIDGETS = {
     "text",
 }
 ALLOWED_OPTION_SOURCES = {"components", "endpoints", "hosts", "profiles", "stacks"}
+ALLOWED_UI_STEPS = {"settings", "connections", "advanced"}
 ALLOWED_LIFECYCLES = {
     "external",
     "external-launchd",
@@ -113,6 +114,13 @@ def _validate_ui_metadata(node: Any, *, path: str = "profile_schema") -> None:
             source = metadata.get("options_source")
             if source is not None and source not in ALLOWED_OPTION_SOURCES:
                 raise TemplateError(f"{path}: unsupported option source: {source}")
+            step = metadata.get("step")
+            if step is not None and step not in ALLOWED_UI_STEPS:
+                raise TemplateError(f"{path}: unsupported UI step: {step}")
+            for key in ("label", "help", "placeholder", "unit"):
+                value = metadata.get(key)
+                if value is not None and not isinstance(value, str):
+                    raise TemplateError(f"{path}.x-llmops-ui.{key} must be a string")
         for key, value in node.items():
             _validate_ui_metadata(value, path=f"{path}.{key}")
     elif isinstance(node, list):
@@ -347,6 +355,11 @@ def flatten_schema(
                 "group": ui.get("group", "General"),
                 "order": ui.get("order", 100),
                 "widget": ui.get("widget"),
+                "label": ui.get("label", ""),
+                "help": ui.get("help", ""),
+                "placeholder": ui.get("placeholder", ""),
+                "unit": ui.get("unit", ""),
+                "step": ui.get("step", "advanced" if ui.get("advanced") else "settings"),
                 "advanced": bool(ui.get("advanced", False)),
                 "read_only": bool(raw.get("readOnly", False) or "const" in raw),
                 "dependencies": list(dependent.get(name, [])) if isinstance(dependent, dict) else [],

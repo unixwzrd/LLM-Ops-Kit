@@ -44,8 +44,8 @@ The TUI should begin as a compact operational dashboard. Configuration screens a
 
 1. **P0 - TUI interaction correctness:** Keep the visible Quit action equivalent to `q`, expose Settings in the primary action bar, apply topology filters immediately, provide one Reset action, and retain semantic condition colors in topology groups and components.
 2. **P1 - Remote log operations:** Add CLI list/read/follow operations for every adapter-declared log channel, resolving host and execution user through the catalog. Add a full-screen scrollable TUI viewer with channel selection, host/path identity, refresh, and follow controls.
-3. **P1 - Guided discovery:** Build optional host, executable, and port discovery over the completed schema-driven creation flow. Fresh users can already create validated profiles and components without manual JSON editing.
-4. **P1 - Template refinement:** Expand reviewed product-specific fields and dynamic option providers using the completed shared JSON Schema contract. The same schemas serve CLI, TUI, future WebUI, recipes, and third-party adapters.
+3. **P1 - Guided discovery:** Build optional host, executable, and port discovery over the completed four-step schema-driven creation flow. Fresh users can create validated profiles and disabled components, wire required endpoints, and import reviewed local templates without manual JSON editing.
+4. **P1 - Template refinement:** Continue expanding reviewed product-specific labels, help, units, grouping, constraints, and dynamic option providers using the shared JSON Schema contract. The same schemas serve CLI, TUI, future WebUI, recipes, and third-party adapters.
 5. **P2 - Lifecycle ownership and restart policy:** Model standalone, manual, launchd, and later systemd ownership explicitly. Separate crash recovery from an operator-requested stop, and expose install/remove/enable/disable plus bounded restart policy without adding a privileged daemon.
 6. **P2 - Stack and host management:** Distinguish catalog host aliases from network hostnames, add full-screen stack membership and dependency views, support stack creation/editing and logical grouping, and keep desired-state reassignment separate from provisioning or stateful relocation.
 
@@ -74,9 +74,12 @@ macOS remains the supported beta platform. A systemd adapter may be developed an
 - Rule-based health and drift remediation suggestions with explicit plans and approval.
 - Agent-neutral operational skill for read-only status, doctor, plan, drift, and approved lifecycle actions.
 - Component update catalog with security/benefit/risk summaries and rollback metadata.
+- Authority-owned append-only installation history for bundled stack components, with artifact identity, validation evidence, and rollback locators available from component details and CLI history inspection.
 - Product-native update providers enabled only after backup, rollback, and post-update health acceptance.
 - Stateless component relocation for proxies, bridges, dashboards, and tunnels with preflight, transactional cutover, and rollback.
 - Typed early-alpha MLXForge engine adapter behind an explicit feature flag.
+- Resume MLXForge only after its accepted Q3 Phase A correction is reviewed and committed. Its first adapter contract is limited to version, health, lifecycle, OpenAI-compatible endpoints, model operations, configuration, and logs.
+- Resume Secrets-Kit from a fresh read-only blocker audit and its highest authorized blocker. Integrate later only through opaque provider references after standalone lifecycle and rollback acceptance.
 - TTS Bridge recipe for OpenAI-compatible local or remote speech services; providers and voice material remain user supplied.
 
 ## Integration Catalog

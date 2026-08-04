@@ -30,6 +30,8 @@ Back: [Documentation index](./INDEX.md)
 - [x] Pass keyboard navigation, high-contrast rendering, help, settings, branding, automatic-refresh pause, and bounded topology acceptance using the installed Textual wheel. Six artifact-boundary TUI tests passed on 2026-07-21 with repository source removed from `PYTHONPATH`.
 - [x] Build the candidate directly from a committed `git archive HEAD` without adding a synthetic `.git` directory, then install and inspect the resulting checksummed artifact in isolated roots.
 - [ ] Pass final normal/minimal install, repair, upgrade, rollback, uninstall, purge, migration, TUI, remote update, reconciliation, and protocol acceptance.
+- [x] Pass the `0.9.0b40` source precheck with the locked UV runtime, including guided component creation, grouped editing, shared-profile warnings, reviewed local-template import, product-history formats, and transactional configuration regressions.
+- [ ] Build `0.9.0b40` from the clean local candidate commit and repeat normal/minimal install, repair, upgrade, rollback, uninstall, purge, and cold-stack acceptance under both isolated macOS test users during the scheduled acceptance window.
 - [x] Confirm all Markdown links, command examples, and public paths resolve.
 - [x] Confirm no release file or archive member contains private paths, addresses, credentials, topology, model weights, voice samples, caches, or development history.
 - [x] Confirm both trusted live hosts report the same catalog/topology identity and expected host-specific complete configuration identity.

@@ -238,8 +238,11 @@ mkdir -p "$staging" "$INSTALL_BASE/releases" "$INSTALL_BASE/python" "$STATE_HOME
 release_created=1
 uv_bin="$(resolve_uv)"
 UV_PYTHON_INSTALL_DIR="$INSTALL_BASE/python" "$uv_bin" python install "$PYTHON_VERSION" --no-bin --compile-bytecode
-managed_python="$(UV_PYTHON_INSTALL_DIR="$INSTALL_BASE/python" "$uv_bin" python find "$PYTHON_VERSION" --managed-python)"
-"$uv_bin" venv --python "$managed_python" --no-python-downloads "$staging/app"
+managed_python="$(env -u CONDA_PREFIX -u VIRTUAL_ENV \
+  UV_PYTHON_INSTALL_DIR="$INSTALL_BASE/python" \
+  "$uv_bin" python find "$PYTHON_VERSION" --managed-python --no-project)"
+env -u CONDA_PREFIX -u VIRTUAL_ENV \
+  "$uv_bin" venv --python "$managed_python" --no-python-downloads "$staging/app"
 requirement="llm-ops-kit"
 [[ "$MINIMAL" -eq 1 ]] || requirement="llm-ops-kit[tui]"
 "$uv_bin" pip install --python "$staging/app/bin/python" --offline --no-index --find-links "$SOURCE_DIR/wheelhouse" "$requirement"
