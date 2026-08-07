@@ -1,7 +1,7 @@
 # Operator Checklist
 
 **Created**: 2026-07-20
-**Updated**: 2026-07-21
+**Updated**: 2026-08-07
 
 Back: [Documentation index](./INDEX.md)
 
@@ -23,7 +23,7 @@ Back: [Documentation index](./INDEX.md)
 - [ ] Treat `authority-only` as unobserved, not stopped; inspect it from the owning account.
 - [ ] Use `component plan` before first-time lifecycle changes.
 - [ ] Confirm the equivalent command shown by `llmops tui` before mutation.
-- [ ] Review component logs after restart using the appropriate channel and verify the reported host, execution user, path, and readiness.
+- [ ] Run `llmops component logs <component> --list`, review the appropriate bounded channel or follow it, and verify the reported host, execution user, remote path, and readiness.
 - [ ] Use `llmops operation list` and `llmops operation show <operation-id>` for lifecycle work dispatched from the TUI.
 - [ ] Add one disabled component through the TUI Service Catalog and confirm placement, essential settings, required connections, inferred dependencies, equivalent CLI, and authority hash before applying.
 - [ ] Import one reviewed local template through the Service Catalog and confirm the planned destination and equivalent `llmops template import` command before applying.

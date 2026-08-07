@@ -6,6 +6,8 @@ from __future__ import annotations
 import argparse
 import json
 import io
+import os
+import pwd
 import subprocess
 import tempfile
 import unittest
@@ -25,8 +27,8 @@ from llmops_kit.llmops_cli import _condition as condition
 from llmops_kit.llmops_cli import _validate_host_operation as validate_host_operation
 from llmops_kit.llmops_cli import stack_operations
 from llmops_kit.llmops_config import load_config
-from llmops_kit.llmops_drivers import CommandResult, ComponentObservation, ComponentRunner, DriverError, _launchd_command, build_component_command
-from llmops_kit.llmops_executor import Executor, ExecutionError, Operation, component_plan, stack_plan
+from llmops_kit.llmops_drivers import CommandResult, ComponentObservation, ComponentRunner, DriverError, LogChannelRecord, _launchd_command, build_component_command, resolve_log_channels
+from llmops_kit.llmops_executor import Executor, ExecutionError, Operation, component_plan, operation_lock, stack_plan
 from llmops_kit.llmops_inventory import InventoryError, load_inventory
 from llmops_kit.llmops_lifecycle_state import LifecycleStateStore
 from llmops_kit.llmops_paths import resolve_paths
@@ -641,10 +643,117 @@ class TopologyTests(ControlFixture):
         )
         self.assertIn(str(self.paths.logs_dir / "model-proxy.rendered.log"), command)
 
+    def test_log_channels_are_template_driven_and_host_qualified(self) -> None:
+        component = self.topology.resolve_component("proxy")
+        records = resolve_log_channels(self.topology, component)
+        self.assertEqual(
+            [record.channel for record in records],
+            ["raw-request", "raw-response", "rendered-prompt", "service"],
+        )
+        rendered = next(record for record in records if record.channel == "rendered-prompt")
+        self.assertEqual(rendered.host, "agent-host")
+        self.assertEqual(rendered.execution_user, "operator")
+        self.assertEqual(
+            rendered.path,
+            str(self.paths.logs_dir / "model-proxy.rendered.log"),
+        )
+
+    def test_log_channel_inspection_reports_file_metadata_and_missing_files(self) -> None:
+        component = replace(
+            self.topology.resolve_component("proxy"),
+            execution_user=pwd.getpwuid(os.geteuid()).pw_name,
+        )
+        path = self.paths.logs_dir / "model-proxy.rendered.log"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("first\nsecond\n", encoding="utf-8")
+        records = ComponentRunner(self.topology).list_logs(component)
+        rendered = next(record for record in records if record.channel == "rendered-prompt")
+        raw_request = next(record for record in records if record.channel == "raw-request")
+        self.assertTrue(rendered.available)
+        self.assertTrue(rendered.readable)
+        self.assertEqual(rendered.size, path.stat().st_size)
+        self.assertIsNotNone(rendered.modified_at)
+        self.assertFalse(raw_request.available)
+
+    def test_templates_without_logs_return_an_empty_channel_catalog(self) -> None:
+        component = replace(
+            self.topology.resolve_component("agent"),
+            template_id="external-http",
+        )
+        self.assertEqual(resolve_log_channels(self.topology, component), ())
+
+    def test_log_reads_are_bounded(self) -> None:
+        component = self.topology.resolve_component("agent")
+        with self.assertRaisesRegex(DriverError, "between 1 and 10000"):
+            build_component_command(self.topology, component, "logs", log_lines=10_001)
+
+    def test_component_log_parser_supports_list_read_and_follow_modes(self) -> None:
+        parser = llmops_cli.build_parser()
+        listed = parser.parse_args(["component", "logs", "agent", "--list"])
+        followed = parser.parse_args(
+            ["component", "logs", "agent", "--channel", "stdout", "--lines", "500", "--follow"]
+        )
+        self.assertTrue(listed.list_channels)
+        self.assertFalse(listed.follow)
+        self.assertEqual(followed.channel, "stdout")
+        self.assertEqual(followed.lines, 500)
+        self.assertTrue(followed.follow)
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["component", "logs", "agent", "--list", "--follow"])
+
+    def test_component_log_list_json_uses_shared_records(self) -> None:
+        llmops_cli.CURRENT_TOPOLOGY = self.topology
+        record = LogChannelRecord(
+            component="sample:agent",
+            channel="service",
+            host="agent-host",
+            execution_user="operator",
+            path="~/.hermes/logs/gateway.log",
+            available=True,
+            readable=True,
+            size=42,
+            modified_at=123,
+        )
+        args = argparse.Namespace(
+            component="agent",
+            action="logs",
+            list_channels=True,
+            follow=False,
+            channel="service",
+            lines=200,
+            json=True,
+        )
+        output = io.StringIO()
+        with (
+            mock.patch.object(ComponentRunner, "list_logs", return_value=(record,)),
+            redirect_stdout(output),
+        ):
+            self.assertEqual(llmops_cli.cmd_component_status(args), 0)
+        payload = json.loads(output.getvalue())
+        self.assertEqual(payload[0]["path"], "~/.hermes/logs/gateway.log")
+        self.assertEqual(payload[0]["execution_user"], "operator")
+
+    def test_follow_reaps_transport_on_keyboard_interrupt(self) -> None:
+        component = replace(
+            self.topology.resolve_component("agent"),
+            execution_user=pwd.getpwuid(os.geteuid()).pw_name,
+        )
+        process = mock.Mock(pid=4321)
+        process.wait.side_effect = [KeyboardInterrupt, 0]
+        with (
+            mock.patch("llmops_kit.llmops_drivers.subprocess.Popen", return_value=process),
+            mock.patch("llmops_kit.llmops_drivers.os.killpg") as kill_group,
+        ):
+            self.assertEqual(
+                ComponentRunner(self.topology).follow_logs(component, lines=10),
+                130,
+            )
+        kill_group.assert_called_once()
+
     def test_log_path_expands_execution_user_home(self) -> None:
         component = self.topology.resolve_component("agent")
         command = build_component_command(self.topology, component, "logs")
-        self.assertEqual(command, 'tail -n 100 "$HOME"/.hermes/logs/gateway.log')
+        self.assertEqual(command, 'tail -n 200 "$HOME"/.hermes/logs/gateway.log')
 
     def test_modelctl_tts_log_resolves_to_tts_server_log(self) -> None:
         component = self.topology.resolve_component("embedding")
@@ -901,6 +1010,133 @@ class TopologyTests(ControlFixture):
         )
         self.assertIn("if launchctl print", command)
         self.assertIn("launchctl bootout", command)
+
+    def test_launchd_start_and_restart_bootstrap_an_unloaded_managed_job(self) -> None:
+        component = self.topology.resolve_component("agent")
+        profile = {
+            "label": "org.example.test",
+            "plist": "~/Library/LaunchAgents/org.example.test.plist",
+        }
+        for action in ("start", "restart"):
+            command = _launchd_command(profile, component, action)
+            self.assertIn("if ! launchctl print", command)
+            self.assertIn("launchctl bootstrap gui/$(id -u)", command)
+            self.assertIn('"$HOME"/Library/LaunchAgents/org.example.test.plist', command)
+            self.assertIn("|| exit $?", command)
+            self.assertIn("launchctl kickstart -k", command)
+
+    def test_unloaded_managed_launchd_job_without_plist_fails_explicitly(self) -> None:
+        command = _launchd_command(
+            {"label": "org.example.test"},
+            self.topology.resolve_component("agent"),
+            "restart",
+        )
+        self.assertIn("no plist is configured", command)
+        self.assertIn("exit 1", command)
+
+    def test_launchd_stop_start_restart_fixture_is_symmetric(self) -> None:
+        component = self.topology.resolve_component("agent")
+        launchctl = self.root / "launchctl"
+        state = self.root / "launchd-loaded"
+        calls = self.root / "launchd-calls"
+        plist = self.root / "org.example.test.plist"
+        plist.write_text("fixture", encoding="utf-8")
+        state.write_text("loaded", encoding="utf-8")
+        launchctl.write_text(
+            "#!/bin/sh\n"
+            "printf '%s\\n' \"$1\" >> \"$LLMOPS_TEST_CALLS\"\n"
+            "case \"$1\" in\n"
+            "  print) test -e \"$LLMOPS_TEST_STATE\" ;;\n"
+            "  bootstrap) test -e \"$3\" && : > \"$LLMOPS_TEST_STATE\" ;;\n"
+            "  kickstart) test -e \"$LLMOPS_TEST_STATE\" ;;\n"
+            "  bootout) rm -f \"$LLMOPS_TEST_STATE\" ;;\n"
+            "  *) exit 2 ;;\n"
+            "esac\n",
+            encoding="utf-8",
+        )
+        launchctl.chmod(0o755)
+        profile = {"label": "org.example.test", "plist": str(plist)}
+        environment = {
+            **os.environ,
+            "PATH": f"{self.root}:{os.environ['PATH']}",
+            "LLMOPS_TEST_STATE": str(state),
+            "LLMOPS_TEST_CALLS": str(calls),
+        }
+        for action in ("stop", "start", "restart", "stop", "restart"):
+            completed = subprocess.run(
+                ["/bin/sh", "-c", _launchd_command(profile, component, action)],
+                capture_output=True,
+                text=True,
+                check=False,
+                env=environment,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertTrue(state.exists())
+        self.assertEqual(
+            calls.read_text(encoding="utf-8").splitlines(),
+            [
+                "print",
+                "bootout",
+                "print",
+                "bootstrap",
+                "kickstart",
+                "print",
+                "kickstart",
+                "print",
+                "bootout",
+                "print",
+                "bootstrap",
+                "kickstart",
+            ],
+        )
+
+    def test_launchd_bootstrap_permission_failure_is_explicit(self) -> None:
+        component = self.topology.resolve_component("agent")
+        launchctl = self.root / "launchctl"
+        calls = self.root / "launchd-calls"
+        plist = self.root / "org.example.test.plist"
+        plist.write_text("fixture", encoding="utf-8")
+        launchctl.write_text(
+            "#!/bin/sh\n"
+            "printf '%s\\n' \"$1\" >> \"$LLMOPS_TEST_CALLS\"\n"
+            "case \"$1\" in\n"
+            "  print) exit 1 ;;\n"
+            "  bootstrap) printf '%s\\n' 'Bootstrap failed: Operation not permitted' >&2; exit 77 ;;\n"
+            "  kickstart) exit 0 ;;\n"
+            "esac\n",
+            encoding="utf-8",
+        )
+        launchctl.chmod(0o755)
+        completed = subprocess.run(
+            [
+                "/bin/sh",
+                "-c",
+                _launchd_command(
+                    {"label": "org.example.test", "plist": str(plist)},
+                    component,
+                    "start",
+                ),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            env={
+                **os.environ,
+                "PATH": f"{self.root}:{os.environ['PATH']}",
+                "LLMOPS_TEST_CALLS": str(calls),
+            },
+        )
+        self.assertEqual(completed.returncode, 77)
+        self.assertIn("Operation not permitted", completed.stderr)
+        self.assertEqual(calls.read_text(encoding="utf-8").splitlines(), ["print", "bootstrap"])
+
+    @mock.patch("llmops_kit.llmops_drivers.subprocess.run")
+    def test_launchd_timeout_returns_bounded_failure(self, run: mock.Mock) -> None:
+        component = self.topology.resolve_component("agent")
+        run.side_effect = subprocess.TimeoutExpired(["launchctl", "kickstart"], 900)
+        result = ComponentRunner(self.topology).run(component, "start")
+        self.assertEqual(result.returncode, 124)
+        self.assertIn("start timed out after 900 seconds", result.stderr)
 
     def test_trusted_host_snapshot_contains_complete_topology(self) -> None:
         destination = self.root / "snapshot"
@@ -1168,6 +1404,15 @@ class ExecutorTests(ControlFixture):
             executor.execute(component_plan(self.topology, agent, "start"))
         self.assertEqual(runner.running, {"sample:chat"})
         self.assertNotIn(("sample:chat", "stop"), runner.calls)
+
+    def test_failed_start_releases_lifecycle_lock(self) -> None:
+        runner = FakeRunner(fail_start="sample:chat")
+        executor = Executor(self.topology, runner=runner)
+        chat = self.topology.resolve_component("chat")
+        with self.assertRaisesRegex(ExecutionError, "start failed"):
+            executor.execute(component_plan(self.topology, chat, "start"))
+        with operation_lock(self.paths.run_dir / "orchestrator.lock"):
+            pass
 
     def test_failed_readiness_rolls_back_the_started_component(self) -> None:
         runner = FakeRunner(fail_health="sample:chat")

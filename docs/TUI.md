@@ -38,7 +38,7 @@ See [status semantics](./STATUS.md) for the complete machine-readable contract.
 | `s` | Start the selected component and missing dependencies |
 | `x` | Stop the selected component after dependent-impact review |
 | `b` | Restart only the selected component |
-| `l` | Show recent component logs |
+| `l` | Open the full-screen component log viewer |
 | `e` | Edit the selected component with its template-generated form |
 | `c` | Open the Service Catalog to add, edit, clone, retire, or restore components |
 | `Enter` | Open full component or stack details |
@@ -57,6 +57,12 @@ Common lifecycle and navigation actions are also clickable in the action bar. `E
 Every lifecycle or configuration mutation displays its ordered plan and equivalent `llmops` command before confirmation. Confirmed long-running lifecycle and toolkit-update actions are recorded under the operational state root and executed by a detached short-lived worker. The TUI shows `starting`, `stopping`, `restarting`, `updating`, or `reconciling` while the operation is active. Exiting the TUI does not cancel or wait for the operation; use `llmops operation list` and `llmops operation show` to inspect it.
 
 Automatic refresh defaults to 15 seconds and pauses while a modal, edit, confirmation, or mutation is active. Local preferences are stored in `~/.config/llm-ops/ui.json` and are excluded from reconciled configuration identity. Shared organization and site labels are stored in canonical `config.json`, validated, backed up, and reconciled normally.
+
+## Logs
+
+The full-screen log viewer discovers channels from the selected component's reviewed service template. It shows the component, host alias, execution user, channel, and resolved remote path or provider unit. Select 100, 200, 500, or 1,000 lines, then use **Refresh** or **Follow**. Follow performs bounded polling and leaves no remote `tail` process behind when the viewer closes.
+
+Use `PageUp`, `PageDown`, `Home`, and `End` to navigate. `r` refreshes, `f` toggles follow, and `Escape` closes the viewer. Dashboard refresh pauses while the viewer is open. The equivalent bounded CLI command remains visible for scripting and diagnostics.
 
 The component editor groups related schema fields and shows both a friendly label and the exact canonical field path. Every accepted edit is persistent:
 

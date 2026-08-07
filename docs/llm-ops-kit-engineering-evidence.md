@@ -1,8 +1,38 @@
 # LLM-Ops-Kit Engineering Evidence
 
-## Incremental Beta Candidate - 2026-08-04
+## Incremental Beta Candidate - 2026-08-07
 
-Candidate `0.9.0b40` extends the schema invariant into the complete component-creation path. The Textual Service Catalog now selects a reviewed template, captures placement and execution identity, renders essential typed fields, resolves required endpoint references, infers dependencies, and displays the same authority-bound mutation plan and CLI command used by automation. New components remain disabled until an operator explicitly starts them.
+Candidate `0.9.0b41` retains the b40 schema-driven creation path and extends the adapter invariant into log access and managed launchd recovery. Log channels are declared by reviewed templates, resolved by the control library to the component host and execution user, and consumed unchanged by CLI and TUI. Managed launchd start and restart share one load-if-needed sequence, while externally owned jobs remain read-only.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Inspect: managed start or restart
+    Inspect --> Kickstart: job is loaded
+    Inspect --> Bootstrap: job was booted out
+    Bootstrap --> Kickstart: configured plist loaded
+    Bootstrap --> Failed: load, permission, or plist error
+    Kickstart --> Running: launchctl accepts kickstart
+    Kickstart --> Failed: kickstart or timeout error
+    Running --> Bootout: managed stop
+    Bootout --> Unloaded: loaded job removed
+    Inspect --> Unloaded: idempotent stop finds no job
+```
+
+Start and restart deliberately converge on the same state machine. A booted-out managed job is not mistaken for a broken service: the adapter loads its reviewed plist and then kickstarts it. Stop is idempotent, and ownership checks prevent this recovery path from mutating external launchd jobs.
+
+```mermaid
+flowchart LR
+    Template["Reviewed template log declarations"] --> Resolver["Shared log resolver"]
+    Profile["Effective component profile"] --> Resolver
+    Resolver --> Identity["Host alias and execution user"]
+    Resolver --> Path["Declared remote path or provider"]
+    Identity --> Transport["Local or SSH transport"]
+    Path --> Transport
+    Transport --> CLI["Bounded CLI read or followed stream"]
+    Transport --> TUI["Bounded full-screen TUI polling"]
+```
+
+The operator cannot submit an arbitrary path. Both interfaces select from the same template-backed channel records, so host routing, execution identity, path resolution, and line bounds cannot drift between CLI and TUI. CLI follow owns and reaps its process group; the TUI polls bounded reads and therefore never leaves a remote `tail` process behind.
 
 Existing-component editing uses the same flattened schema records. Grouping and advanced disclosure are presentation only: hidden non-default values remain in the candidate document. Reset and revert act on the editor's immutable opening snapshot; Save persists without lifecycle action, while Save & Restart adds the explicit shared restart operation.
 
@@ -22,12 +52,12 @@ The ordinary product-history view is presentation over the authority-owned insta
 
 MLXForge and Secrets-Kit remain outside this beta candidate. Their future integration points are deliberately narrow: MLXForge must first expose accepted version, health, lifecycle, endpoint, model-operation, configuration, and log contracts; Secrets-Kit must expose opaque provider references without secret values or a hard runtime dependency.
 
-The locked CPython 3.12 UV environment passed shell syntax, ShellCheck, Python compilation, and all 189 source regressions on 2026-08-04. The suite includes Textual 1.0.0 Pilot coverage for the four wizard steps, local template import, grouped editing, advanced disclosure, reset/revert, shared-profile warnings, Save versus Save & Restart, and review evidence. This is source acceptance; clean-archive installation and the scheduled two-user lifecycle window remain separate release gates.
+The source suite includes Textual 1.0.0 Pilot coverage for the four wizard steps, local template import, grouped editing, advanced disclosure, reset/revert, shared-profile warnings, Save versus Save & Restart, and the full-screen log viewer. Control tests cover template channel discovery, remote identity, metadata, bounded reads, interrupted follow cleanup, and an isolated launchctl stop/start/restart sequence. Clean-archive installation and the scheduled two-user lifecycle window remain separate release gates.
 
-- **Evidence updated:** 2026-07-23
-- **Accepted live candidate:** `0.9.0b21`
-- **Current source candidate:** `0.9.0b22`
-- **Current source artifact:** checksummed dual-architecture clean release candidate
+- **Evidence updated:** 2026-08-07
+- **Accepted live runtime:** `0.9.0b39`
+- **Current source candidate:** `0.9.0b41`
+- **Current source artifact:** clean local archive build and checksum verification passed; isolated-user and live-stack acceptance remain pending
 
 ## Purpose
 
@@ -215,13 +245,13 @@ This distinction prevents readiness and policy from being misreported as lifecyc
 
 | Evidence | Result |
 |---|---|
-| Current source regression | Candidate `0.9.0b21` passes 163 tests, shell syntax, ShellCheck, Python compilation, template/schema validation, clean-distribution checks, generated TUI provisioning, and maintainer precheck |
+| Current source regression | Candidate `0.9.0b41` passes 203 tests, shell syntax, ShellCheck, Python compilation, template/schema validation, generated TUI provisioning, managed launchd recovery, template-backed remote logs, and maintainer precheck |
 | Schema and template behavior | Tests cover one-time v1 migration, no field loss, typed set/unset, atomic mutually exclusive replacement, shared profiles, endpoint wiring, retirement/restore, stale-hash refusal, local-template safety, and generated TUI forms |
 | RTK review gate | Live read-only evidence reports RTK 0.43.0, telemetry disabled, 154/154 RTK verification tests, gain metrics, and a Hermes dry run that wrote nothing; hook enablement remains unapproved |
 | Candidate clean distribution | Runtime-only schema-v2 archives were built from clean committed source, installed on isolated Apple Silicon and Intel roots, and inspected for JSON Schema, Textual, and all 12 packaged service templates |
 | Candidate installed-wheel tests | Eight Textual tests, including generated-form component creation, and the complete control-plane suite pass with repository source first; clean-distribution tests install the built wheel without checkout residue |
 | Clean distribution | Runtime-only archive built from clean commit `6989f97` |
-| Release identity | Version `0.9.0b5`; archive SHA-256 `8169e9c6f953a3036c1c5e30aa2868ac4e9ab704172c5074c184d71140076b8f` |
+| Published baseline release identity | Version `0.9.0b5`; archive SHA-256 `8169e9c6f953a3036c1c5e30aa2868ac4e9ab704172c5074c184d71140076b8f` |
 | macOS packaging baseline | Exact-artifact normal and minimal installation previously passed on Apple Silicon and Intel isolated users |
 | Live coordinated update | Both managed hosts advanced from `0.9.0b4` to `0.9.0b5`; both retained `0.9.0b4` as `previous` |
 | Configuration preservation | Shared catalog hash and both host-specific configuration hashes were unchanged after update |
@@ -247,7 +277,7 @@ No single layer is treated as conclusive. The evidence chain is configuration id
 - `authority-only` does not prove that the component is running; it states that the current peer is not an authorized observer. The authority must inspect that component.
 - The current beta does not download models, install arbitrary engines, edit raw secrets, or autonomously remediate failures. It can create configuration and lifecycle integration from reviewed templates.
 - The Textual TUI is an on-demand client, not a daemon. A future WebUI must use the same control interfaces rather than create a second executor.
-- The `0.9.0b21` candidate remains local and unpublished. Publication is gated on the remaining final-artifact lifecycle/protocol checks, explicit maintainer approval, and green macOS CI.
+- The `0.9.0b41` candidate remains local and unpublished. Publication is gated on isolated-user and live-stack final-artifact lifecycle/protocol checks, explicit maintainer approval, and green macOS CI.
 
 ## Reproduction Outline
 

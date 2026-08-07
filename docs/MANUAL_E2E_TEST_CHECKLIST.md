@@ -1,7 +1,7 @@
 # Manual End-to-End Acceptance
 
 **Created**: 2026-07-17
-**Updated**: 2026-07-21
+**Updated**: 2026-08-07
 
 Back: [Documentation index](./INDEX.md)
 
@@ -31,6 +31,8 @@ Record artifact version, SHA-256, host, architecture, timestamp, result, and evi
 - [ ] Run `doctor --probe`, `status --all --json`, component/stack plans, topology table/JSON/Mermaid output, and TUI startup.
 - [ ] Confirm a running component with failed readiness reports running lifecycle and degraded health, while an intentionally unobservable component reports authority-only observability.
 - [ ] Confirm arrow selection updates TUI details, automatic refresh pauses during dialogs, help/settings open, and active-dependent stop requires cascade or force.
+- [ ] List declared log channels, read a bounded remote log, interrupt CLI follow, and verify host, execution user, path, metadata, and child-process cleanup.
+- [ ] Open the full-screen TUI log viewer, change channel and line limit, scroll, refresh, start and stop follow, close with Escape, and confirm dashboard refresh was paused.
 - [ ] Create a disabled component through all four Service Catalog steps and confirm required endpoints, inferred dependencies, affected files, authority hash, equivalent CLI, and no implicit restart.
 - [ ] Import a reviewed local generic-service template through the TUI, then add its component without editing JSON or changing core source.
 - [ ] Edit a shared profile and confirm the warning names every affected component; verify hidden advanced values survive Reset Section, Revert All, Save, and Save & Restart.
@@ -44,6 +46,7 @@ Record artifact version, SHA-256, host, architecture, timestamp, result, and evi
 ## Lifecycle And Removal
 
 - [ ] Run repair twice without changing configuration.
+- [ ] Stop an initially loaded managed launchd component, then start it and restart it in both loaded and unloaded states; verify bootstrap precedes kickstart and no lifecycle lock remains held.
 - [ ] Upgrade to a second test artifact and verify `current`, `previous`, version, and configuration identity.
 - [ ] Roll back and return to the candidate.
 - [ ] Normal uninstall and confirm configuration/state preservation.

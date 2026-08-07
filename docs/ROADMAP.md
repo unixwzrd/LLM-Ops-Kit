@@ -1,7 +1,7 @@
 # Roadmap
 
 **Created**: 2026-07-19
-**Updated**: 2026-07-23
+**Updated**: 2026-08-07
 
 Back: [Documentation index](./INDEX.md)
 
@@ -9,17 +9,15 @@ Back: [Documentation index](./INDEX.md)
 
 LLM-Ops-Kit will become an extensible, local-first control plane for operating AI subsystems across one host, a trusted LAN, VPS instances, and existing container environments. It coordinates native services rather than replacing launchd, systemd, SSH, Docker, Kubernetes, model engines, or agents.
 
-## Beta Target: 2026-07-26
+## Beta Closure
 
 The beta is deliberately narrow. It should make the existing operator-v1 capabilities installable and understandable without expanding into autonomous remediation or a general infrastructure platform.
 
 ### Release blockers
 
-1. Replay authoritative Hermes image-generation and dedicated vision requests through the revised media-history template, proving textual tool-result images are removed while native structured vision input remains bound through one Qwen vision placeholder.
-2. Complete final-artifact install, minimal install, repair, upgrade, rollback, uninstall, and purge acceptance on the ARM and Intel macOS test users.
-3. Complete coordinated two-host update, old-peer bootstrap, failure rollback, configuration reconciliation, and conflict-refusal acceptance.
-4. Upgrade both live hosts, reconcile the revised Qwen/model-proxy profiles, and repeat protocol and global-status validation without restarting unaffected services.
-5. Produce a clean committed archive with release-hygiene evidence, obtain explicit approval, and require green macOS CI before publication.
+1. Complete final-artifact install, minimal install, repair, upgrade, rollback, uninstall, and purge acceptance on the ARM and Intel macOS test users.
+2. Repeat managed launchd stop/start/restart and complete stack protocol acceptance against the final artifact during the scheduled live window.
+3. Produce a clean committed archive with release-hygiene evidence, obtain explicit approval, and require green macOS CI before publication.
 
 The application-owned UV runtime, standard Python package, dual-architecture offline wheelhouse, adapter registry, core Textual dashboard, version/drift status, remote update implementation, and configuration reconciliation implementation are complete and covered by local regression tests. They remain release candidates until the final host acceptance sequence passes.
 
@@ -30,7 +28,7 @@ The runtime completed its 48-hour soak with continuous successful hourly health 
 ### Beta TUI
 
 - Overview of hosts, components, stacks, lifecycle, health, condition, observability, versions, and drift.
-- High-contrast keyboard and mouse navigation, automatic-refresh settings, shared display labels, contextual help, and recent logs.
+- High-contrast keyboard and mouse navigation, automatic-refresh settings, shared display labels, contextual help, and full-screen remote-aware logs.
 - Component and stack start, stop, restart, plan, and explicitly toolkit-scoped update-check actions.
 - Equivalent `llmops` command shown before mutation.
 - Schema-generated service creation and editing for reviewed templates, reusable profiles, endpoint connections, dependencies, ownership, and readiness timeouts.
@@ -43,7 +41,7 @@ The TUI should begin as a compact operational dashboard. Configuration screens a
 ### Prioritized Operator Polish
 
 1. **P0 - TUI interaction correctness:** Keep the visible Quit action equivalent to `q`, expose Settings in the primary action bar, apply topology filters immediately, provide one Reset action, and retain semantic condition colors in topology groups and components.
-2. **P1 - Remote log operations:** Add CLI list/read/follow operations for every adapter-declared log channel, resolving host and execution user through the catalog. Add a full-screen scrollable TUI viewer with channel selection, host/path identity, refresh, and follow controls.
+2. **Complete - Remote log operations:** CLI list/read/follow operations and the full-screen TUI viewer consume template-declared channels and resolve the component host, execution user, path, refresh, and follow behavior through one control-library contract.
 3. **P1 - Guided discovery:** Build optional host, executable, and port discovery over the completed four-step schema-driven creation flow. Fresh users can create validated profiles and disabled components, wire required endpoints, and import reviewed local templates without manual JSON editing.
 4. **P1 - Template refinement:** Continue expanding reviewed product-specific labels, help, units, grouping, constraints, and dynamic option providers using the shared JSON Schema contract. The same schemas serve CLI, TUI, future WebUI, recipes, and third-party adapters.
 5. **P2 - Lifecycle ownership and restart policy:** Model standalone, manual, launchd, and later systemd ownership explicitly. Separate crash recovery from an operator-requested stop, and expose install/remove/enable/disable plus bounded restart policy without adding a privileged daemon.

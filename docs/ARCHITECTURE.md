@@ -34,6 +34,8 @@ Component start satisfies missing upstream dependencies. Component restart affec
 
 The executor is idempotent. A failed start stops only components started by that invocation and leaves pre-existing services untouched. Mutations use a lifecycle lock; status, health, drift, plans, effective configuration, and logs are read-only. Interactive clients dispatch long-running mutations to detached short-lived workers that persist an operation record. No privileged daemon is required, and closing a client does not cancel an accepted operation.
 
+Managed user launchd operations use one load-if-needed contract: start and restart inspect the configured domain, bootstrap the reviewed plist only when unloaded, and then kickstart. Stop is an idempotent bootout. External launchd components remain read-only and are never bootstrapped by the control plane.
+
 ## Module Boundaries
 
 | Module | Responsibility | Must not own |
@@ -100,6 +102,8 @@ Adapters are grouped by responsibility rather than vendor:
 - Agents: generic process or service profiles, plus optional Hermes and OpenClaw setup recipes.
 - Supporting systems: model-proxy, tts-bridge, Mnemosyne, RTK, Headroom, dashboards, and other independently manageable services.
 - Observability extensions: model-proxy request/rendered-prompt/response correlation, health metrics, logs, and drift providers.
+
+Service templates declare named log channels. The shared log service resolves each channel to a component host, execution user, audited path, or provider unit before any read occurs. CLI and TUI consume the same records; neither accepts an arbitrary operator-supplied path. Bounded reads and TUI polling are short-lived, while CLI follow owns and reaps its local SSH or tail process on interruption.
 
 Product integrations remain optional packages or extras when they add dependencies. The core must remain usable without Textual, FastAPI, a model engine, or an agent framework.
 

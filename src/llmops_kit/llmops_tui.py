@@ -22,7 +22,7 @@ from .llmops_config_ops import (
     provision_component,
     retire_component,
 )
-from .llmops_drivers import ComponentRunner
+from .llmops_drivers import ComponentRunner, DriverError, resolve_log_channels
 from .llmops_executor import ExecutionError, Executor
 from .llmops_operations import ACTIVE_STATES, dispatch, list_records
 from .llmops_topology import TopologyError
@@ -102,7 +102,7 @@ def _textual_types() -> tuple[Any, ...]:
         from textual.app import App, ComposeResult
         from textual.containers import Horizontal, Vertical
         from textual.screen import ModalScreen
-        from textual.widgets import Button, Checkbox, DataTable, Header, Input, Label, Select, Static, Tree
+        from textual.widgets import Button, Checkbox, DataTable, Header, Input, Label, RichLog, Select, Static, Tree
     except ImportError as exc:
         raise RuntimeError(
             "Textual is not installed; repair the normal installation or install the tui extra"
@@ -120,6 +120,7 @@ def _textual_types() -> tuple[Any, ...]:
         Header,
         Input,
         Label,
+        RichLog,
         Select,
         Static,
         Tree,
@@ -142,6 +143,7 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
         Header,
         Input,
         Label,
+        RichLog,
         Select,
         Static,
         Tree,
@@ -1203,30 +1205,160 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
         def action_cancel(self) -> None:
             self.dismiss(None)
 
-    class LogChannelScreen(ModalScreen[Optional[str]]):
-        """Select a supported component log channel."""
+    class LogViewerScreen(ModalScreen[None]):
+        """Read and bounded-follow declared component logs."""
 
-        BINDINGS = [("escape", "cancel", "Cancel")]
+        BINDINGS = [
+            ("escape", "close", "Close"),
+            ("r", "refresh", "Refresh"),
+            ("f", "follow", "Follow"),
+            ("pageup", "page_up", "Page up"),
+            ("pagedown", "page_down", "Page down"),
+            ("home", "home", "First line"),
+            ("end", "end", "Last line"),
+        ]
 
-        def __init__(self, channels: tuple[str, ...]) -> None:
+        def __init__(self, topology: Any, component: Any) -> None:
             super().__init__()
-            self.channels = channels
+            self.topology = topology
+            self.component = component
+            self.records = resolve_log_channels(topology, component)
+            self.following = False
+            self.follow_timer: Any = None
+            self.selection_timer: Any = None
+            self.reading = False
 
         def compose(self) -> ComposeResult:
-            with Vertical(classes="dialog", id="log-channel-dialog"):
-                yield Label("Select log channel", classes="dialog-title")
-                yield Select(tuple((item.replace("-", " ").title(), item) for item in self.channels), value=self.channels[0], id="log-channel")
-                with Horizontal(classes="dialog-actions"):
-                    yield Button("Cancel", id="cancel")
-                    yield Button("Open", id="open", variant="primary")
+            channels = tuple(
+                (record.channel.replace("-", " ").title(), record.channel)
+                for record in self.records
+            )
+            with Vertical(id="log-viewer-dialog"):
+                yield Label(f"Logs: {self.component.qualified_id}", classes="dialog-title")
+                with Horizontal(id="log-controls"):
+                    yield Select(channels, value=channels[0][1], id="log-channel")
+                    yield Select(
+                        (("100 lines", 100), ("200 lines", 200), ("500 lines", 500), ("1,000 lines", 1000)),
+                        value=200,
+                        id="log-lines",
+                    )
+                    yield Button("Refresh", id="log-refresh")
+                    yield Button("Follow", id="log-follow", variant="primary")
+                    yield Button("Close", id="log-close")
+                yield Static("", id="log-metadata")
+                yield Static("", classes="equivalent-command", id="log-command")
+                yield Static("", classes="validation-error", id="log-error")
+                yield RichLog(id="log-output", wrap=False, highlight=False, markup=False)
+
+        def on_mount(self) -> None:
+            self.action_refresh()
+
+        def _selected(self) -> tuple[str, int]:
+            return (
+                str(self.query_one("#log-channel", Select).value),
+                int(self.query_one("#log-lines", Select).value),
+            )
+
+        def _record(self, channel: str) -> Any:
+            return next(record for record in self.records if record.channel == channel)
+
+        def _update_context(self, channel: str, lines: int) -> None:
+            record = self._record(channel)
+            location = record.path or record.provider
+            self.query_one("#log-metadata", Static).update(
+                f"Component: {record.component}  Host: {record.host}  Run as: {record.execution_user}  "
+                f"Channel: {record.channel}  Remote path or unit: {location or 'unconfigured'}"
+            )
+            self.query_one("#log-command", Static).update(
+                shlex.join(
+                    [
+                        "llmops",
+                        "component",
+                        "logs",
+                        self.component.qualified_id,
+                        "--channel",
+                        channel,
+                        "--lines",
+                        str(lines),
+                    ]
+                )
+            )
+
+        async def refresh_output(self) -> None:
+            if self.reading:
+                return
+            self.reading = True
+            try:
+                channel, lines = self._selected()
+                self._update_context(channel, lines)
+                result = await asyncio.to_thread(
+                    ComponentRunner(self.topology).logs,
+                    self.component,
+                    channel=channel,
+                    lines=lines,
+                )
+                output = self.query_one("#log-output", RichLog)
+                output.clear()
+                if result.stdout:
+                    output.write(result.stdout)
+                self.query_one("#log-error", Static).update(
+                    "" if result.ok else result.stderr or f"log read failed with status {result.returncode}"
+                )
+                if self.following:
+                    output.scroll_end(animate=False)
+            except (DriverError, OSError, ValueError) as exc:
+                self.query_one("#log-error", Static).update(str(exc))
+            finally:
+                self.reading = False
+
+        def action_refresh(self) -> None:
+            self.run_worker(self.refresh_output(), exclusive=True, group="log-read")
+
+        def action_follow(self) -> None:
+            self.following = not self.following
+            self.query_one("#log-follow", Button).label = (
+                "Stop Follow" if self.following else "Follow"
+            )
+            if self.following:
+                self.follow_timer = self.set_interval(2, self.action_refresh)
+                self.action_refresh()
+            elif self.follow_timer is not None:
+                self.follow_timer.stop()
+                self.follow_timer = None
+
+        def on_select_changed(self, event: Any) -> None:
+            if event.select.id in {"log-channel", "log-lines"} and self.is_mounted:
+                if self.selection_timer is not None:
+                    self.selection_timer.stop()
+                self.selection_timer = self.set_timer(0.05, self.action_refresh)
 
         def on_button_pressed(self, event: Any) -> None:
-            if event.button.id == "cancel":
-                self.dismiss(None)
-            else:
-                self.dismiss(str(self.query_one("#log-channel", Select).value))
+            actions = {
+                "log-refresh": self.action_refresh,
+                "log-follow": self.action_follow,
+                "log-close": self.action_close,
+            }
+            action = actions.get(event.button.id)
+            if action is not None:
+                action()
 
-        def action_cancel(self) -> None:
+        def action_page_up(self) -> None:
+            self.query_one("#log-output", RichLog).scroll_page_up(animate=False)
+
+        def action_page_down(self) -> None:
+            self.query_one("#log-output", RichLog).scroll_page_down(animate=False)
+
+        def action_home(self) -> None:
+            self.query_one("#log-output", RichLog).scroll_home(animate=False)
+
+        def action_end(self) -> None:
+            self.query_one("#log-output", RichLog).scroll_end(animate=False)
+
+        def action_close(self) -> None:
+            if self.follow_timer is not None:
+                self.follow_timer.stop()
+            if self.selection_timer is not None:
+                self.selection_timer.stop()
             self.dismiss(None)
 
     class TopologyScreen(ModalScreen[None]):
@@ -1410,6 +1542,14 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
         .wizard-step { height: 1fr; overflow-y: auto; padding-right: 1; }
         #catalog-table { height: 1fr; }
         #catalog-detail { height: 7; border-top: solid #6f8ea3; padding: 1; }
+        #log-viewer-dialog { width: 96%; height: 96%; padding: 1 2; border: thick #6f8ea3; background: #0b0f14; }
+        #log-controls { height: 3; }
+        #log-controls Select { width: 1fr; margin-right: 1; }
+        #log-controls Button { min-width: 12; }
+        #log-metadata { height: 3; padding: 1 0; color: #b8d4e8; }
+        #log-command { height: 3; }
+        #log-error { height: 2; }
+        #log-output { height: 1fr; background: #0f151d; color: #f5f7fa; border-top: solid #557086; padding: 1; }
         .field-help { color: #b8c5d1; }
         .field-group { margin: 1 0 0 0; padding: 0 1; background: #243444; color: #ffffff; text-style: bold; }
         .field-label { margin-top: 1; color: #f5f7fa; text-style: bold; }
@@ -1741,35 +1881,18 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
         def action_restart(self) -> None:
             self._mutate("restart")
 
-        async def show_logs(self, component: Any) -> None:
-            channels = (
-                ("service", "raw-request", "rendered-prompt", "raw-response")
-                if component.driver == "model-proxy"
-                else ("service",)
-            )
-            channel = channels[0]
-            if len(channels) > 1:
-                selected = await self.push_screen_wait(LogChannelScreen(channels))
-                if selected is None:
-                    return
-                channel = selected
-            result = await asyncio.to_thread(
-                ComponentRunner(self.topology).logs,
-                component,
-                channel=channel,
-            )
-            heading = (
-                f"Host: {component.host}  Run as: {self.topology.hosts[component.host].user}  "
-                f"Channel: {channel}\n"
-            )
-            self.query_one("#detail", Static).update(
-                heading + (result.stdout or result.stderr or "No log output")
-            )
-
         def action_logs(self) -> None:
             component = self.selected_component()
             if component is not None and hasattr(component, "component_id"):
-                self.run_worker(self.show_logs(component), exclusive=True)
+                try:
+                    records = resolve_log_channels(self.topology, component)
+                    if not records:
+                        raise DriverError(
+                            f"{component.qualified_id}: no log channels are declared"
+                        )
+                    self.push_screen(LogViewerScreen(self.topology, component))
+                except (DriverError, TopologyError) as exc:
+                    self.query_one("#detail", Static).update(str(exc))
 
         async def edit_component(self, component: Any) -> None:
             changes = await self.push_screen_wait(SchemaEditComponent(self.desired_topology, component))

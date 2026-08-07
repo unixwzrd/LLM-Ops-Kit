@@ -13,6 +13,7 @@ from unittest import mock
 from llmops_kit import llmops_cli
 from llmops_kit.llmops_init import initialize
 from llmops_kit.llmops_executor import MutationPlan, Operation
+from llmops_kit.llmops_drivers import CommandResult
 from llmops_kit.llmops_paths import resolve_paths
 from llmops_kit.llmops_tui import (
     CONDITION_STYLES,
@@ -124,6 +125,54 @@ class TuiContractTests(unittest.TestCase):
 
 
 class TuiApplicationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_full_screen_log_viewer_reads_follows_and_closes_cleanly(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            paths = resolve_paths(
+                {
+                    "HOME": str(root),
+                    "LLMOPS_CONFIG_HOME": str(root / "config"),
+                    "LLMOPS_DATA_HOME": str(root / "data"),
+                    "LLMOPS_STATE_HOME": str(root / "state"),
+                    "LLMOPS_CACHE_HOME": str(root / "cache"),
+                }
+            )
+            initialize(paths, preset="single-host", user="operator")
+            app = build_application(str(paths.config_home), None)
+            result = CommandResult(
+                "starter:chat",
+                "logs",
+                "tail -n 200",
+                0,
+                "line one\nline two",
+                "",
+            )
+            with mock.patch(
+                "llmops_kit.llmops_tui.ComponentRunner.logs",
+                return_value=result,
+            ) as read_logs:
+                async with app.run_test(size=(140, 44)) as pilot:
+                    await pilot.pause(1)
+                    await pilot.click("#action-logs")
+                    await pilot.pause()
+                    self.assertIsNotNone(app.screen.query_one("#log-viewer-dialog"))
+                    self.assertIn("starter:chat", str(app.screen.query_one("#log-metadata").render()))
+                    self.assertIn(
+                        "llmops component logs starter:chat",
+                        str(app.screen.query_one("#log-command").render()),
+                    )
+                    self.assertTrue(read_logs.called)
+                    with mock.patch.object(app, "action_refresh") as dashboard_refresh:
+                        app._automatic_refresh()
+                        dashboard_refresh.assert_not_called()
+                    await pilot.click("#log-follow")
+                    await pilot.pause()
+                    self.assertEqual(str(app.screen.query_one("#log-follow").label), "Stop Follow")
+                    await pilot.press("pageup", "pagedown", "home", "end")
+                    await pilot.press("escape")
+                    await pilot.pause()
+                    self.assertEqual(len(app.screen_stack), 1)
+
     async def test_schema_editor_warns_about_shared_profile_consumers(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

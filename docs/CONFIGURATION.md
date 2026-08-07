@@ -245,11 +245,13 @@ Inspect the exact effective non-secret profile, host, execution identity, depend
 ```bash
 llmops config effective
 llmops config effective component <component>
+llmops component logs <component> --list
 llmops component logs <component> --channel service
-llmops component logs model-proxy --channel rendered-prompt
+llmops component logs model-proxy --channel rendered-prompt --lines 500
+llmops component logs model-proxy --channel rendered-prompt --follow
 ```
 
-Log paths are resolved and read on the component's configured host. A displayed remote path is never implied to exist on the controlling host.
+Log channels come from the component's reviewed service template. `--list` reports the host alias, execution user, resolved remote path or provider unit, availability, readability, size, and modification time when available. Bounded reads default to 200 lines and accept at most 10,000. `--json` is supported for listing and bounded reads; streaming follow is terminal output and rejects JSON. Log paths are resolved and read on the component's configured host. A displayed remote path is never implied to exist on the controlling host, and arbitrary paths are not accepted.
 
 Mutable desired state defaults to `~/.config/llm-ops`. Deployed commands read immutable role-filtered revisions through `current-config`, but `config display`, `component configure`, and `config reconcile` always read and write the authority tree. Set `LLMOPS_AUTHORITY_CONFIG_HOME` when the authority uses a non-default location; do not point it at `current-config`.
 

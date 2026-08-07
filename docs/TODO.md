@@ -1,7 +1,7 @@
 # Maintainer TODO
 
 **Created**: 2026-07-16
-**Updated**: 2026-07-23
+**Updated**: 2026-08-07
 
 Back: [Documentation index](./INDEX.md)
 
@@ -28,6 +28,8 @@ Back: [Documentation index](./INDEX.md)
 - [x] Route schema operations and the Textual console from trusted peers to one designated desired-state authority.
 - [x] Add RTK as a tool component with installation status, version, telemetry, verification, gain, and Hermes integration dry-run actions.
 - [x] Separate managed-product releases from toolkit runtime identity with a reconciled product manifest, shared CLI/TUI status columns, update metadata, and public inventory inspection.
+- [x] Add catalog-wide template-declared component log listing, bounded reads, JSON output, interrupt-safe CLI follow, and a full-screen remote-aware TUI log viewer.
+- [x] Make managed launchd lifecycle symmetric so start and restart bootstrap an unloaded configured plist before kickstart while stop remains idempotent.
 
 ## Beta Release Gates
 
@@ -52,12 +54,12 @@ Back: [Documentation index](./INDEX.md)
 
 ## Deferred From Beta
 
-- [ ] Add catalog-wide `component logs list/read/follow` commands and a full-screen scrollable TUI log viewer with adapter-declared channels, remote host/user resolution, path identity, refresh, and follow controls.
+- [x] Add catalog-wide component log list/read/follow operations and a full-screen scrollable TUI viewer with template-declared channels, remote host/user resolution, path identity, refresh, and follow controls.
 - [ ] Extend guided initialization with optional host and executable discovery. Fresh topology creation is now available through templates in the CLI and TUI without manual JSON editing.
 - [x] Replace the single Add Component modal with a four-step placement, settings, connections, and review flow; add grouped editing, advanced disclosure, reset/revert controls, and reviewed local-template import.
 - [ ] Expand schema coverage for product-specific fields discovered during beta operation; unknown extension fields remain preserved and available through advanced CLI file input.
 - [ ] Add explicit manual/standalone/launchd lifecycle ownership and crash-only restart policies that never override an intentional operator stop.
-- [ ] Make managed launchd lifecycle symmetric: after `component stop` unloads a job with `bootout`, `component start` must `bootstrap` its installed plist before `kickstart`. Add an acceptance test that stops, starts, and restarts an initially loaded job without leaving a blocked operation or orchestrator lock holder.
+- [x] Make managed launchd lifecycle symmetric and prove stop, start, loaded restart, and unloaded restart against an isolated launchctl fixture. Final live validation remains part of the scheduled artifact acceptance window.
 - [ ] Add mutating stack creation and membership editing. Full-screen membership, dependencies, and connection inspection are complete.
 - [ ] Add deterministic corrective suggestions from active probes to the TUI. The beta TUI shows configuration validation only.
 - [ ] Add a correlated model-proxy diagnostic exchange browser. The beta exposes component logs without modifying proxy traffic.

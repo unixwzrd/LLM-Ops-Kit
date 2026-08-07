@@ -241,6 +241,30 @@ def emit_product_history(rows: list[dict[str, Any]]) -> None:
     Console().print(table)
 
 
+def emit_log_channels(rows: list[dict[str, Any]]) -> None:
+    """Render host-qualified log channels for an operator terminal."""
+
+    table = Table(show_header=True, header_style="bold")
+    columns = (
+        ("channel", "Channel"),
+        ("host", "Host"),
+        ("execution_user", "Run as"),
+        ("path", "Remote path or unit"),
+        ("available", "Available"),
+        ("readable", "Readable"),
+        ("size", "Bytes"),
+        ("modified_at", "Modified (epoch)"),
+        ("error", "Error"),
+    )
+    for _, heading in columns:
+        table.add_column(heading)
+    for row in rows:
+        table.add_row(
+            *("" if row.get(field) is None else str(row.get(field, "")) for field, _ in columns)
+        )
+    Console().print(table)
+
+
 def operation_payload(operations: list[Any]) -> list[dict[str, str]]:
     """Render operations with their equivalent remote command."""
 
@@ -1027,16 +1051,34 @@ def cmd_component_plan(args: argparse.Namespace) -> int:
 def cmd_component_status(args: argparse.Namespace) -> int:
     component = CURRENT_TOPOLOGY.resolve_component(args.component)
     if args.action == "logs":
-        result = ComponentRunner(CURRENT_TOPOLOGY).logs(component, channel=args.channel)
+        runner = ComponentRunner(CURRENT_TOPOLOGY)
+        if args.list_channels:
+            rows = [record.as_dict() for record in runner.list_logs(component)]
+            if args.json:
+                emit(rows, json_output=True)
+            else:
+                emit_log_channels(rows)
+            return 0 if all(not row["error"] for row in rows) else 1
+        if args.follow:
+            if args.json:
+                raise DriverError("component logs --follow cannot be combined with --json")
+            return runner.follow_logs(component, channel=args.channel, lines=args.lines)
+        result = runner.logs(component, channel=args.channel, lines=args.lines)
         payload = result.as_dict()
         payload.update(
             {
                 "host": component.host,
                 "execution_user": component.execution_user or CURRENT_TOPOLOGY.hosts[component.host].user,
                 "channel": args.channel,
+                "lines": args.lines,
             }
         )
-        emit(payload, json_output=args.json)
+        if args.json:
+            emit(payload, json_output=True)
+        elif result.stdout:
+            print(result.stdout)
+        elif result.stderr:
+            print(result.stderr, file=sys.stderr)
         return 0 if result.ok else 1
     status_args = argparse.Namespace(
         selector=component.qualified_id,
@@ -1719,6 +1761,13 @@ def cmd_remote_component(args: argparse.Namespace) -> int:
         operation.append("--force")
     if args.component_command == "logs" and getattr(args, "channel", "service") != "service":
         operation.extend(("--channel", args.channel))
+    if args.component_command == "logs":
+        if getattr(args, "list_channels", False):
+            operation.append("--list")
+        if getattr(args, "follow", False):
+            operation.append("--follow")
+        if getattr(args, "lines", 200) != 200:
+            operation.extend(("--lines", str(args.lines)))
     command = _host_command(target, operation, json_output=args.json)
     return _execute_host_operation(target_name, command, json_output=args.json, timeout=900)
 
@@ -2295,11 +2344,11 @@ def build_parser() -> argparse.ArgumentParser:
         action_parser.set_defaults(action=action, func=cmd_component_status)
         action_parser.add_argument("component")
         if action == "logs":
-            action_parser.add_argument(
-                "--channel",
-                choices=("service", "raw-request", "rendered-prompt", "raw-response"),
-                default="service",
-            )
+            action_parser.add_argument("--channel", default="service")
+            log_mode = action_parser.add_mutually_exclusive_group()
+            log_mode.add_argument("--list", dest="list_channels", action="store_true")
+            log_mode.add_argument("--follow", action="store_true")
+            action_parser.add_argument("--lines", type=int, default=200)
     component_version = component_sub.add_parser("version")
     component_version.add_argument("component")
     component_version.set_defaults(component_command="version", func=cmd_component_version)
