@@ -697,6 +697,8 @@ def write_host_snapshot(topology: Topology, *, host_name: str, destination: Path
         referenced_products = (
             set(products) if host.trusted_control else set(filtered_bindings.values())
         )
+        if "llm-ops-kit" in products:
+            referenced_products.add("llm-ops-kit")
         missing = sorted(product_id for product_id in referenced_products if product_id not in products)
         if missing:
             raise TopologyError(

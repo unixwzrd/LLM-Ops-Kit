@@ -222,6 +222,13 @@ class InventoryTests(ControlFixture):
                 "schema_version": 1,
                 "products": {
                     "llama-cpp": {"installed_version": "b1057", "update_state": "review"},
+                    "llm-ops-kit": {
+                        "installed_version": __version__,
+                        "latest_version": __version__,
+                        "update_state": "current",
+                        "auto_update": True,
+                        "release_repository": "example/llm-ops-kit",
+                    },
                     "agent": {
                         "installed_version": "1.0",
                         "update_state": "current",
@@ -257,7 +264,8 @@ class InventoryTests(ControlFixture):
             (destination / "products.json").read_text(encoding="utf-8")
         )
         self.assertEqual(products["components"], {"sample:chat": "llama-cpp"})
-        self.assertEqual(set(products["products"]), {"llama-cpp"})
+        self.assertEqual(set(products["products"]), {"llama-cpp", "llm-ops-kit"})
+        self.assertTrue(products["products"]["llm-ops-kit"]["auto_update"])
         self.assertEqual(products["history"], [])
 
     def test_trusted_snapshot_preserves_product_history(self) -> None:
