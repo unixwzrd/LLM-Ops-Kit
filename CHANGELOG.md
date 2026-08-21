@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Made toolkit update and rollback catalog-wide by default, with manifest-selected version and repository policy, explicit `--local-only` internal operations, and no production repository constants in installed application or test code.
 - Added manifest-approved local self-update on every installed `llmops` invocation, with verified release installation, recursion protection, re-execution into the selected runtime, and fail-open diagnostics when the approved artifact is unavailable.
 - Added health-independent component uptime to CLI and TUI status, with machine-readable elapsed seconds, observed start time, and provenance so degraded-but-running processes retain their restart age.
 - Added remote-safe MLX-Audio reference aliases, strict capability-aware expressive controls, redacted bridge diagnostics, registry health metadata, and a revision-pinned TTS evaluation workflow.

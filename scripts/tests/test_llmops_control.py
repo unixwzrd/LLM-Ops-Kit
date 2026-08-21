@@ -997,7 +997,7 @@ class TopologyTests(ControlFixture):
             "runtime",
             "ps",
             0,
-            "1-02:03:04 /opt/llm-ops/releases/0.9.0b41/scripts/model_proxy_tap.py",
+            "1-02:03:04 /opt/llm-ops/current/scripts/model_proxy_tap.py",
             "",
         )
         observation = ComponentObservation(

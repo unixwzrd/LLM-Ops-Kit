@@ -64,6 +64,7 @@ def _auto_update(
             result = llmops_update.main(
                 [
                     "--apply",
+                    "--local-only",
                     "--version",
                     target,
                     "--repository",

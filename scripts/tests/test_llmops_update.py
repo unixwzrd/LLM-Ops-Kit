@@ -51,7 +51,7 @@ class RemoteUpdateTests(unittest.TestCase):
                 mock.patch.object(llmops_update, "_remote_stage") as stage,
                 mock.patch.object(llmops_update, "_remote_apply") as apply,
             ):
-                result = llmops_update.main(["--apply", "--archive", str(archive), "--checksum-file", str(checksum), "--host", "peer", "--json"])
+                result = llmops_update.main(["--apply", "--archive", str(archive), "--checksum-file", str(checksum), "--host", "peer", "--config-home", str(root / "config"), "--json"])
         self.assertEqual(result, 0)
         stage.assert_not_called()
         apply.assert_not_called()
@@ -79,8 +79,55 @@ class RemoteUpdateTests(unittest.TestCase):
                 return subprocess.CompletedProcess([], 0, "", "")
 
             with mock.patch("subprocess.run", side_effect=select_previous):
-                result = llmops_update.main(["--apply", "--archive", str(archive), "--checksum-file", str(checksum), "--prefix", str(root), "--json"])
+                result = llmops_update.main(["--apply", "--local-only", "--archive", str(archive), "--checksum-file", str(checksum), "--prefix", str(root), "--config-home", str(root / "config"), "--json"])
         self.assertEqual(result, 0)
+
+    def test_release_policy_comes_from_products_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config = root / "current-config"
+            config.mkdir()
+            target = "candidate-next"
+            repository = "example/toolkit"
+            (config / "products.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "products": {
+                            "llm-ops-kit": {
+                                "latest_version": target,
+                                "release_repository": repository,
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                llmops_update.release_policy(root, None),
+                (target, repository),
+            )
+
+    def test_update_defaults_to_every_catalog_host(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            archive = root / "LLM-Ops-Kit-candidate-next.tar.xz"
+            archive.write_bytes(b"unused plan fixture")
+            with (
+                mock.patch.object(
+                    llmops_update, "_select_hosts", return_value=[("peer", HOST)]
+                ) as select_hosts,
+                mock.patch.object(
+                    llmops_update,
+                    "_remote_preflight",
+                    return_value={"host": "peer", "ok": True, "version": "current"},
+                ),
+            ):
+                result = llmops_update.main(
+                    ["--plan", "--archive", str(archive), "--config-home", str(root / "config"), "--json"]
+                )
+            self.assertEqual(result, 0)
+            self.assertTrue(select_hosts.call_args.args[0].all_hosts)
 
     def test_managed_catalog_precedes_release_legacy_config(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -176,6 +223,8 @@ class RemoteUpdateTests(unittest.TestCase):
                         "second",
                         "--prefix",
                         str(root / "install"),
+                        "--config-home",
+                        str(root / "config"),
                     ]
                 )
             self.assertEqual(result, 2)

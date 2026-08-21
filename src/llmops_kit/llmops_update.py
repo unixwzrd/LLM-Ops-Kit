@@ -216,6 +216,23 @@ def _load_hosts(prefix: Path, config_home: Optional[Path]) -> dict[str, dict[str
     }
 
 
+def release_policy(prefix: Path, config_home: Optional[Path]) -> tuple[str, str]:
+    """Return the manifest-selected toolkit version and release repository."""
+
+    root = config_home.expanduser() if config_home is not None else prefix / "current-config"
+    path = root / "products.json"
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+        product = document["products"]["llm-ops-kit"]
+    except (OSError, json.JSONDecodeError, KeyError, TypeError):
+        return "", ""
+    target = str(product.get("latest_version", ""))
+    repository = str(product.get("release_repository", ""))
+    if not VERSION_RE.fullmatch(target) or not REPOSITORY_RE.fullmatch(repository):
+        return "", ""
+    return target, repository
+
+
 def _ssh_base(host: dict[str, object]) -> list[str]:
     return [
         "ssh",
@@ -249,7 +266,7 @@ def _select_hosts(args: argparse.Namespace) -> list[tuple[str, dict[str, object]
     hosts = _load_hosts(args.prefix, args.config_home)
     requested = list(dict.fromkeys(args.hosts or []))
     if args.all_hosts:
-        requested = sorted(name for name, host in hosts.items() if host.get("peer_observable", True) is not False)
+        requested = sorted(hosts)
     missing = [name for name in requested if name not in hosts]
     if missing:
         raise UpdateError(f"catalog host not found: {', '.join(missing)}")
@@ -336,9 +353,9 @@ def _remote_apply(
         'previous=$(basename "$(readlink "$root/previous" 2>/dev/null || true)"); '
         'if test "$current" = "$target"; then printf "already current: %s\\n" "$target"; '
         f"elif test \"$previous\" = \"$target\" && test -x \"$root/releases/$target/app/bin/llmops\"; then "
-        f"{llmops} update --rollback {install_args}; "
+        f"{llmops} update --rollback --local-only {install_args}; "
         f"elif test -x {llmops}; then "
-        f"{llmops} update --apply --archive \"{archive}\" --checksum-file \"{checksum}\" {install_args}; "
+        f"{llmops} update --apply --local-only --archive \"{archive}\" --checksum-file \"{checksum}\" {install_args}; "
         "else "
         f"stage=$(dirname \"{archive}\"); cd \"$stage\"; "
         f"shasum -a 256 -c \"{checksum}\"; rm -rf extracted; mkdir extracted; "
@@ -404,7 +421,7 @@ def _remote_rollback(name: str, host: dict[str, object], timeout: int) -> dict[s
     state_home = _remote_path(host.get("state_home", "~/.local/state/llm-ops"))
     completed = _run_remote(
         host,
-        f"{llmops} update --rollback --prefix {install_root} --public-bin-dir {public_bin} --state-home {state_home}",
+        f"{llmops} update --rollback --local-only --prefix {install_root} --public-bin-dir {public_bin} --state-home {state_home}",
         timeout,
     )
     return {
@@ -424,8 +441,8 @@ def build_parser() -> argparse.ArgumentParser:
     action.add_argument("--plan", action="store_true", help="Describe the update without downloading or changing files")
     action.add_argument("--apply", action="store_true", help="Download, verify, and atomically install the release")
     action.add_argument("--rollback", action="store_true", help="Exchange current and previous local releases")
-    parser.add_argument("--version", help="Release tag; defaults to the latest GitHub release")
-    parser.add_argument("--repository", default=os.environ.get("LLMOPS_GITHUB_REPOSITORY", "unixwzrd/LLM-Ops-Kit"))
+    parser.add_argument("--version", help="Release tag; defaults to products.json latest_version")
+    parser.add_argument("--repository", default=os.environ.get("LLMOPS_GITHUB_REPOSITORY"))
     parser.add_argument("--archive", type=Path, help="Use a local release artifact")
     parser.add_argument("--checksum-file", type=Path, help="SHA-256 file for --archive")
     parser.add_argument("--prefix", type=Path, default=Path(os.environ.get("LLMOPS_HOME", "~/.local/llm-ops")).expanduser())
@@ -434,6 +451,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--host", "--hosts", dest="hosts", action="append", default=[], help="Update one catalog host; repeatable")
     parser.add_argument("--all-hosts", action="store_true", help="Update every host in the observer catalog")
+    parser.add_argument("--local-only", action="store_true", help="Update only this installation")
     parser.add_argument("--config-home", type=Path)
     parser.add_argument("--host-timeout", type=int, default=900)
     return parser
@@ -444,6 +462,10 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     args = build_parser().parse_args(argv)
     try:
+        if args.local_only and (args.hosts or args.all_hosts):
+            raise UpdateError("--local-only cannot be combined with --host or --all-hosts")
+        if not args.local_only and not args.hosts and not args.all_hosts:
+            args.all_hosts = True
         selected_hosts = _select_hosts(args) if args.hosts or args.all_hosts else []
         if args.rollback:
             if selected_hosts:
@@ -473,12 +495,16 @@ def main(argv: Optional[list[str]] = None) -> int:
             if completed.returncode != 0:
                 raise UpdateError(f"rollback failed with status {completed.returncode}")
             return 0
-        if not REPOSITORY_RE.fullmatch(args.repository):
+        policy_version, policy_repository = release_policy(args.prefix, args.config_home)
+        repository = args.repository or policy_repository
+        if repository and not REPOSITORY_RE.fullmatch(repository):
             raise UpdateError("invalid GitHub repository; expected owner/name")
         if args.archive is not None:
             available = archive_version(args.archive)
         else:
-            available = args.version or resolve_latest(args.repository)
+            if not repository:
+                raise UpdateError("release_repository is not configured in products.json")
+            available = args.version or policy_version or resolve_latest(repository)
             if not VERSION_RE.fullmatch(available):
                 raise UpdateError(f"invalid release version: {available}")
         installed = current_version(args.prefix)
@@ -489,7 +515,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             "current": installed,
             "available": available,
             "update_available": installed != available,
-            "repository": args.repository,
+            "repository": repository,
         }
         if selected_hosts:
             preflight = [_remote_preflight(name, host, args.host_timeout) for name, host in selected_hosts]
@@ -511,7 +537,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             with tempfile.TemporaryDirectory(prefix="llmops-update-") as temporary_name:
                 temporary = Path(temporary_name)
                 archive, checksum_file = release_assets(
-                    repository=args.repository,
+                    repository=repository,
                     version=available,
                     archive=args.archive,
                     checksum_file=args.checksum_file,
@@ -556,7 +582,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         with tempfile.TemporaryDirectory(prefix="llmops-update-") as temporary_name:
             temporary = Path(temporary_name)
             archive, checksum_file = release_assets(
-                repository=args.repository,
+                repository=repository,
                 version=available,
                 archive=args.archive,
                 checksum_file=args.checksum_file,

@@ -2307,18 +2307,24 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
             install_base = Path(sys.executable).absolute().parents[4]
             current = llmops_update.current_version(install_base)
             try:
-                available = await asyncio.to_thread(
-                    llmops_update.resolve_latest,
-                    "unixwzrd/LLM-Ops-Kit",
-                )
+                available, repository = llmops_update.release_policy(install_base, None)
+                if not available or not repository:
+                    raise llmops_update.UpdateError(
+                        "LLM-Ops-Kit release policy is incomplete in products.json"
+                    )
                 detail = {
-                    "scope": "LLM-Ops-Kit toolkit",
+                    "scope": "LLM-Ops-Kit toolkit on all catalog hosts",
                     "current": current,
                     "available": available,
+                    "repository": repository,
                     "update_available": current != available,
                 }
             except llmops_update.UpdateError as exc:
-                detail = {"scope": "LLM-Ops-Kit toolkit", "current": current, "error": str(exc)}
+                detail = {
+                    "scope": "LLM-Ops-Kit toolkit on all catalog hosts",
+                    "current": current,
+                    "error": str(exc),
+                }
             self.query_one("#detail", Static).update(json.dumps(detail, indent=2, sort_keys=True))
 
         def action_update_check(self) -> None:
@@ -2328,7 +2334,7 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
             approved = await self.push_screen_wait(
                 ConfirmOperation(
                     "llmops update --apply",
-                    [{"action": "update", "component": "LLM-Ops-Kit toolkit"}],
+                    [{"action": "update", "component": "LLM-Ops-Kit toolkit on all catalog hosts"}],
                 )
             )
             if not approved:
@@ -2337,9 +2343,9 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                 self.topology.paths,
                 argv=["update", "--apply"],
                 action="update",
-                target="LLM-Ops-Kit toolkit",
+                target="LLM-Ops-Kit toolkit on all catalog hosts",
                 command="llmops update --apply",
-                plan=[{"action": "update", "component": "LLM-Ops-Kit toolkit"}],
+                plan=[{"action": "update", "component": "LLM-Ops-Kit toolkit on all catalog hosts"}],
                 host="authority",
             )
             self.query_one("#detail", Static).update(

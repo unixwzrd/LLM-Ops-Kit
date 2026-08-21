@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPOSITORY="${LLMOPS_GITHUB_REPOSITORY:-unixwzrd/LLM-Ops-Kit}"
+REPOSITORY="${LLMOPS_GITHUB_REPOSITORY:-}"
 VERSION="${LLMOPS_VERSION:-latest}"
 ARCHIVE=""
 CHECKSUM_FILE=""
@@ -48,7 +48,9 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[[ "$REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || { echo "bootstrap-install.sh: invalid repository" >&2; exit 2; }
+if [[ -z "$ARCHIVE" ]]; then
+  [[ "$REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || { echo "bootstrap-install.sh: --repository or LLMOPS_GITHUB_REPOSITORY is required for downloads" >&2; exit 2; }
+fi
 command -v curl >/dev/null 2>&1 || { echo "bootstrap-install.sh: curl is required" >&2; exit 2; }
 command -v shasum >/dev/null 2>&1 || { echo "bootstrap-install.sh: shasum is required" >&2; exit 2; }
 command -v tar >/dev/null 2>&1 || { echo "bootstrap-install.sh: tar is required" >&2; exit 2; }

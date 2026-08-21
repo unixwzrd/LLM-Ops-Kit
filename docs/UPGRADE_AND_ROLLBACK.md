@@ -10,7 +10,7 @@ Back: [Documentation index](./INDEX.md)
 ```bash
 llmops update --check
 llmops update --plan --version <version> --json
-llmops update --all-hosts --plan --version <version> --json
+llmops update --local-only --plan --version <version> --json
 ```
 
 Check and plan do not download or mutate a release. A local artifact can be selected with `--archive` and `--checksum-file`.
@@ -19,10 +19,10 @@ Check and plan do not download or mutate a release. A local artifact can be sele
 
 ```bash
 llmops update --apply --version <version>
-llmops update --all-hosts --apply --version <version>
+llmops update --local-only --apply --version <version>
 ```
 
-Local apply verifies and safely extracts the release before invoking its immutable installer. Multi-host apply preflights macOS, SSH, disk space, and installed state; stages one verified artifact everywhere; then applies sequentially. If a later host fails, hosts changed by the invocation are rolled back and the mixed-version condition is reported.
+Update check, plan, apply, and rollback select every host in the reconciled catalog by default. Apply preflights macOS, SSH, disk space, and installed state; stages one verified artifact everywhere; then applies sequentially. If any catalog host is unreachable, preflight stops before mutation. If a later host fails, hosts changed by the invocation are rolled back and the mixed-version condition is reported. `--local-only` is reserved for deliberate single-installation work and for the internal per-host phase of a coordinated operation.
 
 An older peer can use its existing `llmops update` implementation to invoke the new archive installer. A peer without `llmops` is bootstrapped from the staged, remotely verified archive.
 
