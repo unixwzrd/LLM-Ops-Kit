@@ -1,0 +1,142 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ACTION="${1:-status}"
+PRODUCT_ROOT="${LLMOPS_TTS_CANARY_ROOT:-$HOME/.local/llm-ops/products/tts-canary/0.5.0+unixwzrd.1}"
+ENGINE_PYTHON="${MLX_AUDIO_CANARY_PYTHON:-$HOME/.local/llm-ops/products/mlx-audio/0.5.0+unixwzrd.1/.venv/bin/python}"
+BRIDGE_PYTHON="${TTS_BRIDGE_CANARY_PYTHON:-$HOME/.local/llm-ops/current/app/bin/python}"
+BRIDGE_SOURCE="${TTS_BRIDGE_CANARY_SOURCE:-$PRODUCT_ROOT/bridge}"
+CONFIG_DIR="${TTS_BRIDGE_CANARY_CONFIG:-$PRODUCT_ROOT/config}"
+SAMPLES_DIR="${TTS_BRIDGE_CANARY_SAMPLES:-$HOME/LLM_Repository/TTS/Samples}"
+MODEL="${TTS_BRIDGE_CANARY_MODEL:-$HOME/LLM_Repository/TTS/revision-pinned/Qwen3-TTS-12Hz-0.6B-Base-8bit--50f45ef0047c}"
+REFERENCE_STORE="${MLX_AUDIO_REFERENCE_STORE:-$HOME/.local/share/mlx-audio/references-canary}"
+TOKEN_FILE="${MLX_AUDIO_REFERENCE_ADMIN_TOKEN_FILE:-$PRODUCT_ROOT/reference-admin-token}"
+RUN_DIR="$PRODUCT_ROOT/run"
+LOG_DIR="$PRODUCT_ROOT/logs"
+ENGINE_PID_FILE="$RUN_DIR/mlx-audio.pid"
+BRIDGE_PID_FILE="$RUN_DIR/tts-bridge.pid"
+
+usage() {
+  echo "Usage: tts-canary [start|stop|restart|start-engine|stop-engine|restart-engine|status]" >&2
+}
+
+running_pid() {
+  local pid_file="$1" marker="$2" pid=""
+  [[ -f "$pid_file" ]] || return 1
+  pid="$(<"$pid_file")"
+  [[ "$pid" =~ ^[0-9]+$ ]] || return 1
+  kill -0 "$pid" 2>/dev/null || return 1
+  ps -p "$pid" -o command= | grep -F -- "$marker" >/dev/null
+  printf '%s\n' "$pid"
+}
+
+start_engine() {
+  local token="" engine_pid=""
+  mkdir -p "$RUN_DIR" "$LOG_DIR" "$REFERENCE_STORE"
+  [[ -x "$ENGINE_PYTHON" ]] || { echo "tts-canary: engine Python missing: $ENGINE_PYTHON" >&2; return 1; }
+  [[ -r "$TOKEN_FILE" ]] || { echo "tts-canary: admin token file missing" >&2; return 1; }
+  token="$(<"$TOKEN_FILE")"
+  [[ -n "$token" ]] || { echo "tts-canary: admin token is empty" >&2; return 1; }
+  engine_pid="$(running_pid "$ENGINE_PID_FILE" "mlx_audio.server --host 127.0.0.1 --port 12439" || true)"
+  if [[ -n "$engine_pid" ]]; then
+    echo "tts-canary: engine already running pid=$engine_pid"
+  else
+    nohup env \
+      MLX_AUDIO_REFERENCE_ADMIN_TOKEN="$token" \
+      MLX_AUDIO_REFERENCE_STORE="$REFERENCE_STORE" \
+      MLX_AUDIO_REFERENCE_ROOTS="$SAMPLES_DIR" \
+      MLX_AUDIO_QWEN_ICL_CACHE_ENTRIES=32 \
+      "$ENGINE_PYTHON" -m mlx_audio.server --host 127.0.0.1 --port 12439 \
+      >"$LOG_DIR/mlx-audio.log" 2>&1 &
+    echo "$!" >"$ENGINE_PID_FILE"
+  fi
+}
+
+start_bridge() {
+  local bridge_pid=""
+  mkdir -p "$RUN_DIR" "$LOG_DIR"
+  [[ -x "$BRIDGE_PYTHON" ]] || { echo "tts-canary: bridge Python missing: $BRIDGE_PYTHON" >&2; return 1; }
+  [[ -f "$BRIDGE_SOURCE/tts_bridge_server.py" ]] || { echo "tts-canary: bridge source missing" >&2; return 1; }
+  bridge_pid="$(running_pid "$BRIDGE_PID_FILE" "tts_bridge_server.py --listen-host 0.0.0.0 --listen-port 12440" || true)"
+  if [[ -n "$bridge_pid" ]]; then
+    echo "tts-canary: bridge already running pid=$bridge_pid"
+  else
+    nohup "$BRIDGE_PYTHON" "$BRIDGE_SOURCE/tts_bridge_server.py" \
+      --listen-host 0.0.0.0 \
+      --listen-port 12440 \
+      --upstream-base http://127.0.0.1:12439/v1 \
+      --model "$MODEL" \
+      --config-dir "$CONFIG_DIR" \
+      --pronounce-config "$CONFIG_DIR/pronounce.json" \
+      --voice-map-config "$CONFIG_DIR/voice-map.json" \
+      --samples-dir "$SAMPLES_DIR" \
+      --log-path "$LOG_DIR/tts-bridge.log" \
+      >"$LOG_DIR/tts-bridge-console.log" 2>&1 &
+    echo "$!" >"$BRIDGE_PID_FILE"
+  fi
+}
+
+start_canary() {
+  start_engine
+  start_bridge
+}
+
+stop_one() {
+  local pid_file="$1" marker="$2" label="$3" pid=""
+  pid="$(running_pid "$pid_file" "$marker" || true)"
+  if [[ -z "$pid" ]]; then
+    echo "tts-canary: $label stopped"
+    return
+  fi
+  kill "$pid"
+  for _ in 1 2 3 4 5; do
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 1
+  done
+  if kill -0 "$pid" 2>/dev/null; then
+    echo "tts-canary: $label did not stop cleanly pid=$pid" >&2
+    return 1
+  fi
+  echo "tts-canary: $label stopped pid=$pid"
+}
+
+stop_canary() {
+  stop_one "$BRIDGE_PID_FILE" "tts_bridge_server.py --listen-host 0.0.0.0 --listen-port 12440" bridge
+  stop_one "$ENGINE_PID_FILE" "mlx_audio.server --host 127.0.0.1 --port 12439" engine
+}
+
+restart_engine() {
+  local pid=""
+  if ! stop_one "$ENGINE_PID_FILE" "mlx_audio.server --host 127.0.0.1 --port 12439" engine; then
+    pid="$(running_pid "$ENGINE_PID_FILE" "mlx_audio.server --host 127.0.0.1 --port 12439" || true)"
+    if [[ -n "$pid" ]]; then
+      kill -9 "$pid"
+      for _ in 1 2 3 4 5; do
+        kill -0 "$pid" 2>/dev/null || break
+        sleep 1
+      done
+      kill -0 "$pid" 2>/dev/null && { echo "tts-canary: engine remains uninterruptible pid=$pid" >&2; return 1; }
+    fi
+  fi
+  start_engine
+}
+
+status_canary() {
+  local engine_pid="" bridge_pid=""
+  engine_pid="$(running_pid "$ENGINE_PID_FILE" "mlx_audio.server --host 127.0.0.1 --port 12439" || true)"
+  bridge_pid="$(running_pid "$BRIDGE_PID_FILE" "tts_bridge_server.py --listen-host 0.0.0.0 --listen-port 12440" || true)"
+  echo "engine=${engine_pid:-stopped} endpoint=http://127.0.0.1:12439/v1"
+  echo "bridge=${bridge_pid:-stopped} endpoint=http://127.0.0.1:12440/v1"
+  [[ -n "$engine_pid" && -n "$bridge_pid" ]]
+}
+
+case "$ACTION" in
+  start) start_canary ;;
+  stop) stop_canary ;;
+  restart) stop_canary; start_canary ;;
+  start-engine) start_engine ;;
+  stop-engine) stop_one "$ENGINE_PID_FILE" "mlx_audio.server --host 127.0.0.1 --port 12439" engine ;;
+  restart-engine) restart_engine ;;
+  status) status_canary ;;
+  *) usage; exit 2 ;;
+esac

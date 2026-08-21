@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+MANIFEST="${1:-$(cd -P "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/examples/tts/model-evaluation-manifest.json}"
+DEST_ROOT="${TTS_MODEL_EVALUATION_ROOT:-$HOME/LLM_Repository/TTS/revision-pinned}"
+HF_BIN="${HF_BIN:-$HOME/.local/llm-ops/products/mlx-audio/0.5.0+unixwzrd.1/.venv/bin/hf}"
+
+[[ -r "$MANIFEST" ]] || { echo "model manifest is not readable: $MANIFEST" >&2; exit 2; }
+[[ -x "$HF_BIN" ]] || { echo "Hugging Face CLI is not executable: $HF_BIN" >&2; exit 2; }
+command -v jq >/dev/null 2>&1 || { echo "jq is required" >&2; exit 2; }
+mkdir -p "$DEST_ROOT"
+
+jq -c '.models[] | select(.action != "do-not-download")' "$MANIFEST" | while IFS= read -r item; do
+  repo_id="$(jq -r '.repo_id' <<<"$item")"
+  revision="$(jq -r '.revision' <<<"$item")"
+  action="$(jq -r '.action' <<<"$item")"
+  name="${repo_id##*/}"
+  destination="$DEST_ROOT/${name}--${revision:0:12}"
+  completion="$destination/.llmops-download-complete.json"
+  if [[ -s "$completion" ]] && [[ "$(jq -r '.revision // ""' "$completion")" == "$revision" ]]; then
+    echo "skip repo=$repo_id revision=$revision destination=$destination"
+    continue
+  fi
+  mkdir -p "$destination"
+  echo "download repo=$repo_id revision=$revision action=$action destination=$destination"
+  "$HF_BIN" download "$repo_id" --revision "$revision" --local-dir "$destination"
+  size_kib="$(du -sk "$destination" | awk '{print $1}')"
+  jq -n \
+    --arg repo_id "$repo_id" \
+    --arg revision "$revision" \
+    --arg action "$action" \
+    --argjson size_kib "$size_kib" \
+    '{schema_version: 1, repo_id: $repo_id, revision: $revision, action: $action, size_kib: $size_kib}' \
+    >"$completion"
+  echo "complete repo=$repo_id revision=$revision size_kib=$size_kib"
+done

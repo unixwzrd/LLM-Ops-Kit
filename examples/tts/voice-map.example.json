@@ -4,9 +4,15 @@
     "sample": "speaker-reference-a.wav"
   },
   "Sol": {
-    "sample": "speaker-reference-a.wav"
+    "sample": "speaker-reference-a.wav",
+    "ref_text": "speaker-reference-a.txt",
+    "language": "en",
+    "emotion": "neutral"
   },
   "Guide": {
-    "sample": "speaker-reference-b.wav"
+    "reference_id": "ref_0123456789abcdef0123456789abcdef",
+    "language": "en",
+    "emotion": "warm",
+    "intensity": 0.65
   }
 }

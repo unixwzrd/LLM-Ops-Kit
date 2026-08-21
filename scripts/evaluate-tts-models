@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+BASE_URL="${TTS_EVALUATION_BASE_URL:-http://127.0.0.1:12439/v1}"
+MANIFEST="${1:-$(cd -P "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/examples/tts/model-evaluation-manifest.json}"
+MODEL_ROOT="${TTS_MODEL_EVALUATION_ROOT:-$HOME/LLM_Repository/TTS/revision-pinned}"
+REFERENCE_ID="${TTS_EVALUATION_REFERENCE_ID:-}"
+OUTPUT_DIR="${TTS_EVALUATION_OUTPUT_DIR:-$HOME/.local/llm-ops/products/tts-canary/0.5.0+unixwzrd.1/evaluation}"
+TARGET_TEXT="${TTS_EVALUATION_TEXT:-The same neutral cloning sentence is used for every candidate model.}"
+RESTART_BETWEEN_MODELS="${TTS_EVALUATION_RESTART_BETWEEN_MODELS:-1}"
+CANARY_CONTROL="${TTS_EVALUATION_CANARY_CONTROL:-$(cd "$(dirname "$0")" && pwd)/tts-canary}"
+ENGINE_LOG="${TTS_EVALUATION_ENGINE_LOG:-$HOME/.local/llm-ops/products/tts-canary/0.5.0+unixwzrd.1/logs/mlx-audio.log}"
+INCLUDE_REGEX="${TTS_EVALUATION_INCLUDE_REGEX:-.*}"
+EXCLUDE_REGEX="${TTS_EVALUATION_EXCLUDE_REGEX:-^$}"
+
+[[ -n "$REFERENCE_ID" ]] || { echo "TTS_EVALUATION_REFERENCE_ID is required" >&2; exit 2; }
+[[ -r "$MANIFEST" ]] || { echo "model manifest is not readable: $MANIFEST" >&2; exit 2; }
+command -v curl >/dev/null 2>&1 || { echo "curl is required" >&2; exit 2; }
+command -v jq >/dev/null 2>&1 || { echo "jq is required" >&2; exit 2; }
+if [[ "$RESTART_BETWEEN_MODELS" == "1" ]]; then
+  [[ -x "$CANARY_CONTROL" ]] || { echo "canary control is not executable: $CANARY_CONTROL" >&2; exit 2; }
+fi
+mkdir -p "$OUTPUT_DIR"
+metrics="$OUTPUT_DIR/metrics.tsv"
+printf 'model\tstatus\ttime_starttransfer\ttime_total\tbytes\tisolated\toutput\n' >"$metrics"
+
+while IFS=$'\t' read -r repo_id revision; do
+  model_name="${repo_id##*/}--${revision:0:12}"
+  [[ "$model_name" =~ $INCLUDE_REGEX ]] || continue
+  [[ ! "$model_name" =~ $EXCLUDE_REGEX ]] || continue
+  model_dir="$MODEL_ROOT/$model_name"
+  completion="$model_dir/.llmops-download-complete.json"
+  [[ -f "$completion" ]] || continue
+  model_name="${model_dir##*/}"
+  output="$OUTPUT_DIR/$model_name.wav"
+  payload="$OUTPUT_DIR/.$model_name.request.json"
+  if [[ "$RESTART_BETWEEN_MODELS" == "1" ]]; then
+    "$CANARY_CONTROL" restart-engine >/dev/null
+    for _ in $(seq 1 60); do
+      curl -fsS "$BASE_URL/models" >/dev/null 2>&1 && break
+      sleep 1
+    done
+  fi
+  capabilities="$(curl -sS --max-time 600 --get --data-urlencode "model=$model_dir" "$BASE_URL/audio/capabilities" || true)"
+  family="$(jq -r '.family // ""' <<<"$capabilities" 2>/dev/null || true)"
+  if [[ -z "$family" ]]; then
+    printf '%s\tcapability_error\t0\t0\t0\t%s\t%s\n' "$model_name" "$RESTART_BETWEEN_MODELS" "$output" | tee -a "$metrics"
+    continue
+  fi
+  jq -n \
+    --arg model "$model_dir" \
+    --arg input "$TARGET_TEXT" \
+    --arg reference_id "$REFERENCE_ID" \
+    --arg family "$family" \
+    '{model: $model, input: $input, reference_id: $reference_id, response_format: "wav", max_tokens: 1200} + (if $family == "chatterbox" then {exaggeration: 0.65, lang_code: "en"} else {} end)' \
+    >"$payload"
+  metrics_line="$(curl -sS --max-time 600 -o "$output" -w '%{http_code}\t%{time_starttransfer}\t%{time_total}\t%{size_download}' -H 'Content-Type: application/json' --data-binary "@$payload" "$BASE_URL/audio/speech" || true)"
+  rm -f "$payload"
+  if [[ -r "$ENGINE_LOG" ]]; then
+    cp "$ENGINE_LOG" "$OUTPUT_DIR/$model_name.engine.log"
+  fi
+  status="${metrics_line%%$'\t'*}"
+  bytes="$(cut -f4 <<<"$metrics_line")"
+  if [[ "$status" == "200" && "${bytes:-0}" == "0" ]]; then
+    status="stream_error"
+    metrics_line="$(cut -f2- <<<"$metrics_line")"
+    metrics_line="$status"$'\t'"$metrics_line"
+  fi
+  if [[ "$status" != "200" ]]; then
+    rm -f "$output"
+  fi
+  printf '%s\t%s\t%s\t%s\n' "$model_name" "$metrics_line" "$RESTART_BETWEEN_MODELS" "$output" | tee -a "$metrics"
+done < <(jq -r '.models[] | select(.action != "do-not-download") | [.repo_id, .revision] | @tsv' "$MANIFEST")

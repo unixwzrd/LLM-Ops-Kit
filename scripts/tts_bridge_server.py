@@ -11,10 +11,11 @@ import argparse
 import json
 import os
 import sys
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib import error, request
+from urllib import error, parse, request
 
 from log_rotation import RotatingLogWriter
 
@@ -65,6 +66,62 @@ def _mlx_speech_url(base: str) -> str:
     if base.endswith("/v1"):
         return f"{base}/audio/speech"
     return f"{base}/v1/audio/speech"
+
+
+def _mlx_api_url(base: str, path: str) -> str:
+    base = _normalize_base(base)
+    if base.endswith("/v1"):
+        return f"{base}/{path.lstrip('/')}"
+    return f"{base}/v1/{path.lstrip('/')}"
+
+
+def _fetch_json(url: str, timeout_seconds: int) -> dict[str, Any]:
+    with request.urlopen(url, timeout=timeout_seconds) as response:  # noqa: S310
+        payload = json.loads(response.read().decode("utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("upstream response was not a JSON object")
+    return payload
+
+
+def _refresh_upstream_metadata(
+    cfg: dict[str, Any], model: str, *, force: bool = False
+) -> dict[str, Any]:
+    cached = cfg.setdefault("upstream_metadata", {})
+    now = time.monotonic()
+    if (
+        not force
+        and cached.get("model") == model
+        and now - float(cached.get("checked_at", 0.0)) < 30.0
+    ):
+        return cached
+    try:
+        query = "?" + parse.urlencode({"model": model}) if model else ""
+        capabilities = _fetch_json(
+            _mlx_api_url(cfg["upstream_base"], "audio/capabilities") + query,
+            cfg["timeout_seconds"],
+        )
+        references = _fetch_json(
+            _mlx_api_url(cfg["upstream_base"], "audio/references"),
+            cfg["timeout_seconds"],
+        )
+        refreshed = {
+            "reachable": True,
+            "model": model,
+            "capabilities": capabilities,
+            "reference_count": len(references.get("data", [])),
+            "checked_at": now,
+        }
+    except Exception as exc:  # noqa: BLE001
+        refreshed = {
+            "reachable": False,
+            "model": model,
+            "capabilities": {},
+            "reference_count": 0,
+            "error": str(exc),
+            "checked_at": now,
+        }
+    cfg["upstream_metadata"] = refreshed
+    return refreshed
 
 
 def _content_type_for_format(fmt: str) -> str:
@@ -184,15 +241,47 @@ def _copy_optional_passthrough_fields(
             target[field] = fallback[field]
 
 
+def _copy_optional_style_fields(
+    target: dict[str, Any], source: dict[str, Any], alias_name: str, path: Path
+) -> None:
+    _copy_optional_text_fields(
+        target,
+        source,
+        ("emotion", "instruction"),
+        alias_name=alias_name,
+        path=path,
+    )
+    if "intensity" in source:
+        intensity = source["intensity"]
+        if not isinstance(intensity, (int, float)) or isinstance(intensity, bool):
+            raise BridgeConfigError(
+                f"voice-map alias '{alias_name}' field 'intensity' must be numeric in {path}"
+            )
+        if not 0.0 <= float(intensity) <= 1.0:
+            raise BridgeConfigError(
+                f"voice-map alias '{alias_name}' field 'intensity' must be between 0 and 1 in {path}"
+            )
+        target["intensity"] = float(intensity)
+
+
 def _normalize_voice_alias_entry(alias_name: str, entry: dict[str, Any], path: Path) -> dict[str, Any]:
-    if "sample" not in entry or not isinstance(entry["sample"], str) or not entry["sample"].strip():
+    has_sample = isinstance(entry.get("sample"), str) and bool(entry["sample"].strip())
+    has_reference_id = isinstance(entry.get("reference_id"), str) and bool(
+        entry["reference_id"].strip()
+    )
+    if has_sample == has_reference_id:
         raise BridgeConfigError(
-            f"voice-map alias '{alias_name}' missing required field 'sample' in {path}"
+            f"voice-map alias '{alias_name}' requires exactly one of 'sample' or 'reference_id' in {path}"
         )
-    normalized: dict[str, Any] = {
-        "alias": alias_name.strip(),
-        "sample": _validate_optional_text("sample", alias_name, entry["sample"], path),
-    }
+    normalized: dict[str, Any] = {"alias": alias_name.strip()}
+    if has_sample:
+        normalized["sample"] = _validate_optional_text(
+            "sample", alias_name, entry["sample"], path
+        )
+    else:
+        normalized["reference_id"] = _validate_optional_text(
+            "reference_id", alias_name, entry["reference_id"], path
+        )
     _copy_optional_text_fields(
         normalized,
         entry,
@@ -200,6 +289,7 @@ def _normalize_voice_alias_entry(alias_name: str, entry: dict[str, Any], path: P
         alias_name=alias_name,
         path=path,
     )
+    _copy_optional_style_fields(normalized, entry, alias_name, path)
     if "speed" in entry:
         speed = entry["speed"]
         if not isinstance(speed, (int, float, str)):
@@ -215,10 +305,22 @@ def _normalize_voice_map_defaults(path: Path, entry: dict[str, Any]) -> dict[str
     _copy_optional_text_fields(
         normalized,
         entry,
-        ("sample", "ref_text", "response_format", "language", "sample_dir"),
+        (
+            "sample",
+            "reference_id",
+            "ref_text",
+            "response_format",
+            "language",
+            "sample_dir",
+        ),
         alias_name="defaults",
         path=path,
     )
+    if "sample" in normalized and "reference_id" in normalized:
+        raise BridgeConfigError(
+            f"voice-map defaults cannot set both 'sample' and 'reference_id' in {path}"
+        )
+    _copy_optional_style_fields(normalized, entry, "defaults", path)
     if "speed" in entry:
         speed = entry["speed"]
         if not isinstance(speed, (int, float, str)):
@@ -343,6 +445,8 @@ def _resolve_clone_ref_paths(
     default_ref_text_path: Path | None = None
 
     if voice_mapping is not None:
+        if "reference_id" in resolved_voice_mapping:
+            return None, None, None, None
         alias_sample_path, alias_ref_text_path = _build_ref_paths_for_alias(
             resolved_voice_mapping, _resolve_sample_root(cfg, resolved_voice_mapping)
         )
@@ -398,6 +502,8 @@ def _resolve_output_ref(
 
 
 def _build_health_payload(cfg: dict[str, Any]) -> dict[str, Any]:
+    metadata = cfg.get("upstream_metadata", {})
+    capabilities = metadata.get("capabilities", {})
     return {
         "ok": True,
         "upstream": cfg["upstream_base"],
@@ -406,10 +512,12 @@ def _build_health_payload(cfg: dict[str, Any]) -> dict[str, Any]:
         "defaults": {
             "model": cfg.get("model", ""),
             "voice": cfg.get("voice", ""),
-            "ref_audio": cfg.get("ref_audio", ""),
-            "ref_text": cfg.get("ref_text", ""),
             "response_format": cfg.get("response_format", "wav"),
         },
+        "registry_reachable": bool(metadata.get("reachable", False)),
+        "alias_count": len(cfg["voice_map"]),
+        "reference_count": int(metadata.get("reference_count", 0)),
+        "upstream_capability_revision": capabilities.get("revision", ""),
         "compat": {
             "unsupported_response_formats": UNSUPPORTED_FORMAT_FALLBACKS,
         },
@@ -424,11 +532,62 @@ def _build_health_payload(cfg: dict[str, Any]) -> dict[str, Any]:
             "voice_map_config": cfg["voice_map_config"],
             "voice_map_config_exists": cfg["voice_map_config_exists"],
             "voice_map_entry_count": len(cfg["voice_map"]),
-            "voice_map_defaults": cfg.get("voice_map_defaults", {}),
-            "samples_dir": cfg["samples_dir"],
             "samples_dir_exists": cfg["samples_dir_exists"],
         },
     }
+
+
+def _alias_supported_controls(
+    alias: dict[str, Any], capabilities: dict[str, Any]
+) -> list[str]:
+    family = capabilities.get("family", "")
+    controls: list[str] = []
+    if family == "chatterbox":
+        controls.append("intensity")
+    if alias.get("emotion"):
+        controls.append("emotion")
+    return controls
+
+
+def _build_voices_payload(
+    cfg: dict[str, Any], capabilities: dict[str, Any]
+) -> dict[str, Any]:
+    voices = []
+    for alias in sorted(cfg["voice_map"].values(), key=lambda item: item["alias"].lower()):
+        style = {
+            key: alias[key]
+            for key in ("emotion", "intensity", "instruction")
+            if key in alias
+        }
+        voices.append(
+            {
+                "id": alias["alias"],
+                "name": alias["alias"],
+                "source": "reference_id" if "reference_id" in alias else "server_path",
+                "reference_id": alias.get("reference_id"),
+                "language": alias.get("language", ""),
+                "style": style,
+                "supported_controls": _alias_supported_controls(alias, capabilities),
+            }
+        )
+    return {"object": "list", "data": voices}
+
+
+def _redact_upstream_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    redacted = dict(payload)
+    for field in ("input", "ref_text", "ref_audio"):
+        if field in redacted:
+            redacted[field] = f"<redacted {field}>"
+    if "reference" in redacted:
+        reference = redacted["reference"]
+        redacted["reference"] = {
+            "filename": reference.get("filename", "")
+            if isinstance(reference, dict)
+            else "",
+            "audio_base64": "<redacted inline audio>",
+            "transcript": "<redacted reference transcript>",
+        }
+    return redacted
 
 
 def build_bridge_config(args: argparse.Namespace) -> dict[str, Any]:
@@ -485,6 +644,7 @@ def build_bridge_config(args: argparse.Namespace) -> dict[str, Any]:
         "pronounce_map": pronounce_map,
         "voice_map_defaults": voice_map_defaults,
         "voice_map": voice_map,
+        "upstream_metadata": {},
     }
 
     if not samples_dir.exists() or not samples_dir.is_dir():
@@ -495,6 +655,94 @@ def build_bridge_config(args: argparse.Namespace) -> dict[str, Any]:
 
     _log("startup config loaded; use /health or `tts-bridge status` for runtime details")
     return cfg
+
+
+def _explicit_reference_mode(incoming: dict[str, Any]) -> str:
+    legacy = "ref_audio" in incoming or "ref_text" in incoming
+    modes = [
+        name
+        for name, present in (
+            ("legacy", legacy),
+            ("reference_id", bool(incoming.get("reference_id"))),
+            ("reference", incoming.get("reference") is not None),
+        )
+        if present
+    ]
+    if len(modes) > 1:
+        raise BridgeRequestError(
+            422, "reference_validation", "reference inputs are mutually exclusive"
+        )
+    return modes[0] if modes else ""
+
+
+def _apply_style_controls(
+    output: dict[str, Any],
+    incoming: dict[str, Any],
+    mapping: dict[str, Any],
+    capabilities: dict[str, Any],
+) -> None:
+    family = str(capabilities.get("family", ""))
+    supported = set(capabilities.get("style_controls", []))
+    clone_active = any(
+        key in output for key in ("ref_audio", "reference_id", "reference")
+    )
+
+    if "emotion" in incoming:
+        emotion = incoming["emotion"]
+        if not isinstance(emotion, str) or not emotion.strip():
+            raise BridgeRequestError(
+                422, "style_validation", "emotion must be a non-empty string"
+            )
+        mapped_emotion = str(mapping.get("emotion", ""))
+        if not clone_active or not mapped_emotion:
+            raise BridgeRequestError(
+                422,
+                "style_validation",
+                "emotion is reference-driven; select an alias with matching emotion metadata",
+            )
+        if mapped_emotion.casefold() != emotion.strip().casefold():
+            raise BridgeRequestError(
+                422,
+                "style_validation",
+                f"selected reference has emotion '{mapped_emotion}', not '{emotion.strip()}'",
+            )
+
+    instruction = incoming.get("instruction", incoming.get("instruct"))
+    if instruction is None:
+        instruction = mapping.get("instruction")
+    if instruction is not None:
+        if not isinstance(instruction, str) or not instruction.strip():
+            raise BridgeRequestError(
+                422, "style_validation", "instruction must be a non-empty string"
+            )
+        if clone_active and family == "qwen3_tts":
+            raise BridgeRequestError(
+                422,
+                "style_validation",
+                "Qwen reference cloning does not support explicit instruction controls",
+            )
+        if "instruct" not in supported:
+            raise BridgeRequestError(
+                422, "style_validation", "loaded model does not support instruction"
+            )
+        output["instruct"] = instruction
+
+    explicit_intensity = "intensity" in incoming
+    intensity = incoming.get("intensity", mapping.get("intensity"))
+    if intensity is not None and (family == "chatterbox" or explicit_intensity):
+        if not isinstance(intensity, (int, float)) or isinstance(intensity, bool):
+            raise BridgeRequestError(
+                422, "style_validation", "intensity must be numeric"
+            )
+        if not 0.0 <= float(intensity) <= 1.0:
+            raise BridgeRequestError(
+                422, "style_validation", "intensity must be between 0 and 1"
+            )
+        if family != "chatterbox" or "exaggeration" not in supported:
+            raise BridgeRequestError(
+                422, "style_validation", "loaded model does not support intensity"
+            )
+        output["exaggeration"] = float(intensity)
 
 
 def build_upstream_payload(
@@ -533,16 +781,22 @@ def build_upstream_payload(
 
     selected_voice = _select_requested_voice(incoming, cfg)
     voice_mapping, resolved_voice_mapping = _resolve_voice_mapping(selected_voice, cfg)
+    explicit_reference_mode = _explicit_reference_mode(incoming)
     (
         alias_sample_path,
         alias_ref_text_path,
         default_sample_path,
         default_ref_text_path,
     ) = _resolve_clone_ref_paths(cfg, voice_mapping, resolved_voice_mapping)
+    if explicit_reference_mode:
+        alias_sample_path = None
+        alias_ref_text_path = None
+        default_sample_path = None
+        default_ref_text_path = None
 
     if voice_mapping is not None:
         _log(f"voice alias matched: '{selected_voice}' -> '{voice_mapping['alias']}'")
-    else:
+    elif not explicit_reference_mode:
         _log(f"voice alias skipped: '{selected_voice or ''}'")
         normalized_fallback_voice = _normalize_custom_voice(selected_voice)
         if normalized_fallback_voice:
@@ -554,7 +808,7 @@ def build_upstream_payload(
         explicit_value=incoming.get("ref_audio"),
         alias_path=alias_sample_path,
         default_path=default_sample_path,
-        cfg_value=str(cfg.get("ref_audio", "")),
+        cfg_value="" if explicit_reference_mode else str(cfg.get("ref_audio", "")),
         missing_domain="alias_resolution",
         missing_message=(
             f"voice alias '{voice_mapping['alias']}' resolved sample missing: {{path}}"
@@ -569,7 +823,7 @@ def build_upstream_payload(
         explicit_value=incoming.get("ref_text"),
         alias_path=alias_ref_text_path,
         default_path=default_ref_text_path,
-        cfg_value=str(cfg.get("ref_text", "")),
+        cfg_value="" if explicit_reference_mode else str(cfg.get("ref_text", "")),
         missing_domain="alias_resolution",
         missing_message=(
             f"voice alias '{voice_mapping['alias']}' resolved transcript missing: {{path}}"
@@ -580,12 +834,19 @@ def build_upstream_payload(
     if resolved_ref_text is not None:
         output["ref_text"] = resolved_ref_text
 
+    if explicit_reference_mode == "reference_id":
+        output["reference_id"] = incoming["reference_id"]
+    elif explicit_reference_mode == "reference":
+        output["reference"] = incoming["reference"]
+    elif not explicit_reference_mode and "reference_id" in resolved_voice_mapping:
+        output["reference_id"] = resolved_voice_mapping["reference_id"]
+
     if voice_mapping is not None:
         _copy_optional_passthrough_fields(
             output,
             incoming,
             resolved_voice_mapping,
-            ("speed", "language"),
+            ("speed",),
         )
         if "response_format" not in incoming and "response_format" in resolved_voice_mapping:
             output["response_format"], downgraded_from = _normalize_response_format(
@@ -593,10 +854,27 @@ def build_upstream_payload(
                 str(cfg.get("response_format", "wav")),
             )
     else:
-        _copy_optional_passthrough_fields(output, incoming, {}, ("speed", "language", "verbose"))
+        _copy_optional_passthrough_fields(output, incoming, {}, ("speed", "verbose"))
+
+    language = incoming.get("lang_code", incoming.get("language"))
+    if language is None and not explicit_reference_mode:
+        language = resolved_voice_mapping.get("language")
+    if language is not None:
+        if not isinstance(language, str) or not language.strip():
+            raise BridgeRequestError(
+                422, "language_validation", "language must be a non-empty string"
+            )
+        output["lang_code"] = language.strip()
 
     if "verbose" in incoming:
         output["verbose"] = incoming["verbose"]
+
+    _apply_style_controls(
+        output,
+        incoming,
+        {} if explicit_reference_mode else resolved_voice_mapping,
+        cfg.get("upstream_capabilities", {}),
+    )
 
     return output, output["response_format"], downgraded_from
 
@@ -632,7 +910,16 @@ class BridgeHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         if self.path in ("/health", "/v1/health"):
             cfg = self.server.bridge_config  # type: ignore[attr-defined]
+            _refresh_upstream_metadata(cfg, str(cfg.get("model", "")), force=True)
             self._json(200, _build_health_payload(cfg))
+            return
+        if self.path in ("/v1/audio/voices", "/audio/voices"):
+            cfg = self.server.bridge_config  # type: ignore[attr-defined]
+            metadata = _refresh_upstream_metadata(cfg, str(cfg.get("model", "")))
+            if not metadata["reachable"]:
+                self._json(502, {"error": "upstream_capabilities_unreachable"})
+                return
+            self._json(200, _build_voices_payload(cfg, metadata["capabilities"]))
             return
         self._json(404, {"error": "not_found"})
 
@@ -653,16 +940,26 @@ class BridgeHandler(BaseHTTPRequestHandler):
 
         cfg = self.server.bridge_config  # type: ignore[attr-defined]
         try:
-            output, response_format, downgraded_from = build_upstream_payload(incoming, cfg)
+            model = str(cfg.get("model") or incoming.get("model", ""))
+            metadata = _refresh_upstream_metadata(cfg, model)
+            if not metadata["reachable"]:
+                raise BridgeRequestError(
+                    502,
+                    "capability_validation",
+                    "upstream capabilities or reference registry are unreachable",
+                )
+            request_cfg = dict(cfg)
+            request_cfg["upstream_capabilities"] = metadata["capabilities"]
+            output, response_format, downgraded_from = build_upstream_payload(
+                incoming, request_cfg
+            )
         except BridgeRequestError as exc:
             _log(f"request rejected [{exc.domain}]: {exc.message}")
             self._json(exc.status, {"error": f"{exc.domain}: {exc.message}"})
             return
 
         upstream_url = _mlx_speech_url(cfg["upstream_base"])
-        debug_output = dict(output)
-        if "input" in debug_output:
-            debug_output["input"] = "<redacted input text>"
+        debug_output = _redact_upstream_payload(output)
         _log("upstream payload: " + json.dumps(debug_output, ensure_ascii=False))
         body = json.dumps(output).encode("utf-8")
         req = request.Request(

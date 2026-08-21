@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "created": "2026-08-21",
+  "storage_policy": "Each revision is downloaded into a new directory; working checkpoints are never refreshed in place.",
+  "models": [
+    {
+      "priority": "baseline",
+      "repo_id": "mlx-community/Qwen3-TTS-12Hz-0.6B-Base-8bit",
+      "revision": "50f45ef0047cde7e84c2ef04326acb8ada2436a7",
+      "approx_storage_gb": 3.0,
+      "clone_contract": "audio_transcript",
+      "license": "Apache-2.0",
+      "action": "provenance-refresh"
+    },
+    {
+      "priority": "baseline",
+      "repo_id": "mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit",
+      "revision": "049ef77fe8816b536193c0c25f9a214d17921282",
+      "approx_storage_gb": 2.9,
+      "clone_contract": "patched_audio_transcript_or_named_voice",
+      "license": "Apache-2.0",
+      "action": "provenance-refresh"
+    },
+    {
+      "priority": 1,
+      "repo_id": "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit",
+      "revision": "e7dd0585652209fa0d7783659aad4e8a324de11c",
+      "approx_storage_gb": 5.2,
+      "clone_contract": "audio_transcript",
+      "license": "Apache-2.0",
+      "action": "download"
+    },
+    {
+      "priority": 1,
+      "repo_id": "mlx-community/chatterbox-multilingual-v3",
+      "revision": "03565773edd72e949572557597af8063bb49a18a",
+      "approx_storage_gb": 5.4,
+      "clone_contract": "audio",
+      "license": "MIT",
+      "action": "download"
+    },
+    {
+      "priority": 1,
+      "repo_id": "mlx-community/Audio8-TTS-Preview-0.6b-bf16",
+      "revision": "e59b26ec0ad753ea5441a6439424e305ccc93800",
+      "approx_storage_gb": 2.6,
+      "clone_contract": "audio_transcript",
+      "license": "Apache-2.0",
+      "action": "download"
+    },
+    {
+      "priority": 2,
+      "repo_id": "mlx-community/Confucius4-TTS-mlx-int8",
+      "revision": "3cbe563153dfc2cce87d6a2896abb8cb01c20743",
+      "approx_storage_gb": 4.4,
+      "clone_contract": "audio",
+      "license": "Apache-2.0",
+      "action": "download"
+    },
+    {
+      "priority": 2,
+      "repo_id": "mlx-community/Zyphra-ZONOS2",
+      "revision": "3ad1bd8b27d420840757b27db9917a9a8d284a2b",
+      "approx_storage_gb": 15.4,
+      "clone_contract": "audio",
+      "license": "Apache-2.0",
+      "action": "download"
+    },
+    {
+      "priority": "research-only",
+      "repo_id": "bosonai/higgs-audio-v3-generation-base",
+      "revision": null,
+      "approx_storage_gb": 9.3,
+      "clone_contract": "multiple_audio_transcript_pairs",
+      "license": "non-commercial",
+      "action": "do-not-download"
+    }
+  ]
+}

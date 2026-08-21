@@ -17,6 +17,7 @@
 - [RTK integration](./RTK.md)
 - [Model profiles](./MODELCTL_GUIDE.md)
 - [Model proxy](./PROXY_TAP_RUNBOOK.md)
+- [Remote voice cloning and TTS evaluation](./TTS_REMOTE_CLONING.md)
 - [Troubleshooting](./TROUBLESHOOTING.md)
 - [Acceptance checklist](./MANUAL_E2E_TEST_CHECKLIST.md)
 - [Release audit](./RELEASE_AUDIT_CHECKLIST.md)

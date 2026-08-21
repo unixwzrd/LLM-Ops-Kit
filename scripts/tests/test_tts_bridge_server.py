@@ -42,6 +42,30 @@ class _FakeUpstreamHandler(BaseHTTPRequestHandler):
     audio_bytes = b"RIFFfakewav"
 
     def do_GET(self) -> None:  # noqa: N802
+        if self.path.startswith("/v1/audio/capabilities"):
+            payload = json.dumps(
+                {
+                    "revision": "0.5.0+unixwzrd.1",
+                    "family": "qwen3_tts",
+                    "clone_mode": "audio_transcript",
+                    "transcript_required": True,
+                    "style_controls": [],
+                }
+            ).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+            return
+        if self.path == "/v1/audio/references":
+            payload = json.dumps({"object": "list", "data": []}).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+            return
         if self.path == "/v1/models":
             payload = json.dumps({"data": [{"id": "fake-model"}]}).encode("utf-8")
             self.send_response(200)
@@ -221,7 +245,7 @@ class TTSBridgeServerTests(unittest.TestCase):
             )
             with self.assertRaises(MODULE.BridgeConfigError) as ctx:
                 MODULE.build_bridge_config(args)
-            self.assertIn("missing required field 'sample'", str(ctx.exception))
+            self.assertIn("exactly one of 'sample' or 'reference_id'", str(ctx.exception))
             self.assertIn("Faith", str(ctx.exception))
 
     def test_build_upstream_payload_applies_alias_case_insensitively(self) -> None:
@@ -357,8 +381,11 @@ class TTSBridgeServerTests(unittest.TestCase):
         self.assertEqual(payload["config"]["config_dir"], "/tmp/config")
         self.assertEqual(payload["config"]["pronounce_entry_count"], 1)
         self.assertEqual(payload["config"]["voice_map_entry_count"], 1)
-        self.assertEqual(payload["config"]["voice_map_defaults"]["sample_dir"], "/tmp/samples")
-        self.assertEqual(payload["config"]["samples_dir"], "/tmp/samples")
+        self.assertEqual(payload["alias_count"], 1)
+        self.assertNotIn("voice_map_defaults", payload["config"])
+        self.assertNotIn("samples_dir", payload["config"])
+        self.assertNotIn("ref_audio", payload["defaults"])
+        self.assertNotIn("ref_text", payload["defaults"])
 
     def test_voice_map_defaults_can_supply_sample_dir_and_fallback_refs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -445,7 +472,8 @@ class TTSBridgeServerTests(unittest.TestCase):
             self.assertTrue(payload["ok"])
             self.assertEqual(payload["config"]["pronounce_entry_count"], 1)
             self.assertEqual(payload["config"]["voice_map_entry_count"], 1)
-            self.assertEqual(payload["config"]["samples_dir"], str(samples_dir.resolve()))
+            self.assertNotIn("samples_dir", payload["config"])
+            self.assertFalse(payload["registry_reachable"])
 
     def test_bridge_post_rewrites_text_and_resolves_alias(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -517,6 +545,161 @@ class TTSBridgeServerTests(unittest.TestCase):
             self.assertEqual(upstream_payload["response_format"], "wav")
             self.assertEqual(upstream_payload["ref_audio"], str(sample.resolve()))
             self.assertEqual(upstream_payload["ref_text"], str(transcript.resolve()))
+
+    def test_reference_id_alias_exposes_metadata_without_paths(self) -> None:
+        cfg = {
+            "model": "qwen-model",
+            "voice": "",
+            "prefer_incoming_voice": False,
+            "ref_audio": "",
+            "ref_text": "",
+            "response_format": "wav",
+            "pronounce_map": {"/": " slash "},
+            "voice_map_defaults": {},
+            "voice_map": {
+                "faith-emotive": {
+                    "alias": "Faith-Emotive",
+                    "reference_id": "ref_0123456789abcdef0123456789abcdef",
+                    "language": "en",
+                    "emotion": "warm",
+                    "intensity": 0.7,
+                }
+            },
+            "samples_dir": "/private/samples",
+            "upstream_capabilities": {
+                "family": "qwen3_tts",
+                "style_controls": [],
+            },
+        }
+        output, _, _ = MODULE.build_upstream_payload(
+            {"input": "a/b", "voice": "Faith-Emotive", "emotion": "warm"}, cfg
+        )
+        self.assertEqual(output["input"], "a slash b")
+        self.assertEqual(
+            output["reference_id"], "ref_0123456789abcdef0123456789abcdef"
+        )
+        self.assertEqual(output["lang_code"], "en")
+        self.assertNotIn("language", output)
+        self.assertNotIn("ref_audio", output)
+        self.assertNotIn("ref_text", output)
+        voices = MODULE._build_voices_payload(cfg, cfg["upstream_capabilities"])
+        voice = voices["data"][0]
+        self.assertEqual(voice["source"], "reference_id")
+        self.assertEqual(voice["style"]["emotion"], "warm")
+        self.assertNotIn("/private/samples", str(voice))
+
+    def test_inline_reference_overrides_alias_and_is_redacted(self) -> None:
+        cfg = {
+            "model": "qwen-model",
+            "voice": "",
+            "prefer_incoming_voice": False,
+            "ref_audio": "",
+            "ref_text": "",
+            "response_format": "wav",
+            "pronounce_map": {"sample": "changed"},
+            "voice_map_defaults": {},
+            "voice_map": {
+                "faith": {
+                    "alias": "Faith",
+                    "reference_id": "ref_0123456789abcdef0123456789abcdef",
+                }
+            },
+            "samples_dir": "/tmp/samples",
+            "upstream_capabilities": {
+                "family": "qwen3_tts",
+                "style_controls": [],
+            },
+        }
+        reference = {
+            "filename": "voice.wav",
+            "audio_base64": "private-audio",
+            "transcript": "sample transcript must remain exact",
+        }
+        output, _, _ = MODULE.build_upstream_payload(
+            {"input": "sample target", "voice": "Faith", "reference": reference},
+            cfg,
+        )
+        self.assertEqual(output["input"], "changed target")
+        self.assertEqual(output["reference"]["transcript"], reference["transcript"])
+        self.assertNotIn("reference_id", output)
+        redacted = MODULE._redact_upstream_payload(output)
+        self.assertNotIn("private-audio", str(redacted))
+        self.assertNotIn("sample transcript", str(redacted))
+        self.assertNotIn("changed target", str(redacted))
+
+    def test_style_controls_translate_or_reject_strictly(self) -> None:
+        base_cfg = {
+            "model": "model",
+            "voice": "",
+            "prefer_incoming_voice": False,
+            "ref_audio": "",
+            "ref_text": "",
+            "response_format": "wav",
+            "pronounce_map": {},
+            "voice_map_defaults": {},
+            "voice_map": {},
+            "samples_dir": "/tmp/samples",
+        }
+        chatterbox = dict(base_cfg)
+        chatterbox["upstream_capabilities"] = {
+            "family": "chatterbox",
+            "style_controls": ["exaggeration"],
+        }
+        output, _, _ = MODULE.build_upstream_payload(
+            {
+                "input": "hello",
+                "reference_id": "ref_0123456789abcdef0123456789abcdef",
+                "intensity": 0.65,
+            },
+            chatterbox,
+        )
+        self.assertEqual(output["exaggeration"], 0.65)
+        self.assertNotIn("intensity", output)
+
+        qwen_named = dict(base_cfg)
+        qwen_named["upstream_capabilities"] = {
+            "family": "qwen3_tts",
+            "style_controls": ["instruct"],
+        }
+        output, _, _ = MODULE.build_upstream_payload(
+            {"input": "hello", "voice": "Ethan", "instruction": "calm"},
+            qwen_named,
+        )
+        self.assertEqual(output["instruct"], "calm")
+        with self.assertRaises(MODULE.BridgeRequestError) as ctx:
+            MODULE.build_upstream_payload(
+                {
+                    "input": "hello",
+                    "reference_id": "ref_0123456789abcdef0123456789abcdef",
+                    "instruction": "calm",
+                },
+                qwen_named,
+            )
+        self.assertEqual(ctx.exception.status, 422)
+
+    def test_voice_map_accepts_distinct_reference_ids(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "voice-map.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "Neutral": {
+                            "reference_id": "ref_00000000000000000000000000000000",
+                            "emotion": "neutral",
+                        },
+                        "Emotive": {
+                            "reference_id": "ref_11111111111111111111111111111111",
+                            "emotion": "joyful",
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            _, aliases = MODULE._normalize_voice_map(path)
+            self.assertNotEqual(
+                aliases["neutral"]["reference_id"],
+                aliases["emotive"]["reference_id"],
+            )
 
 
 if __name__ == "__main__":

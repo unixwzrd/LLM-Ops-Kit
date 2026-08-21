@@ -131,8 +131,8 @@ bridge_health_url() {
 status_bridge() {
   local pid="" bridge_url upstream_url bridge_probe upstream_probe bridge_state="down" upstream_state="down"
   local bridge_detail="" upstream_detail="" port_pid="" reported_model="" bridge_payload=""
-  local health_config_dir="" health_pronounce_config="" health_voice_map_config="" health_samples_dir=""
-  local health_ref_audio="" health_ref_text="" health_voice=""
+  local health_config_dir="" health_pronounce_config="" health_voice_map_config=""
+  local health_voice="" registry_reachable="" alias_count="" reference_count="" capability_revision=""
   bridge_url="$(bridge_health_url)"
   upstream_url="$(upstream_models_url)"
 
@@ -162,10 +162,11 @@ status_bridge() {
       health_config_dir="$(printf '%s' "$bridge_payload" | jq -r '.config.config_dir // ""' 2>/dev/null || true)"
       health_pronounce_config="$(printf '%s' "$bridge_payload" | jq -r '.config.pronounce_config // ""' 2>/dev/null || true)"
       health_voice_map_config="$(printf '%s' "$bridge_payload" | jq -r '.config.voice_map_config // ""' 2>/dev/null || true)"
-      health_samples_dir="$(printf '%s' "$bridge_payload" | jq -r '.config.samples_dir // ""' 2>/dev/null || true)"
-      health_ref_audio="$(printf '%s' "$bridge_payload" | jq -r '.defaults.ref_audio // ""' 2>/dev/null || true)"
-      health_ref_text="$(printf '%s' "$bridge_payload" | jq -r '.defaults.ref_text // ""' 2>/dev/null || true)"
       health_voice="$(printf '%s' "$bridge_payload" | jq -r '.defaults.voice // ""' 2>/dev/null || true)"
+      registry_reachable="$(printf '%s' "$bridge_payload" | jq -r '.registry_reachable // false' 2>/dev/null || true)"
+      alias_count="$(printf '%s' "$bridge_payload" | jq -r '.alias_count // 0' 2>/dev/null || true)"
+      reference_count="$(printf '%s' "$bridge_payload" | jq -r '.reference_count // 0' 2>/dev/null || true)"
+      capability_revision="$(printf '%s' "$bridge_payload" | jq -r '.upstream_capability_revision // ""' 2>/dev/null || true)"
     fi
   fi
 
@@ -188,9 +189,12 @@ status_bridge() {
   echo "  config_dir=${health_config_dir:-$CONFIG_DIR}"
   echo "  pronounce_config=${health_pronounce_config:-${PRONOUNCE_CONFIG:-<config-dir>/pronounce.json}}"
   echo "  voice_map_config=${health_voice_map_config:-${VOICE_MAP_CONFIG:-<config-dir>/voice-map.json}}"
-  echo "  samples_dir=${health_samples_dir:-$SAMPLES_DIR}"
-  echo "  ref_audio=${health_ref_audio:-$REF_AUDIO}"
-  echo "  ref_text=${health_ref_text:-$REF_TEXT}"
+  echo "  samples_dir_configured=$([[ -n "$SAMPLES_DIR" ]] && echo yes || echo no)"
+  echo "  fallback_reference_configured=$([[ -n "$REF_AUDIO" ]] && echo yes || echo no)"
+  echo "  registry_reachable=${registry_reachable:-unknown}"
+  echo "  alias_count=${alias_count:-0}"
+  echo "  reference_count=${reference_count:-0}"
+  echo "  upstream_capability_revision=${capability_revision:-<unreported>}"
   echo "  log=$log_file"
   echo "  log_rotate_seconds=$LOG_ROTATE_SECONDS"
   echo "  log_rotate_keep=$LOG_ROTATE_KEEP"
