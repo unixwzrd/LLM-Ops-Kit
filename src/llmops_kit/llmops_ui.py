@@ -43,6 +43,7 @@ STATUS_COLUMNS = (
     ("condition", "CONDITION"),
     ("lifecycle", "LIFECYCLE"),
     ("health", "HEALTH"),
+    ("uptime", "UPTIME"),
     ("component", "COMPONENT"),
     ("host", "HOST"),
     ("execution_user", "RUN AS"),

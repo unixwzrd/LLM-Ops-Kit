@@ -105,6 +105,7 @@ class TuiContractTests(unittest.TestCase):
             "condition": "attention",
             "lifecycle": "running",
             "health": "healthy",
+            "uptime": "1h 02m",
             "component": "sample:embedding",
             "component_version": "0.9.0b15",
             "drift": "stale-runtime",
@@ -112,6 +113,7 @@ class TuiContractTests(unittest.TestCase):
         self.assertEqual(status_cell_style("condition", record), CONDITION_STYLES["attention"])
         self.assertEqual(status_cell_style("lifecycle", record), CONDITION_STYLES["ok"])
         self.assertEqual(status_cell_style("health", record), CONDITION_STYLES["ok"])
+        self.assertEqual(status_cell_style("uptime", record), "#f5f7fa")
         self.assertEqual(status_cell_style("component", record), CONDITION_STYLES["attention"])
         self.assertEqual(status_cell_style("component_version", record), CONDITION_STYLES["attention"])
         self.assertEqual(status_cell_style("drift", record), CONDITION_STYLES["attention"])

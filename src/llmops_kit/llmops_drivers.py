@@ -630,13 +630,16 @@ class ComponentRunner:
             return 130
 
     def runtime_command(self, component: Component, result: CommandResult) -> Optional[CommandResult]:
-        """Inspect the command line of a live PID reported by a typed driver."""
+        """Inspect elapsed time and command line for a live reported PID."""
 
-        match = re.search(r"(?:^|\s)pid=(\d+)(?:\s|$)", result.stdout)
+        match = re.search(
+            r"(?:^|\s)(?:pid\s*=|Main PID:)\s*(\d+)(?:\s|$)",
+            result.stdout,
+        )
         if match is None:
             return None
         host = self._host(component)
-        script = f"ps -p {int(match.group(1))} -o command="
+        script = f"ps -p {int(match.group(1))} -o etime= -o command="
         command = ["/bin/sh", "-c", script] if host.transport == "local" else host.ssh_base() + [script]
         completed = subprocess.run(command, capture_output=True, text=True, check=False)
         return CommandResult(

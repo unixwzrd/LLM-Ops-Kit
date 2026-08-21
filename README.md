@@ -4,6 +4,8 @@ LLM-Ops-Kit is a macOS-first control plane for models, agents, proxies, bridges,
 
 `llmops` is the only public command. Components are independently manageable; stacks are dependency groups for coordinated operation. The CLI and Textual console use the same planner, executor, adapters, and configuration model.
 
+Installed commands converge locally to the release approved by the reconciled `llm-ops-kit` product manifest before dispatch when `auto_update` is enabled. The verified updater changes only the immutable toolkit runtime and re-executes the requested command; it does not restart managed components.
+
 ## Supported Beta Platform
 
 - macOS 15 or newer on Apple Silicon or Intel
@@ -44,7 +46,7 @@ llmops tui
 
 Starting a component starts missing dependencies. Restarting affects only the requested component unless `--cascade` is supplied. Stopping a component with active dependents requires `--force` or `--cascade`.
 
-Status reports lifecycle, health, operator condition, observability, owning host, component and toolkit versions, catalog and configuration identity, authority, drift, and last synchronization where available. `authority-only` means the catalog knows the component but the current account has no authorized observation route; it does not mean the component is stopped.
+Status reports lifecycle, health-independent uptime, operator condition, observability, owning host, component and toolkit versions, catalog and configuration identity, authority, drift, and last synchronization where available. `authority-only` means the catalog knows the component but the current account has no authorized observation route; it does not mean the component is stopped.
 
 ## Configure And Update
 

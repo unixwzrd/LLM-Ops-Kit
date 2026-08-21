@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added manifest-approved local self-update on every installed `llmops` invocation, with verified release installation, recursion protection, re-execution into the selected runtime, and fail-open diagnostics when the approved artifact is unavailable.
+- Added health-independent component uptime to CLI and TUI status, with machine-readable elapsed seconds, observed start time, and provenance so degraded-but-running processes retain their restart age.
 - Added template-driven `component logs --list`, bounded reads, JSON output, and interrupt-safe follow mode with component-host and execution-user resolution.
 - Replaced the TUI log preview with a full-screen, scrollable viewer providing declared channel selection, line limits, refresh, bounded polling follow, remote path identity, equivalent CLI, and Escape-safe cleanup.
 - Made managed launchd start and restart symmetric: an unloaded job bootstraps its configured plist before kickstart, bootstrap failures stop the operation, and stop remains idempotent.

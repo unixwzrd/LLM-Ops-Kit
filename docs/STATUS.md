@@ -1,7 +1,7 @@
 # Status Semantics
 
 **Created**: 2026-07-21
-**Updated**: 2026-07-21
+**Updated**: 2026-08-20
 
 Back: [Documentation index](./INDEX.md)
 
@@ -11,12 +11,18 @@ Back: [Documentation index](./INDEX.md)
 |---|---|---|
 | `lifecycle` | `running`, `stopped`, `disabled`, `unknown`, or a transient operation state | Whether the process or native service exists or an approved operation is in progress |
 | `health` | `healthy`, `degraded`, `unhealthy`, `unknown`, `not-applicable` | Whether the running component passes its readiness check |
+| `uptime` | compact duration, `unknown`, or `-` | How long the observed process or native service has been running, independent of health |
+| `uptime_seconds` | non-negative integer or `null` | Machine-readable elapsed runtime |
+| `started_at` | ISO-8601 timestamp or empty | Observed or derived process start time |
+| `uptime_source` | `process`, `state`, `state-invalid`, `unknown`, or empty | Provenance for the uptime observation |
 | `desired_lifecycle` | `running`, `stopped`, `disabled` | Last successful lifecycle intent recorded by LLM-Ops-Kit |
 | `condition` | `ok`, `down`, `attention`, `error`, `unobserved` | Operator-facing state derived from lifecycle, desired lifecycle, health, drift, and observability |
 | `observability` | `observed`, `authority-only`, `unreachable` | Whether this host has and successfully used an authorized observation route |
 | `execution_user` | configured account name | Identity LLM-Ops-Kit uses for lifecycle operations on the component host |
 
 A running model-proxy whose upstream model is unavailable is `lifecycle=running`, `health=degraded`, and `condition=attention`. It is not reported as stopped merely because its health command exits nonzero.
+
+Uptime follows the component process or native service, not readiness. A degraded component therefore keeps accumulating uptime; restarting its process resets the value. Components without a process identity, such as an installed command-line tool, report `uptime=unknown` rather than inventing a start time. Stopped and disabled components display `-`.
 
 An operator-requested stop is `lifecycle=stopped`, `desired_lifecycle=stopped`, and `condition=down`. It is expected and returns status exit code 0. An enabled component that is stopped while `desired_lifecycle=running` is an error. Desired lifecycle state is stored transactionally under the operational state root and survives immutable runtime updates.
 

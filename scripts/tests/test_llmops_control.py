@@ -11,7 +11,7 @@ import pwd
 import subprocess
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import replace
 from pathlib import Path
 from typing import Optional
@@ -411,6 +411,116 @@ class InventoryTests(ControlFixture):
         with redirect_stdout(output):
             self.assertEqual(entrypoint.main(["--version"]), 0)
         self.assertEqual(output.getvalue().strip(), __version__)
+
+    def test_auto_update_target_requires_manifest_approval(self) -> None:
+        products = self.config_home / "products.json"
+        self.write_json(
+            products,
+            {
+                "schema_version": 1,
+                "products": {
+                    "llm-ops-kit": {
+                        "latest_version": "0.9.0b42",
+                        "auto_update": True,
+                        "release_repository": "unixwzrd/LLM-Ops-Kit",
+                    }
+                },
+            },
+        )
+        self.assertEqual(
+            entrypoint._auto_update_target(self.config_home),
+            ("0.9.0b42", "unixwzrd/LLM-Ops-Kit"),
+        )
+        document = json.loads(products.read_text(encoding="utf-8"))
+        document["products"]["llm-ops-kit"]["auto_update"] = False
+        self.write_json(products, document)
+        self.assertEqual(entrypoint._auto_update_target(self.config_home), ("", ""))
+
+    def test_auto_update_applies_manifest_target_and_returns_new_entrypoint(self) -> None:
+        self.write_json(
+            self.config_home / "products.json",
+            {
+                "schema_version": 1,
+                "products": {
+                    "llm-ops-kit": {
+                        "latest_version": "0.9.0b42",
+                        "auto_update": True,
+                        "release_repository": "unixwzrd/LLM-Ops-Kit",
+                    }
+                },
+            },
+        )
+        install_base = self.root / "install"
+        updated = install_base / "current" / "app" / "bin" / "llmops"
+        updated.parent.mkdir(parents=True)
+        updated.write_text("#!/bin/sh\n", encoding="utf-8")
+        with (
+            mock.patch.object(
+                entrypoint.llmops_update, "current_version", return_value="0.9.0b41"
+            ),
+            mock.patch.object(
+                entrypoint.llmops_update, "main", return_value=0
+            ) as apply_update,
+            mock.patch.dict(
+                os.environ,
+                {
+                    "LLMOPS_PUBLIC_BIN_DIR": str(self.root / "bin"),
+                    "LLMOPS_STATE_HOME": str(self.root / "state"),
+                },
+                clear=False,
+            ),
+        ):
+            selected = entrypoint._auto_update(
+                install_base, self.config_home, ["status"]
+            )
+        self.assertEqual(selected, updated)
+        arguments = apply_update.call_args.args[0]
+        self.assertIn("--apply", arguments)
+        self.assertEqual(arguments[arguments.index("--version") + 1], "0.9.0b42")
+        self.assertNotIn("LLMOPS_AUTO_UPDATE_ACTIVE", os.environ)
+
+    def test_auto_update_skips_explicit_update_and_rollback_commands(self) -> None:
+        with mock.patch.object(entrypoint, "_auto_update_target") as target:
+            self.assertIsNone(
+                entrypoint._auto_update(
+                    self.root / "install", self.config_home, ["update", "--check"]
+                )
+            )
+            self.assertIsNone(
+                entrypoint._auto_update(
+                    self.root / "install", self.config_home, ["rollback"]
+                )
+            )
+        target.assert_not_called()
+
+    def test_auto_update_failure_is_nonfatal_and_redacted(self) -> None:
+        self.write_json(
+            self.config_home / "products.json",
+            {
+                "schema_version": 1,
+                "products": {
+                    "llm-ops-kit": {
+                        "latest_version": "0.9.0b42",
+                        "auto_update": True,
+                    }
+                },
+            },
+        )
+        error = io.StringIO()
+        with (
+            mock.patch.object(
+                entrypoint.llmops_update, "current_version", return_value="0.9.0b41"
+            ),
+            mock.patch.object(entrypoint.llmops_update, "main", return_value=2),
+            redirect_stderr(error),
+        ):
+            self.assertIsNone(
+                entrypoint._auto_update(
+                    self.root / "install", self.config_home, ["status"]
+                )
+            )
+        self.assertIn("automatic update to 0.9.0b42 failed", error.getvalue())
+        self.assertNotIn("products.json", error.getvalue())
 
     def test_tui_routes_from_trusted_peer_to_authority(self) -> None:
         catalog = {
@@ -813,6 +923,22 @@ class TopologyTests(ControlFixture):
         observation = ComponentObservation("running", "healthy", "observed", lifecycle, lifecycle, runtime)
         self.assertEqual(llmops_cli._observed_runtime(observation), "0.9.0b6")
 
+    def test_runtime_command_reads_elapsed_time_for_supported_pid_formats(self) -> None:
+        component = self.topology.resolve_component("proxy")
+        runner = ComponentRunner(self.topology)
+        completed = subprocess.CompletedProcess([], 0, "01:02 command\n", "")
+        for output in ("model-proxy: running pid=42", "pid = 42", "Main PID: 42 (service)"):
+            with self.subTest(output=output), mock.patch(
+                "llmops_kit.llmops_drivers.subprocess.run", return_value=completed
+            ) as run:
+                result = runner.runtime_command(
+                    component,
+                    CommandResult(component.qualified_id, "status", "status", 0, output, ""),
+                )
+                self.assertIsNotNone(result)
+                self.assertEqual(result.stdout, "01:02 command")
+                self.assertIn("ps -p 42 -o etime= -o command=", run.call_args.args[0][-1])
+
     def test_model_start_runtime_precedes_current_wrapper_runtime(self) -> None:
         component = self.topology.resolve_component("chat")
         lifecycle = CommandResult(
@@ -828,6 +954,41 @@ class TopologyTests(ControlFixture):
         )
         observation = ComponentObservation("running", "healthy", "observed", lifecycle)
         self.assertEqual(llmops_cli._observed_runtime(observation), "0.9.0b9")
+
+    def test_elapsed_seconds_and_uptime_format(self) -> None:
+        self.assertEqual(llmops_cli._elapsed_seconds("42:03"), 2523)
+        self.assertEqual(llmops_cli._elapsed_seconds("02:03:04"), 7384)
+        self.assertEqual(llmops_cli._elapsed_seconds("3-02:03:04"), 266584)
+        self.assertIsNone(llmops_cli._elapsed_seconds("not-an-etime"))
+        self.assertEqual(llmops_cli._format_uptime(266584, "running"), "3d 02h")
+        self.assertEqual(llmops_cli._format_uptime(3723, "running"), "1h 02m")
+        self.assertEqual(llmops_cli._format_uptime(None, "stopped"), "-")
+
+    def test_degraded_component_retains_process_uptime(self) -> None:
+        component = self.topology.resolve_component("proxy")
+        lifecycle = CommandResult(
+            component.qualified_id,
+            "status",
+            "status",
+            1,
+            "model-proxy: running pid=42\nhealth=down",
+            "",
+        )
+        runtime = CommandResult(
+            component.qualified_id,
+            "runtime",
+            "ps",
+            0,
+            "1-02:03:04 /opt/llm-ops/releases/0.9.0b41/scripts/model_proxy_tap.py",
+            "",
+        )
+        observation = ComponentObservation(
+            "running", "degraded", "observed", lifecycle, lifecycle, runtime
+        )
+        seconds, started_at, source = llmops_cli._uptime_fields(observation, "running")
+        self.assertEqual(seconds, 93784)
+        self.assertRegex(started_at, r"Z$")
+        self.assertEqual(source, "process")
 
     def test_component_tags_must_be_nonempty_strings(self) -> None:
         stack = json.loads((self.paths.stacks_dir / "sample.json").read_text(encoding="utf-8"))
@@ -918,6 +1079,8 @@ class TopologyTests(ControlFixture):
         self.assertNotIn("status", payload[0])
         self.assertEqual(payload[0]["lifecycle"], "running")
         self.assertEqual(payload[0]["health"], "degraded")
+        self.assertEqual(payload[0]["uptime"], "unknown")
+        self.assertIsNone(payload[0]["uptime_seconds"])
         self.assertEqual(payload[0]["condition"], "attention")
         self.assertEqual(payload[0]["execution_user"], "operator")
         self.assertEqual(payload[0]["component_version"], "0.9.0b4")

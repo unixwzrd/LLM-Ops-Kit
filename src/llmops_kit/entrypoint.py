@@ -6,10 +6,93 @@ import json
 import os
 import subprocess
 import sys
+from contextlib import redirect_stderr, redirect_stdout
+from io import StringIO
 from pathlib import Path
 from typing import Optional
 
 from . import __version__, llmops_cli, llmops_update
+
+
+def _auto_update_target(config_home: Path) -> tuple[str, str]:
+    """Return the manifest-approved toolkit version and release repository."""
+
+    try:
+        document = json.loads((config_home / "products.json").read_text(encoding="utf-8"))
+        product = document["products"]["llm-ops-kit"]
+    except (OSError, json.JSONDecodeError, KeyError, TypeError):
+        return "", ""
+    if product.get("auto_update") is not True:
+        return "", ""
+    target = str(product.get("latest_version", ""))
+    repository = str(
+        product.get("release_repository", "unixwzrd/LLM-Ops-Kit")
+    )
+    if not llmops_update.VERSION_RE.fullmatch(target):
+        return "", ""
+    if not llmops_update.REPOSITORY_RE.fullmatch(repository):
+        return "", ""
+    return target, repository
+
+
+def _auto_update(
+    install_base: Path,
+    config_home: Path,
+    arguments: list[str],
+) -> Optional[Path]:
+    """Apply one approved local runtime update before normal dispatch."""
+
+    if os.environ.get("LLMOPS_AUTO_UPDATE_ACTIVE") == "1":
+        return None
+    if arguments and arguments[0] in {"update", "rollback"}:
+        return None
+    target, repository = _auto_update_target(config_home)
+    if not target or llmops_update.current_version(install_base) == target:
+        return None
+    public_bin = Path(
+        os.environ.get("LLMOPS_PUBLIC_BIN_DIR", str(Path.home() / ".local/bin"))
+    ).expanduser()
+    state_home = Path(
+        os.environ.get(
+            "LLMOPS_STATE_HOME", str(Path.home() / ".local/state/llm-ops")
+        )
+    ).expanduser()
+    previous = os.environ.get("LLMOPS_AUTO_UPDATE_ACTIVE")
+    os.environ["LLMOPS_AUTO_UPDATE_ACTIVE"] = "1"
+    stdout = StringIO()
+    stderr = StringIO()
+    try:
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            result = llmops_update.main(
+                [
+                    "--apply",
+                    "--version",
+                    target,
+                    "--repository",
+                    repository,
+                    "--prefix",
+                    str(install_base),
+                    "--public-bin-dir",
+                    str(public_bin),
+                    "--state-home",
+                    str(state_home),
+                ]
+            )
+    finally:
+        if previous is None:
+            os.environ.pop("LLMOPS_AUTO_UPDATE_ACTIVE", None)
+        else:
+            os.environ["LLMOPS_AUTO_UPDATE_ACTIVE"] = previous
+    if result != 0:
+        detail = stderr.getvalue().strip() or stdout.getvalue().strip()
+        print(
+            f"llmops: automatic update to {target} failed; continuing with the current runtime"
+            + (f": {detail}" if detail else ""),
+            file=sys.stderr,
+        )
+        return None
+    updated = install_base / "current" / "app" / "bin" / "llmops"
+    return updated if updated.is_file() else None
 
 
 def tui_authority_command(config_home: Path, arguments: list[str]) -> Optional[list[str]]:
@@ -49,9 +132,6 @@ def main(argv: Optional[list[str]] = None) -> int:
     """Dispatch the public command surface without shell-profile dependencies."""
 
     arguments = list(sys.argv[1:] if argv is None else argv)
-    if arguments == ["--version"]:
-        print(__version__)
-        return 0
     release_root = Path(sys.executable).absolute().parents[2]
     install_base = release_root.parent.parent
     install_state = install_base / "install.json"
@@ -68,6 +148,14 @@ def main(argv: Optional[list[str]] = None) -> int:
     deployed_config = managed_config if managed_config.is_dir() else release_root / "config"
     if "LLMOPS_CONFIG_HOME" not in os.environ and (deployed_config / "config.json").is_file():
         os.environ["LLMOPS_CONFIG_HOME"] = str(deployed_config)
+    updated = _auto_update(install_base, deployed_config, arguments)
+    if updated is not None:
+        environment = os.environ.copy()
+        environment["LLMOPS_AUTO_UPDATE_ACTIVE"] = "1"
+        os.execve(updated, [str(updated), *arguments], environment)
+    if arguments == ["--version"]:
+        print(__version__)
+        return 0
     if not arguments or arguments[0] in {"-h", "--help", "help"}:
         llmops_cli.print_public_help()
         return 0

@@ -1,7 +1,7 @@
 # Upgrade And Rollback
 
 **Created**: 2026-07-16
-**Updated**: 2026-07-20
+**Updated**: 2026-08-21
 
 Back: [Documentation index](./INDEX.md)
 
@@ -25,6 +25,10 @@ llmops update --all-hosts --apply --version <version>
 Local apply verifies and safely extracts the release before invoking its immutable installer. Multi-host apply preflights macOS, SSH, disk space, and installed state; stages one verified artifact everywhere; then applies sequentially. If a later host fails, hosts changed by the invocation are rolled back and the mixed-version condition is reported.
 
 An older peer can use its existing `llmops update` implementation to invoke the new archive installer. A peer without `llmops` is bootstrapped from the staged, remotely verified archive.
+
+## Manifest-Approved Automatic Update
+
+When the reconciled `products.json` entry for `llm-ops-kit` sets `auto_update: true`, every installed invocation compares its selected immutable runtime with that entry's `latest_version`. A mismatch uses the checksum-verified updater and re-executes the original command from the newly selected release. `update` and `rollback` commands bypass this pre-dispatch hook to prevent recursion. An unavailable update emits a warning and continues with the current runtime; managed components are never restarted by toolkit self-update.
 
 ## Rollback And Repair
 

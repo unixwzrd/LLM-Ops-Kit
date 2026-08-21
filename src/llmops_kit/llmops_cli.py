@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import csv
+import datetime
 import hashlib
 import json
 import os
@@ -1342,6 +1343,76 @@ def _observed_runtime(observation: Any) -> str:
     return matches[-1] if matches else ""
 
 
+def _elapsed_seconds(value: str) -> Optional[int]:
+    """Parse POSIX ``ps etime`` output into elapsed seconds."""
+
+    match = re.fullmatch(r"(?:(\d+)-)?(?:(\d+):)?(\d+):(\d+)", value.strip())
+    if match is None:
+        return None
+    days, hours, minutes, seconds = (int(part or 0) for part in match.groups())
+    if minutes > 59 or seconds > 59:
+        return None
+    return days * 86400 + hours * 3600 + minutes * 60 + seconds
+
+
+def _format_uptime(seconds: Optional[int], lifecycle: str) -> str:
+    """Return a compact operator-facing duration independent of health."""
+
+    if lifecycle != "running":
+        return "-" if lifecycle in {"stopped", "disabled"} else "unknown"
+    if seconds is None:
+        return "unknown"
+    days, remainder = divmod(max(0, seconds), 86400)
+    hours, remainder = divmod(remainder, 3600)
+    minutes, secs = divmod(remainder, 60)
+    if days:
+        return f"{days}d {hours:02d}h"
+    if hours:
+        return f"{hours}h {minutes:02d}m"
+    if minutes:
+        return f"{minutes}m {secs:02d}s"
+    return f"{secs}s"
+
+
+def _uptime_fields(observation: Any, lifecycle: str) -> tuple[Optional[int], str, str]:
+    """Return elapsed seconds, start timestamp, and source for one observation."""
+
+    if observation is None or lifecycle != "running":
+        return None, "", ""
+    text = "\n".join(
+        str(value)
+        for value in (
+            observation.lifecycle_result.stdout,
+            observation.lifecycle_result.stderr,
+        )
+        if value
+    )
+    started_match = re.search(
+        r"(?:^|\n)\s*started_at=([^\s]+)",
+        text,
+    )
+    started_at = started_match.group(1) if started_match is not None else ""
+    seconds: Optional[int] = None
+    if observation.runtime_result is not None and observation.runtime_result.ok:
+        fields = observation.runtime_result.stdout.strip().split(None, 1)
+        if fields:
+            seconds = _elapsed_seconds(fields[0])
+    if seconds is None and started_at:
+        try:
+            started = datetime.datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+            now = datetime.datetime.now(datetime.timezone.utc)
+            seconds = max(0, int((now - started.astimezone(datetime.timezone.utc)).total_seconds()))
+        except ValueError:
+            pass
+    if not started_at and seconds is not None:
+        started = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=seconds)
+        started_at = started.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    source = "process" if seconds is not None else "unknown"
+    if started_match is not None:
+        source = "state" if seconds is not None else "state-invalid"
+    return seconds, started_at, source
+
+
 def _component_version(component: Any, observation: Any, profile: dict[str, Any]) -> str:
     """Return an adapter-provided product version when inventory is unavailable."""
 
@@ -1401,6 +1472,7 @@ def _inspect_status(components: list[Any], args: argparse.Namespace) -> list[dic
             "running" if component.enabled else "disabled",
         )
         observed_runtime = "" if observation is None else _observed_runtime(observation)
+        uptime_seconds, started_at, uptime_source = _uptime_fields(observation, lifecycle)
         desired_runtime = metadata["toolkit_version"]
         runtime_drift = bool(observed_runtime and observed_runtime != desired_runtime)
         drift = "stale-runtime" if runtime_drift else metadata["drift"]
@@ -1415,6 +1487,10 @@ def _inspect_status(components: list[Any], args: argparse.Namespace) -> list[dic
             "lifecycle": lifecycle,
             "desired_lifecycle": desired_lifecycle,
             "health": health,
+            "uptime": _format_uptime(uptime_seconds, lifecycle),
+            "uptime_seconds": uptime_seconds,
+            "started_at": started_at,
+            "uptime_source": uptime_source,
             "condition": condition,
             "observability": observability,
             "component": component.qualified_id,
