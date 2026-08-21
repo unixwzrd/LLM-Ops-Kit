@@ -146,8 +146,6 @@ def main(argv: Optional[list[str]] = None) -> int:
                 os.environ.setdefault("LLMOPS_PUBLIC_BIN_DIR", str(layout["public_bin_dir"]))
     managed_config = install_base / "current-config"
     deployed_config = managed_config if managed_config.is_dir() else release_root / "config"
-    if "LLMOPS_CONFIG_HOME" not in os.environ and (deployed_config / "config.json").is_file():
-        os.environ["LLMOPS_CONFIG_HOME"] = str(deployed_config)
     updated = _auto_update(install_base, deployed_config, arguments)
     if updated is not None:
         environment = os.environ.copy()
@@ -156,6 +154,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     if arguments == ["--version"]:
         print(__version__)
         return 0
+    if "LLMOPS_CONFIG_HOME" not in os.environ and (deployed_config / "config.json").is_file():
+        os.environ["LLMOPS_CONFIG_HOME"] = str(deployed_config)
     if not arguments or arguments[0] in {"-h", "--help", "help"}:
         llmops_cli.print_public_help()
         return 0
