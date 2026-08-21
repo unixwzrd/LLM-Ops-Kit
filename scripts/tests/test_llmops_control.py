@@ -413,6 +413,8 @@ class InventoryTests(ControlFixture):
         self.assertEqual(output.getvalue().strip(), __version__)
 
     def test_auto_update_target_requires_manifest_approval(self) -> None:
+        target_version = f"{__version__}.next"
+        release_repository = "example/llm-ops-kit"
         products = self.config_home / "products.json"
         self.write_json(
             products,
@@ -420,32 +422,38 @@ class InventoryTests(ControlFixture):
                 "schema_version": 1,
                 "products": {
                     "llm-ops-kit": {
-                        "latest_version": "0.9.0b42",
+                        "latest_version": target_version,
                         "auto_update": True,
-                        "release_repository": "unixwzrd/LLM-Ops-Kit",
+                        "release_repository": release_repository,
                     }
                 },
             },
         )
         self.assertEqual(
             entrypoint._auto_update_target(self.config_home),
-            ("0.9.0b42", "unixwzrd/LLM-Ops-Kit"),
+            (target_version, release_repository),
         )
         document = json.loads(products.read_text(encoding="utf-8"))
         document["products"]["llm-ops-kit"]["auto_update"] = False
         self.write_json(products, document)
         self.assertEqual(entrypoint._auto_update_target(self.config_home), ("", ""))
+        document["products"]["llm-ops-kit"]["auto_update"] = True
+        del document["products"]["llm-ops-kit"]["release_repository"]
+        self.write_json(products, document)
+        self.assertEqual(entrypoint._auto_update_target(self.config_home), ("", ""))
 
     def test_auto_update_applies_manifest_target_and_returns_new_entrypoint(self) -> None:
+        target_version = f"{__version__}.next"
+        release_repository = "example/llm-ops-kit"
         self.write_json(
             self.config_home / "products.json",
             {
                 "schema_version": 1,
                 "products": {
                     "llm-ops-kit": {
-                        "latest_version": "0.9.0b42",
+                        "latest_version": target_version,
                         "auto_update": True,
-                        "release_repository": "unixwzrd/LLM-Ops-Kit",
+                        "release_repository": release_repository,
                     }
                 },
             },
@@ -456,7 +464,7 @@ class InventoryTests(ControlFixture):
         updated.write_text("#!/bin/sh\n", encoding="utf-8")
         with (
             mock.patch.object(
-                entrypoint.llmops_update, "current_version", return_value="0.9.0b41"
+                entrypoint.llmops_update, "current_version", return_value=__version__
             ),
             mock.patch.object(
                 entrypoint.llmops_update, "main", return_value=0
@@ -476,7 +484,7 @@ class InventoryTests(ControlFixture):
         self.assertEqual(selected, updated)
         arguments = apply_update.call_args.args[0]
         self.assertIn("--apply", arguments)
-        self.assertEqual(arguments[arguments.index("--version") + 1], "0.9.0b42")
+        self.assertEqual(arguments[arguments.index("--version") + 1], target_version)
         self.assertNotIn("LLMOPS_AUTO_UPDATE_ACTIVE", os.environ)
 
     def test_auto_update_skips_explicit_update_and_rollback_commands(self) -> None:
@@ -494,14 +502,16 @@ class InventoryTests(ControlFixture):
         target.assert_not_called()
 
     def test_auto_update_failure_is_nonfatal_and_redacted(self) -> None:
+        target_version = f"{__version__}.next"
         self.write_json(
             self.config_home / "products.json",
             {
                 "schema_version": 1,
                 "products": {
                     "llm-ops-kit": {
-                        "latest_version": "0.9.0b42",
+                        "latest_version": target_version,
                         "auto_update": True,
+                        "release_repository": "example/llm-ops-kit",
                     }
                 },
             },
@@ -509,7 +519,7 @@ class InventoryTests(ControlFixture):
         error = io.StringIO()
         with (
             mock.patch.object(
-                entrypoint.llmops_update, "current_version", return_value="0.9.0b41"
+                entrypoint.llmops_update, "current_version", return_value=__version__
             ),
             mock.patch.object(entrypoint.llmops_update, "main", return_value=2),
             redirect_stderr(error),
@@ -519,7 +529,7 @@ class InventoryTests(ControlFixture):
                     self.root / "install", self.config_home, ["status"]
                 )
             )
-        self.assertIn("automatic update to 0.9.0b42 failed", error.getvalue())
+        self.assertIn(f"automatic update to {target_version} failed", error.getvalue())
         self.assertNotIn("products.json", error.getvalue())
 
     def test_tui_routes_from_trusted_peer_to_authority(self) -> None:

@@ -25,9 +25,7 @@ def _auto_update_target(config_home: Path) -> tuple[str, str]:
     if product.get("auto_update") is not True:
         return "", ""
     target = str(product.get("latest_version", ""))
-    repository = str(
-        product.get("release_repository", "unixwzrd/LLM-Ops-Kit")
-    )
+    repository = str(product.get("release_repository", ""))
     if not llmops_update.VERSION_RE.fullmatch(target):
         return "", ""
     if not llmops_update.REPOSITORY_RE.fullmatch(repository):

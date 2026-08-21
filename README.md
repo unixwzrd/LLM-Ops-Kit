@@ -4,7 +4,7 @@ LLM-Ops-Kit is a macOS-first control plane for models, agents, proxies, bridges,
 
 `llmops` is the only public command. Components are independently manageable; stacks are dependency groups for coordinated operation. The CLI and Textual console use the same planner, executor, adapters, and configuration model.
 
-Installed commands converge locally to the release approved by the reconciled `llm-ops-kit` product manifest before dispatch when `auto_update` is enabled. The verified updater changes only the immutable toolkit runtime and re-executes the requested command; it does not restart managed components.
+Installed commands converge locally to the version and release repository approved by the reconciled `llm-ops-kit` product manifest before dispatch when `auto_update` is enabled. The verified updater changes only the immutable toolkit runtime and re-executes the requested command; it does not restart managed components.
 
 ## Supported Beta Platform
 
