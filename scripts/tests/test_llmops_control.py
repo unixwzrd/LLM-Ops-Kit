@@ -48,10 +48,19 @@ from llmops_kit.llmops_topology_view import project_topology, render_dot, render
 class FakeRunner:
     """Stateful runner used to test orchestration without processes or SSH."""
 
-    def __init__(self, running: Optional[set[str]] = None, fail_start: str = "", fail_health: str = "") -> None:
+    def __init__(
+        self,
+        running: Optional[set[str]] = None,
+        fail_start: str = "",
+        fail_stop: str = "",
+        fail_health: str = "",
+        stubborn_stop: str = "",
+    ) -> None:
         self.running = set(running or set())
         self.fail_start = fail_start
+        self.fail_stop = fail_stop
         self.fail_health = fail_health
+        self.stubborn_stop = stubborn_stop
         self.calls: list[tuple[str, str]] = []
 
     def status(self, component):
@@ -68,7 +77,10 @@ class FakeRunner:
                 return CommandResult(component.qualified_id, action, "fake", 1, "", "failed")
             self.running.add(component.qualified_id)
         elif action == "stop":
-            self.running.discard(component.qualified_id)
+            if component.qualified_id == self.fail_stop:
+                return CommandResult(component.qualified_id, action, "fake", 1, "", "failed")
+            if component.qualified_id != self.stubborn_stop:
+                self.running.discard(component.qualified_id)
         elif action == "restart":
             self.running.add(component.qualified_id)
         return CommandResult(component.qualified_id, action, "fake", 0, "", "")
@@ -77,6 +89,13 @@ class FakeRunner:
         if component.qualified_id == self.fail_health:
             raise DriverError("readiness timed out")
         return CommandResult(component.qualified_id, "health", "fake", 0, "", "")
+
+    def wait_stopped(self, component):
+        if component.qualified_id in self.running:
+            raise DriverError(
+                f"{component.qualified_id}: stop command completed but component is still running"
+            )
+        return CommandResult(component.qualified_id, "status", "fake", 1, "", "")
 
 
 class ControlFixture(unittest.TestCase):
@@ -1043,6 +1062,18 @@ class TopologyTests(ControlFixture):
         )
         self.assertEqual(ComponentRunner.lifecycle_from_result(proxy, result), "running")
 
+    def test_process_status_with_empty_pid_is_stopped(self) -> None:
+        component = replace(self.topology.resolve_component("agent"), driver="process")
+        result = CommandResult(
+            component.qualified_id,
+            "status",
+            "status",
+            0,
+            "hermes-dashboard: running pid=",
+            "cat: dashboard.pid: No such file or directory",
+        )
+        self.assertEqual(ComponentRunner.lifecycle_from_result(component, result), "stopped")
+
     @mock.patch("llmops_kit.llmops_drivers.subprocess.run")
     def test_component_action_timeout_returns_bounded_failure(self, run: mock.Mock) -> None:
         component = self.topology.resolve_component("chat")
@@ -1603,6 +1634,38 @@ class ExecutorTests(ControlFixture):
             executor.execute(component_plan(self.topology, chat, "start"))
         self.assertNotIn("sample:chat", runner.running)
         self.assertIn(("sample:chat", "stop"), runner.calls)
+
+    def test_stack_stop_continues_after_failure_and_persists_successes(self) -> None:
+        stack = self.topology.stacks["sample"]
+        components = {item.qualified_id for item in stack.components.values()}
+        LifecycleStateStore(self.paths.lifecycle_state_file).save(
+            {component: "running" for component in components}
+        )
+        runner = FakeRunner(running=components, fail_stop="sample:proxy")
+        executor = Executor(self.topology, runner=runner)
+
+        with self.assertRaisesRegex(ExecutionError, "sample:proxy: stop failed"):
+            executor.execute(stack_plan(stack, "stop"))
+
+        expected = [item.component.qualified_id for item in stack_plan(stack, "stop")]
+        attempted = [component for component, action in runner.calls if action == "stop"]
+        self.assertEqual(attempted, expected)
+        self.assertEqual(runner.running, {"sample:proxy"})
+        states = LifecycleStateStore(self.paths.lifecycle_state_file).load()
+        self.assertEqual(states["sample:proxy"], "running")
+        self.assertTrue(
+            all(states[component] == "stopped" for component in components - {"sample:proxy"})
+        )
+
+    def test_stop_fails_when_component_survives_successful_command(self) -> None:
+        runner = FakeRunner(running={"sample:chat"}, stubborn_stop="sample:chat")
+        executor = Executor(self.topology, runner=runner)
+        chat = self.topology.resolve_component("chat")
+
+        with self.assertRaisesRegex(ExecutionError, "component is still running"):
+            executor.execute(component_plan(self.topology, chat, "stop"))
+
+        self.assertIn("sample:chat", runner.running)
 
     def test_active_dependents_reports_only_running_components(self) -> None:
         runner = FakeRunner(running={"sample:proxy", "sample:agent"})

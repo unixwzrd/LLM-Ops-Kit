@@ -658,6 +658,13 @@ class ComponentRunner:
         if result.returncode == 255:
             return "unknown"
         output = f"{result.stdout}\n{result.stderr}".casefold()
+        if component.driver in {"process", "command"}:
+            pid_status = re.search(
+                r"(?:^|\n)[^\n]*:\s+running\s+pid\s*=\s*(\d*)(?:\s|$)",
+                output,
+            )
+            if pid_status is not None:
+                return "running" if pid_status.group(1) else "stopped"
         if component.driver in {"model-proxy", "tts-bridge", "modelctl"}:
             if re.search(r"(^|\n)[^\n]*:\s+running(?:\s|$)", output):
                 return "running"
@@ -669,6 +676,21 @@ class ComponentRunner:
         """Return lifecycle state without treating failed readiness as stopped."""
 
         return self.lifecycle_from_result(component, self.status(component)) == "running"
+
+    def wait_stopped(self, component: Component) -> CommandResult:
+        """Verify that a completed stop action left the component stopped."""
+
+        result = self.status(component)
+        lifecycle = self.lifecycle_from_result(component, result)
+        if lifecycle == "stopped":
+            return result
+        if lifecycle == "unknown":
+            raise DriverError(
+                f"{component.qualified_id}: stop could not be verified: component is unreachable"
+            )
+        raise DriverError(
+            f"{component.qualified_id}: stop command completed but component is still running"
+        )
 
     def probe_health(
         self,

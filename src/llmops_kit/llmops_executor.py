@@ -210,6 +210,10 @@ class Executor:
 
         results: list[CommandResult] = []
         started: list[Component] = []
+        stop_failures: list[str] = []
+        best_effort_stop = bool(operations) and all(
+            operation.action == "stop" for operation in operations
+        )
         lock_path = self.topology.paths.run_dir / "orchestrator.lock"
         state_store = LifecycleStateStore(self.topology.paths.lifecycle_state_file)
         with operation_lock(lock_path):
@@ -243,16 +247,32 @@ class Executor:
                     elif action == "stop":
                         if not self.runner.is_running(component):
                             desired[component.qualified_id] = "stopped"
+                            state_store.save(desired)
                             continue
                         result = self.runner.run(component, "stop")
                         results.append(result)
                         if not result.ok:
-                            raise ExecutionError(
-                                f"{component.qualified_id}: stop failed: {result.stderr or result.stdout}"
+                            detail = (
+                                f"{component.qualified_id}: stop failed: "
+                                f"{result.stderr or result.stdout}"
                             )
+                            if not best_effort_stop:
+                                raise ExecutionError(detail)
+                            stop_failures.append(detail)
+                            continue
+                        try:
+                            self.runner.wait_stopped(component)
+                        except DriverError as exc:
+                            if not best_effort_stop:
+                                raise
+                            stop_failures.append(str(exc))
+                            continue
                         desired[component.qualified_id] = "stopped"
+                        state_store.save(desired)
                     else:
                         results.append(self.runner.run(component, action))
+                if stop_failures:
+                    raise ExecutionError("; ".join(stop_failures))
                 if any(operation.action in {"start", "stop", "restart"} for operation in operations):
                     state_store.save(desired)
             except (DriverError, ExecutionError, LifecycleStateError):

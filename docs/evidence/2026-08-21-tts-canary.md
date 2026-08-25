@@ -5,15 +5,15 @@
 
 ## Gate status
 
-The isolated Base and CustomVoice functional canary passed. Production remained on the retained Conda engine at `11439`; the canary used patched MLX-Audio `0.5.0+unixwzrd.1` at `12439` and the LLM-Ops bridge at `12440`. Production cutover remains blocked on human listening acceptance, the remaining revision-pinned model comparison, and one real Hermes request after the accepted URL change.
+The isolated Base and CustomVoice functional canary passed. At the operator's direction, the retained Conda production engine and Hermes-host bridge were stopped and the validated patched runtime was promoted. Production now uses patched MLX-Audio `0.5.0+unixwzrd.1` on the inference host and the co-located LLM-Ops bridge; the isolated canary listeners are stopped. Hermes uses the bridge's advertised LAN endpoint. A real Hermes `text_to_speech_tool` request through the production bridge returned a valid 24 kHz mono WAV using the accepted registered pair.
 
 ## Environment
 
-- Host: `xanax-model`, Apple Silicon, 96 GB unified memory.
+- Host: Apple Silicon inference host with 96 GB unified memory.
 - Engine: immutable UV environment under `~/.local/llm-ops/products/mlx-audio/0.5.0+unixwzrd.1`.
 - Bridge: LLM-Ops application Python with canary assets under `~/.local/llm-ops/products/tts-canary/0.5.0+unixwzrd.1`.
 - Models: the initial functional pass used the existing provenance-unknown Qwen checkpoints. The comparison pass used new revision-qualified directories with completion records; the old directories were not modified.
-- Registry: two persistent reviewed pairs, `Mia1` and `Mia2`; discovery returned two records without transcript content, audio, or paths. The names describe the remastered Mia voice variants and intentionally omit the upstream synthesized-voice labels.
+- Registry: two persistent reviewed pairs with neutral local aliases; discovery returned two records without transcript content, audio, or paths. The aliases intentionally omit the upstream synthesized-voice labels.
 
 ## Objective results
 
@@ -48,11 +48,11 @@ All seven requested production-evaluation checkpoints downloaded at the manifest
 
 The generic MLX-Audio request schema had defaulted `lang_code` to Kokoro's `a`, which Chatterbox rejects. The patched server now leaves the code unset so each model uses its native default; the bridge maps alias `language` to the upstream `lang_code`. A live bridge alias request confirmed `reference_id`, `lang_code: en`, and `intensity` translated to `exaggeration: 0.65`, producing a valid WAV without logging text or paths.
 
-Confucius4 produced `kIOGPUCommandBufferCallbackErrorTimeout`, and subsequent model initialization in the same Metal state failed. The evaluator now isolates model processes, captures a per-model engine log, detects HTTP 200 responses with zero audio as stream failures, and supports include/exclude ordering. The canary recovered after stopping that engine process; the production engine was not stopped. Confucius4 is disqualified on this host pending an upstream or model-specific fix.
+Confucius4 produced `kIOGPUCommandBufferCallbackErrorTimeout`, and subsequent model initialization in the same Metal state failed. The evaluator now isolates model processes, captures a per-model engine log, detects HTTP 200 responses with zero audio as stream failures, and supports include/exclude ordering. The canary recovered after stopping that engine process; the then-current production engine was not stopped during evaluation. Confucius4 is disqualified on this host pending an upstream or model-specific fix.
 
-### Mia2 reference pass
+### Accepted reference pass
 
-The registered `Mia2` record is the exact remastered 20-second variant-2 pair. The source and registered audio both have SHA-256 `b062f547707e7529c8eb2afddacbe90fab03bae7e4193a81749501b48cb76cf1`; the source and registered transcript both have SHA-256 `fe03800770ab6e2f92e362937be5e0499b40b974b71ffd8a5040155f51d6f594`. A separate process-isolated pass used that immutable pair rather than the Mia1 comparison reference.
+The accepted registered record is the exact remastered 20-second variant-2 pair. The source and registered audio hashes match, and the source and registered transcript hashes match. A separate process-isolated pass used that immutable pair rather than the comparison reference. The private hashes remain in the retained acceptance record rather than the release source.
 
 | Candidate | Output duration | Total request time | RTF | Result |
 |---|---:|---:|---:|---|
@@ -60,7 +60,7 @@ The registered `Mia2` record is the exact remastered 20-second variant-2 pair. T
 | Qwen3 0.6B CustomVoice 8-bit, patched ICL | 9.60 s | 4.432 s | 0.46 | Valid WAV |
 | Qwen3 1.7B Base 8-bit | 6.88 s | 4.133 s | 0.60 | Valid WAV |
 
-These objective results establish that all three Qwen cloning paths accept Mia2 correctly. Speaker identity and emotional fidelity remain subject to human listening review.
+These objective results establish that all three Qwen cloning paths accept the registered pair correctly. Speaker identity and emotional fidelity remain subject to human listening review.
 
 HTTP header-first-byte timing is not treated as time-to-first-audio because the streaming response sends headers before generated audio. The table therefore reports total request time and RTF; a client-side first-audio probe remains required before promotion.
 
@@ -69,13 +69,15 @@ HTTP header-first-byte timing is not treated as time-to-first-audio because the 
 | Artifact | SHA-256 |
 |---|---|
 | `base-reference-id.wav` | `b8404d022cdffafb8700eeb942d7d5d6e5345647c4ead46ef0c902a7bd0a6160` |
-| `base-bridge-mia1.wav` | `7d93174690c88e63349abd304ebe3e58e23df9f6b457cc087229efdda0a57717` |
+| `base-bridge-alias.wav` | `7d93174690c88e63349abd304ebe3e58e23df9f6b457cc087229efdda0a57717` |
 | `base-inline.wav` | `60c3e58178e893513088fea760f60a129a468f5f2a0033d18e215834a6ac6c7b` |
 | `base-long.wav` | `190160c2b63adc40338380a2c65333b5a995d0262f16afc2b92ee56a8bea938d` |
 | `base-stream.wav` | `ccab5a00056e9eaa561b34d80162d9b963f02e9787b401881febb08c240b779f` |
 | `custom-reference-id.wav` | `16e1f9d951e8183e41b4e51b9a34e9092fd691589c9ea95b723359b95283a62d` |
 | `custom-named.wav` | `01eb5fc1209936c1be438b3e024772f83626ed7197c405b054df39f809ecbfb1` |
 
-## Manual acceptance still required
+## Production cutover and remaining listening review
 
-Listen to the retained artifacts and record speaker similarity, intelligibility, emotional fidelity, unexpected noise, truncation, repetition, and prosody. Objective validity and stability do not substitute for that review. Do not change Hermes or production topology until this gate passes.
+Production promotion completed after explicit operator direction to stop and restart the TTS components. The production engine reports `0.5.0+unixwzrd.1`; the bridge reports two aliases, two references, registry reachability, and the matching upstream capability revision. The redacted bridge diagnostic for the Hermes acceptance request records the selected alias, its registered reference ID, the revision-pinned Qwen Base path, and HTTP 200 without exposing input or transcript content.
+
+Listen to the retained artifacts and production output and record speaker similarity, intelligibility, emotional fidelity, unexpected noise, truncation, repetition, and prosody. Objective validity and stability do not substitute for that review; use the retained Conda runtime and pre-cutover configuration backup if the production listening result is unacceptable.

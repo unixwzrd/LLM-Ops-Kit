@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Made managed stack shutdown attempt every component in exact reverse dependency order even when one stop fails, while retaining aggregated failure reporting.
+- Verified successful stop commands against observed lifecycle and refused to report completion when a managed component remains running or becomes unreachable.
+- Persisted each successful stop as shutdown progresses so partial failures do not leave successfully stopped components recorded as desired-running.
+- Treated malformed process status output with an empty `pid=` value as stopped instead of reporting a nonexistent process as running and degraded.
 - Made toolkit update and rollback catalog-wide by default, with manifest-selected version and repository policy, explicit `--local-only` internal operations, and no production repository constants in installed application or test code.
 - Added manifest-approved local self-update on every installed `llmops` invocation, with verified release installation, recursion protection, re-execution into the selected runtime, and fail-open diagnostics when the approved artifact is unavailable.
 - Added health-independent component uptime to CLI and TUI status, with machine-readable elapsed seconds, observed start time, and provenance so degraded-but-running processes retain their restart age.
