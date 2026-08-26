@@ -80,7 +80,7 @@ def probe_topology(topology: Topology) -> dict[str, Any]:
             host_name,
             "printf 'arch='; uname -m; "
             f"printf 'app_python='; test -x {app_python} && {app_python} --version 2>&1 || true; "
-            "printf '\\nbash='; test -x /usr/local/bin/bash && echo /usr/local/bin/bash || true; "
+            "printf '\\nbash='; command -v bash || true; "
             "printf 'launchctl='; command -v launchctl || true; "
             "printf 'memory='; sysctl -n hw.memsize 2>/dev/null || true",
         )
@@ -97,7 +97,7 @@ def probe_topology(topology: Topology) -> dict[str, Any]:
         python_status = "ok" if app_python_version.startswith("Python 3.") else "error" if has_enabled else "warning"
         checks.append(_item(host_name, "application-python", python_status, app_python_version or "not found", "repair or reinstall the LLM-Ops-Kit application runtime" if not app_python_version else ""))
         bash = values.get("bash", "")
-        checks.append(_item(host_name, "gnu-bash", "ok" if bash else "error", bash or "not found", "install GNU Bash at /usr/local/bin/bash" if not bash else ""))
+        checks.append(_item(host_name, "gnu-bash", "ok" if bash else "error", bash or "not found", "install GNU Bash and make it available in PATH" if not bash else ""))
         needs_launchd = any(component.host == host_name and component.driver in {"launchd", "ssh-tunnel"} for component in topology.all_components())
         launchctl = values.get("launchctl", "")
         if needs_launchd:

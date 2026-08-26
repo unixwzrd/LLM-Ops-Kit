@@ -17,7 +17,7 @@ llmops config hash --json
 llmops config reconcile --all-hosts --plan --json
 ```
 
-If `llmops` is missing or points at an old release, run `/usr/local/bin/bash ~/.local/llm-ops/current/scripts/install-runtime.sh --repair`. Repair uses the installed immutable release and does not require a checkout.
+If `llmops` is missing or points at an old release, run `bash ~/.local/llm-ops/current/scripts/install-runtime.sh --repair`. Repair uses the installed immutable release and does not require a checkout.
 
 If configuration is missing, set `LLMOPS_CONFIG_HOME` explicitly or initialize a new root. Installed host commands normally use the role-filtered revision selected through `current-config`.
 

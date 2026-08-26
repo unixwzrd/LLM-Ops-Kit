@@ -112,5 +112,6 @@ install_args=(
 )
 [[ "$MINIMAL" -eq 1 ]] && install_args+=(--minimal)
 
-/usr/local/bin/bash "$installer" \
+bash_bin="${BASH_BIN:-$(command -v bash)}"
+"$bash_bin" "$installer" \
   "${install_args[@]}"

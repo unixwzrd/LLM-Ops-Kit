@@ -27,6 +27,7 @@ class UpdateError(RuntimeError):
 VERSION_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 REPOSITORY_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 USER_AGENT = "LLM-Ops-Kit update"
+BASH = shutil.which("bash") or "/bin/bash"
 
 
 def sha256(path: Path) -> str:
@@ -362,7 +363,7 @@ def _remote_apply(
         f"tar -xJf \"{archive}\" -C extracted; "
         "installer=$(find extracted -path '*/scripts/install-runtime.sh' -type f -print -quit); "
         "test -n \"$installer\"; "
-        f"/usr/local/bin/bash \"$installer\" --source \"$(dirname \"$(dirname \"$installer\")\")\" --release-id {shlex.quote(version)} {install_args}; "
+        f"bash \"$installer\" --source \"$(dirname \"$(dirname \"$installer\")\")\" --release-id {shlex.quote(version)} {install_args}; "
         "fi"
     )
     completed = _run_remote(host, script, timeout)
@@ -488,7 +489,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             if not installer.is_file():
                 raise UpdateError(f"active rollback installer is missing: {installer}")
             completed = subprocess.run(
-                ["/usr/local/bin/bash", str(installer), "--prefix", str(args.prefix), "--public-bin-dir", str(args.public_bin_dir), "--state-home", str(args.state_home), "--rollback"],
+                [BASH, str(installer), "--prefix", str(args.prefix), "--public-bin-dir", str(args.public_bin_dir), "--state-home", str(args.state_home), "--rollback"],
                 text=True,
                 check=False,
             )
@@ -570,7 +571,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         if previous_version(args.prefix) == available:
             installer = args.prefix / "current" / "scripts" / "install-runtime.sh"
             completed = subprocess.run(
-                ["/usr/local/bin/bash", str(installer), "--prefix", str(args.prefix), "--public-bin-dir", str(args.public_bin_dir), "--state-home", str(args.state_home), "--rollback"],
+                [BASH, str(installer), "--prefix", str(args.prefix), "--public-bin-dir", str(args.public_bin_dir), "--state-home", str(args.state_home), "--rollback"],
                 text=True,
                 check=False,
             )
@@ -591,7 +592,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             verify_archive(archive, checksum_file)
             installer = safe_extract(archive, temporary / "extracted")
             command = [
-                "/usr/local/bin/bash",
+                BASH,
                 str(installer),
                 "--source",
                 str(installer.parents[1]),

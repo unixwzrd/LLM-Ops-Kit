@@ -34,7 +34,7 @@ When the reconciled `products.json` entry for `llm-ops-kit` sets `auto_update: t
 
 ```bash
 llmops rollback
-/usr/local/bin/bash ~/.local/llm-ops/current/scripts/install-runtime.sh --repair
+bash ~/.local/llm-ops/current/scripts/install-runtime.sh --repair
 ```
 
 Rollback exchanges `current` and `previous`, reconstructs managed links, and updates install state. A second rollback exchanges them again. Repair verifies the active application environment and rebuilds managed links without creating a release.
@@ -42,8 +42,8 @@ Rollback exchanges `current` and `previous`, reconstructs managed links, and upd
 ## Uninstall
 
 ```bash
-/usr/local/bin/bash ~/.local/llm-ops/current/scripts/uninstall-runtime.sh
-/usr/local/bin/bash ~/.local/llm-ops/current/scripts/uninstall-runtime.sh --purge
+bash ~/.local/llm-ops/current/scripts/uninstall-runtime.sh
+bash ~/.local/llm-ops/current/scripts/uninstall-runtime.sh --purge
 ```
 
 Normal uninstall preserves canonical configuration, data, state, and cache. Purge removes LLM-Ops-Kit-owned roots. Model weights, agent state, logs owned by other products, and source defaults are never removed.

@@ -22,7 +22,7 @@ The installer bootstraps a verified UV binary when necessary, installs a managed
 Use `--minimal` to omit Textual. Repair the active installation using its installed runtime resource:
 
 ```bash
-/usr/local/bin/bash ~/.local/llm-ops/current/scripts/install-runtime.sh --repair
+bash ~/.local/llm-ops/current/scripts/install-runtime.sh --repair
 ```
 
 ## Initialize

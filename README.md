@@ -9,7 +9,7 @@ Installed commands converge locally to the version and release repository approv
 ## Supported Beta Platform
 
 - macOS 15 or newer on Apple Silicon or Intel
-- GNU Bash at `/usr/local/bin/bash`
+- GNU Bash available as `bash` in `PATH`
 - SSH for remote hosts
 - launchd for supervised services
 

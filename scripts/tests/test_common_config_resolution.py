@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -11,6 +12,7 @@ from pathlib import Path
 
 
 COMMON = Path(__file__).resolve().parents[1] / "lib" / "common.sh"
+BASH = shutil.which("bash") or "/bin/bash"
 
 
 class CommonConfigResolutionTests(unittest.TestCase):
@@ -30,7 +32,7 @@ class CommonConfigResolutionTests(unittest.TestCase):
             env.pop("LLMOPS_CONFIG_HOME", None)
             completed = subprocess.run(
                 [
-                    "/usr/local/bin/bash",
+                    BASH,
                     "-c",
                     f'. "{COMMON}"; printf "%s\\n" "$LLMOPS_CONFIG_HOME"',
                 ],

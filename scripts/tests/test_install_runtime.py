@@ -18,6 +18,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 INSTALLER = REPO_ROOT / "scripts" / "install-runtime.sh"
 UNINSTALLER = REPO_ROOT / "scripts" / "uninstall-runtime.sh"
 BUILDER = REPO_ROOT / "scripts" / "build-release.py"
+BASH = shutil.which("bash") or "/bin/bash"
 
 
 class InstallerTests(unittest.TestCase):
@@ -73,7 +74,7 @@ class InstallerTests(unittest.TestCase):
             }
             source = self.release_source(home, "installer-test")
             common = [
-                "/usr/local/bin/bash",
+                BASH,
                 str(INSTALLER),
                 "--source",
                 str(source),
@@ -132,7 +133,7 @@ class InstallerTests(unittest.TestCase):
             self.run_command(common + ["--repair"], env)
 
             uninstall = [
-                "/usr/local/bin/bash",
+                BASH,
                 str(UNINSTALLER),
                 "--prefix",
                 str(install),
@@ -167,7 +168,7 @@ class InstallerTests(unittest.TestCase):
             install = root / "install"
             completed = subprocess.run(
                 [
-                    "/usr/local/bin/bash",
+                    BASH,
                     str(INSTALLER),
                     "--source",
                     str(REPO_ROOT),
@@ -199,7 +200,7 @@ class InstallerTests(unittest.TestCase):
                 "LLMOPS_UV_BIN": shutil.which("uv") or "uv",
             }
             install = [
-                "/usr/local/bin/bash",
+                BASH,
                 str(source / "scripts" / "install-runtime.sh"),
                 "--source", str(source),
                 "--prefix", str(root / "install"),
@@ -230,7 +231,7 @@ class InstallerTests(unittest.TestCase):
             }
             self.run_command(
                 [
-                    "/usr/local/bin/bash",
+                    BASH,
                     str(source / "scripts" / "install-runtime.sh"),
                     "--source",
                     str(source),
@@ -292,7 +293,7 @@ class InstallerTests(unittest.TestCase):
             }
             self.run_command(
                 [
-                    "/usr/local/bin/bash",
+                    BASH,
                     "-c",
                     '. "$1"; archive_log_for_restart "$2"; prepare_log_file "$2"',
                     "_",
@@ -321,7 +322,7 @@ class InstallerTests(unittest.TestCase):
             }
             self.run_command(
                 [
-                    "/usr/local/bin/bash",
+                    BASH,
                     "-c",
                     '. "$1"; rotate_log_if_needed "$2" 1',
                     "_",

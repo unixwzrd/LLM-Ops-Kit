@@ -23,16 +23,17 @@ export LLMOPS_CONFIG_HOME="$CONFIG"
 export LLMOPS_DATA_HOME="$DATA"
 export LLMOPS_STATE_HOME="$STATE"
 export LLMOPS_CACHE_HOME="$CACHE"
+BASH_BIN="${BASH_BIN:-$(command -v bash)}"
 
 installer=(
-  /usr/local/bin/bash "$SOURCE_DIR/scripts/install-runtime.sh"
+  "$BASH_BIN" "$SOURCE_DIR/scripts/install-runtime.sh"
   --source "$SOURCE_DIR"
   --prefix "$INSTALL"
   --public-bin-dir "$PUBLIC_BIN"
   --state-home "$STATE"
 )
 uninstaller=(
-  /usr/local/bin/bash "$SOURCE_DIR/scripts/uninstall-runtime.sh"
+  "$BASH_BIN" "$SOURCE_DIR/scripts/uninstall-runtime.sh"
   --prefix "$INSTALL"
   --public-bin-dir "$PUBLIC_BIN"
   --config-home "$CONFIG"

@@ -17,6 +17,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BUILDER = REPO_ROOT / "scripts" / "build-release.py"
 BOOTSTRAP = REPO_ROOT / "scripts" / "bootstrap-install.sh"
+BASH = shutil.which("bash") or "/bin/bash"
 
 
 class ReleaseDistributionTests(unittest.TestCase):
@@ -145,7 +146,7 @@ class ReleaseDistributionTests(unittest.TestCase):
             env["LLMOPS_STATE_HOME"] = str(state)
             self.run_command(
                 [
-                    "/usr/local/bin/bash",
+                    BASH,
                     str(source / "scripts" / "bootstrap-install.sh"),
                     "--archive",
                     str(artifact),
@@ -252,7 +253,7 @@ class ReleaseDistributionTests(unittest.TestCase):
             artifact.write_bytes(artifact.read_bytes() + b"tampered")
             completed = self.run_command(
                 [
-                    "/usr/local/bin/bash",
+                    BASH,
                     str(source / "scripts" / "bootstrap-install.sh"),
                     "--archive",
                     str(artifact),
