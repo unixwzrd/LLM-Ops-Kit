@@ -1,5 +1,12 @@
 # LLM-Ops-Kit
 
+![LLM-Ops-Kit](docs/images/LLM-OPS-Kit-banner.png)
+
+[![Release](https://img.shields.io/github/v/release/unixwzrd/LLM-Ops-Kit?include_prereleases&label=release)](https://github.com/unixwzrd/LLM-Ops-Kit/releases/latest)
+[![CI](https://github.com/unixwzrd/LLM-Ops-Kit/actions/workflows/ci.yml/badge.svg)](https://github.com/unixwzrd/LLM-Ops-Kit/actions/workflows/ci.yml)
+[![Platform](https://img.shields.io/badge/platform-macOS-555555)](#supported-beta-platform)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE.md)
+
 LLM-Ops-Kit is a macOS-first control plane for models, agents, proxies, bridges, tunnels, and supporting AI services across one computer or a trusted LAN. It coordinates native processes and service managers without replacing them with containers or a cluster scheduler.
 
 `llmops` is the only public command. Components are independently manageable; stacks are dependency groups for coordinated operation. The CLI and Textual console use the same planner, executor, adapters, and configuration model.
@@ -17,19 +24,26 @@ The installer owns its UV-managed Python runtime. It does not require Git, syste
 
 ## Install
 
+Download and verify the installer from the latest published release:
+
 ```bash
-curl -fLO https://github.com/unixwzrd/LLM-Ops-Kit/releases/download/<version>/install-llmops
-curl -fLO https://github.com/unixwzrd/LLM-Ops-Kit/releases/download/<version>/install-llmops.sha256
+curl -fsSLO https://github.com/unixwzrd/LLM-Ops-Kit/releases/latest/download/install-llmops
+curl -fsSLO https://github.com/unixwzrd/LLM-Ops-Kit/releases/latest/download/install-llmops.sha256
 shasum -a 256 -c install-llmops.sha256
-chmod +x install-llmops
-./install-llmops --version <version>
-~/.local/bin/llmops init --preset single-host
-~/.local/bin/llmops doctor --probe
+bash install-llmops --repository unixwzrd/LLM-Ops-Kit
 ```
 
-The verified release archive contains the application wheel, locked offline dependency wheelhouse, runtime resources, manifest, and checksums. The installer creates an immutable release under `~/.local/llm-ops/releases/`, maintains `current` and `previous`, and exposes `~/.local/bin/llmops`. Use `--minimal` for a CLI-only installation.
+Then create and validate a local configuration:
 
-No beta has been published yet; `<version>` remains a placeholder until release acceptance is complete.
+```bash
+~/.local/bin/llmops init --preset single-host
+~/.local/bin/llmops doctor --probe
+~/.local/bin/llmops --version
+```
+
+The release badge at the top of this page shows the current published version. `llmops --version` reports the installed toolkit version. To install a specific release, add `--version <tag>` to the installer command.
+
+The verified release archive contains the application wheel, locked offline dependency wheelhouse, runtime resources, manifest, and checksums. The installer creates an immutable release under `~/.local/llm-ops/releases/`, maintains `current` and `previous`, and exposes `~/.local/bin/llmops`. Use `--minimal` for a CLI-only installation.
 
 ## Operate
 

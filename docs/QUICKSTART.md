@@ -7,15 +7,16 @@ Back: [Documentation index](./INDEX.md)
 
 ## Install
 
-Download the standalone installer and checksum from the selected GitHub release, verify it, and run it:
+Download and verify the installer from the latest published GitHub release:
 
 ```bash
-curl -fLO https://github.com/unixwzrd/LLM-Ops-Kit/releases/download/<version>/install-llmops
-curl -fLO https://github.com/unixwzrd/LLM-Ops-Kit/releases/download/<version>/install-llmops.sha256
+curl -fsSLO https://github.com/unixwzrd/LLM-Ops-Kit/releases/latest/download/install-llmops
+curl -fsSLO https://github.com/unixwzrd/LLM-Ops-Kit/releases/latest/download/install-llmops.sha256
 shasum -a 256 -c install-llmops.sha256
-chmod +x install-llmops
-./install-llmops --version <version>
+bash install-llmops --repository unixwzrd/LLM-Ops-Kit
 ```
+
+Add `--version <tag>` to install a specific release instead of the latest one.
 
 The installer bootstraps a verified UV binary when necessary, installs a managed Python under `~/.local/llm-ops/python/`, installs the project and Textual from the archive's offline wheelhouse, and switches the immutable `current` release only after verification. It does not require a checkout or modify shell startup files.
 
