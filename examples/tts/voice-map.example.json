@@ -14,5 +14,9 @@
     "language": "en",
     "emotion": "warm",
     "intensity": 0.65
+  },
+  "Narrator": {
+    "language": "en",
+    "emotion": "emotive"
   }
 }

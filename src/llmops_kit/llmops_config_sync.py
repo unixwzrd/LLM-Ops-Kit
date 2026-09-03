@@ -89,7 +89,10 @@ def _remote_llmops(host: Any) -> str:
 def remote_snapshot_status(host: Any) -> dict[str, Any]:
     """Read and verify the target's active configuration through its installed CLI."""
 
-    completed = _remote_command(host, f"{_remote_llmops(host)} config hash --json")
+    completed = _remote_command(
+        host,
+        f"LLMOPS_AUTO_UPDATE_ACTIVE=1 {_remote_llmops(host)} config hash --json",
+    )
     try:
         payload = json.loads(completed.stdout)
     except json.JSONDecodeError:
@@ -191,7 +194,7 @@ def apply_snapshot(host: Any, snapshot: Path, desired_hash: str) -> dict[str, An
                 f"archive=\"$HOME/{remote_relative}\"",
                 f"revision=\"$root/config-revisions/{desired_hash}\"",
                 'if test ! -e "$revision"; then mkdir -p "$revision"; tar -xzf "$archive" -C "$revision"; fi',
-                f"observed=$(LLMOPS_CONFIG_HOME=\"$revision\" {_remote_llmops(host)} config hash | awk -F= '$1 == \"config_hash\" {{print $2}}')",
+                f"observed=$(LLMOPS_AUTO_UPDATE_ACTIVE=1 LLMOPS_CONFIG_HOME=\"$revision\" {_remote_llmops(host)} config hash | awk -F= '$1 == \"config_hash\" {{print $2}}')",
                 f"test \"$observed\" = {shlex.quote(desired_hash)}",
                 'if test -L "$root/current-config"; then old=$(readlink "$root/current-config"); ln -s "$old" "$root/.previous-config.$$"; if ! mv -fh "$root/.previous-config.$$" "$root/previous-config" 2>/dev/null; then rm -f "$root/previous-config"; mv -f "$root/.previous-config.$$" "$root/previous-config"; fi; fi',
                 'ln -s "$revision" "$root/.current-config.$$"',

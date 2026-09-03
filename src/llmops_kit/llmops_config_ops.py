@@ -40,14 +40,28 @@ COMPONENT_SCHEMA: dict[str, Any] = {
         "execution_user": {"type": "string", "minLength": 1},
         "profile": {"type": "string", "minLength": 1},
         "template_id": {"type": "string", "minLength": 1},
-        "ownership": {"type": "string", "enum": ["managed", "external"]},
+        "ownership": {
+            "type": "string",
+            "enum": ["managed", "external"],
+            "description": (
+                "Managed components participate in LLM-Ops start and stop operations; "
+                "external components remain enabled for dependency and health observation "
+                "but are started and stopped by the operator."
+            ),
+        },
         "restart_policy": {
             "type": "string",
             "enum": ["never", "on-failure"],
             "default": "never",
             "description": "Adapter supervision after an unexpected exit; explicit stops always win",
         },
-        "enabled": {"type": "boolean"},
+        "enabled": {
+            "type": "boolean",
+            "description": (
+                "Disabled components are excluded from future stack lifecycle operations. "
+                "Saving this setting does not stop a process that is already running."
+            ),
+        },
         "retired": {"type": "boolean", "readOnly": True},
         "tags": {"type": "array", "items": {"type": "string", "minLength": 1}},
         "depends_on": {"type": "array", "items": {"type": "string", "minLength": 1}},

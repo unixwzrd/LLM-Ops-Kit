@@ -33,7 +33,7 @@ Legacy server paths are disabled unless `MLX_AUDIO_REFERENCE_ROOTS` is configure
 
 ## Voice aliases and controls
 
-An alias contains exactly one clone source: `sample` with optional `ref_text`, or a registered `reference_id`. `emotion`, `intensity`, and `instruction` are optional normalized style metadata. See [`voice-map.example.json`](../examples/tts/voice-map.example.json).
+An alias may select a registered `reference_id`, an explicit `sample` with optional `ref_text`, or omit both to derive `<alias>.wav` and `<alias>.txt` under the configured samples directory. When `ref_text` is omitted from an explicit sample entry, the bridge derives the transcript by replacing the sample extension with `.txt`. An alias source overrides any default clone source. Derived aliases return HTTP 422 when their audio file, or a transcript required by the loaded model, is missing. `emotion`, `intensity`, and `instruction` are optional normalized style metadata. See [`voice-map.example.json`](../examples/tts/voice-map.example.json).
 
 - Qwen Base and patched Qwen CustomVoice cloning derive speaker and emotional character from the reference pair. Explicit instruction is rejected.
 - Qwen CustomVoice named-speaker mode and VoiceDesign map `instruction` to upstream `instruct`.

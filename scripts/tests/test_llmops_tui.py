@@ -239,14 +239,14 @@ class TuiApplicationTests(unittest.IsolatedAsyncioTestCase):
                         for index, row in enumerate(editor.rows)
                         if row["path"] == "component.enabled"
                     )
-                    editor.query_one(f"#schema-field-{enabled_index}").value = not bool(
-                        editor.initial_values[enabled_index]
-                    )
+                    enabled_widget = editor.query_one(f"#schema-field-{enabled_index}")
+                    initial_enabled = bool(editor.initial_values[enabled_index])
+                    enabled_widget.value = not initial_enabled
                     await pilot.click("#revert-all")
                     await pilot.pause()
                     self.assertEqual(
-                        editor.query_one(f"#schema-field-{enabled_index}").value,
-                        bool(editor.initial_values[enabled_index]),
+                        enabled_widget.value,
+                        initial_enabled,
                     )
                     editor.query_one(f"#schema-field-{enabled_index}").value = not bool(
                         editor.initial_values[enabled_index]
@@ -279,6 +279,76 @@ class TuiApplicationTests(unittest.IsolatedAsyncioTestCase):
                     await pilot.pause()
                     self.assertTrue(detached.called)
                     self.assertIn("--restart-affected", detached.call_args.kwargs["argv"])
+
+    async def test_schema_editor_disables_component_and_navigates_sections(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            paths = resolve_paths(
+                {
+                    "HOME": str(root),
+                    "LLMOPS_CONFIG_HOME": str(root / "config"),
+                    "LLMOPS_DATA_HOME": str(root / "data"),
+                    "LLMOPS_STATE_HOME": str(root / "state"),
+                    "LLMOPS_CACHE_HOME": str(root / "cache"),
+                }
+            )
+            initialize(paths, preset="single-host", user="operator")
+            stack_path = paths.stacks_dir / "starter.json"
+            stack = json.loads(stack_path.read_text(encoding="utf-8"))
+            selected = stack["components"][0]
+            selected["enabled"] = True
+            stack_path.write_text(json.dumps(stack, indent=2) + "\n", encoding="utf-8")
+
+            app = build_application(str(paths.config_home), None)
+            async with app.run_test(size=(140, 44)) as pilot:
+                await pilot.pause(1)
+                await pilot.click("#action-configure")
+                await pilot.pause()
+                editor = app.screen
+                enabled_index = next(
+                    index
+                    for index, row in enumerate(editor.rows)
+                    if row["path"] == "component.enabled"
+                )
+                enabled_widget = editor.query_one(f"#schema-field-{enabled_index}")
+                self.assertTrue(enabled_widget.value)
+                await pilot.click("#toggle-advanced")
+                await pilot.pause()
+                boolean_indices = [
+                    index
+                    for index, row in enumerate(editor.rows)
+                    if row.get("type") == "boolean" or row.get("widget") == "checkbox"
+                ]
+                self.assertGreaterEqual(len(boolean_indices), 2)
+                for boolean_index in boolean_indices:
+                    widget = editor.query_one(f"#schema-field-{boolean_index}")
+                    initial_value = widget.value
+                    widget.scroll_visible(top=True, immediate=True)
+                    await pilot.pause()
+                    await pilot.click(f"#schema-field-{boolean_index}")
+                    await pilot.pause()
+                    self.assertEqual(widget.value, not initial_value)
+                    await pilot.click(f"#schema-field-{boolean_index}")
+                    await pilot.pause()
+                    self.assertEqual(widget.value, initial_value)
+                enabled_widget.focus()
+                await pilot.press("space")
+                await pilot.pause()
+                self.assertFalse(enabled_widget.value)
+
+                destination_group = editor.groups[-1]
+                heading = editor.query_one(
+                    f"#{editor.group_heading_ids[destination_group]}"
+                )
+                with mock.patch.object(heading, "scroll_visible") as scroll_visible:
+                    editor.query_one("#schema-group").value = destination_group
+                    await pilot.pause()
+                    scroll_visible.assert_called_once_with(top=True, immediate=True)
+
+                await pilot.click("#save")
+                await pilot.pause()
+                command = str(app.screen.query_one("#equivalent-command").render())
+                self.assertIn("component.enabled=false", command)
 
     async def test_headless_views_and_mutation_cancellation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -339,10 +409,15 @@ class TuiApplicationTests(unittest.IsolatedAsyncioTestCase):
                     await pilot.click("#action-settings")
                     await pilot.pause()
                     self.assertIsNotNone(app.screen.query_one("#settings-dialog"))
-                    self.assertEqual(
-                        app.screen.query_one("#settings-auto-refresh").styles.background.hex,
-                        "#18222D",
-                    )
+                    auto_refresh = app.screen.query_one("#settings-auto-refresh")
+                    self.assertTrue(auto_refresh.has_class("boolean-checkbox"))
+                    initial_auto_refresh = auto_refresh.value
+                    await pilot.click("#settings-auto-refresh")
+                    await pilot.pause()
+                    self.assertEqual(auto_refresh.value, not initial_auto_refresh)
+                    await pilot.click("#settings-auto-refresh")
+                    await pilot.pause()
+                    self.assertEqual(auto_refresh.value, initial_auto_refresh)
                     self.assertEqual(
                         app.screen.query_one("#save").styles.background.hex,
                         "#496F91",
@@ -357,7 +432,18 @@ class TuiApplicationTests(unittest.IsolatedAsyncioTestCase):
                     await pilot.click("#action-details")
                     await pilot.pause()
                     self.assertIsNotNone(app.screen.query_one("#details-dialog"))
-                    self.assertIn("effective_configuration", str(app.screen.query_one(".details-body").render()))
+                    details = app.screen.query_one("#details-body")
+                    self.assertIn("effective_configuration", details.text)
+                    self.assertTrue(details.read_only)
+                    self.assertTrue(details.soft_wrap)
+                    details.select_all()
+                    await pilot.click("#copy-selection")
+                    await pilot.pause()
+                    self.assertEqual(app._clipboard, details.text)
+                    self.assertIn(
+                        "Copied selection",
+                        str(app.screen.query_one("#details-copy-status").render()),
+                    )
                     await pilot.press("escape")
                     await pilot.pause()
                     await pilot.click("#action-configure")

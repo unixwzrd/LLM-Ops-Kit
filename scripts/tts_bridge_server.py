@@ -269,19 +269,22 @@ def _normalize_voice_alias_entry(alias_name: str, entry: dict[str, Any], path: P
     has_reference_id = isinstance(entry.get("reference_id"), str) and bool(
         entry["reference_id"].strip()
     )
-    if has_sample == has_reference_id:
+    if has_sample and has_reference_id:
         raise BridgeConfigError(
-            f"voice-map alias '{alias_name}' requires exactly one of 'sample' or 'reference_id' in {path}"
+            f"voice-map alias '{alias_name}' cannot set both 'sample' and 'reference_id' in {path}"
         )
     normalized: dict[str, Any] = {"alias": alias_name.strip()}
     if has_sample:
         normalized["sample"] = _validate_optional_text(
             "sample", alias_name, entry["sample"], path
         )
-    else:
+    elif has_reference_id:
         normalized["reference_id"] = _validate_optional_text(
             "reference_id", alias_name, entry["reference_id"], path
         )
+    else:
+        normalized["sample"] = f"{alias_name.strip()}.wav"
+        normalized["sample_derived"] = True
     _copy_optional_text_fields(
         normalized,
         entry,
@@ -430,6 +433,9 @@ def _resolve_voice_mapping(
     if voice_mapping is None:
         return None, defaults
     resolved_voice_mapping = dict(defaults)
+    if "sample" in voice_mapping or "reference_id" in voice_mapping:
+        for field in ("sample", "reference_id", "ref_text"):
+            resolved_voice_mapping.pop(field, None)
     resolved_voice_mapping.update(voice_mapping)
     return voice_mapping, resolved_voice_mapping
 
@@ -473,11 +479,21 @@ def _resolve_output_ref(
     cfg_value: str,
     missing_domain: str,
     missing_message: str,
+    strict_missing: bool = False,
+    skip_missing: bool = False,
 ) -> str | None:
     if explicit_value:
         return str(explicit_value)
     if alias_path is not None:
         if not alias_path.is_file():
+            if strict_missing:
+                raise BridgeRequestError(
+                    422,
+                    missing_domain,
+                    missing_message.format(path=alias_path.name),
+                )
+            if skip_missing:
+                return None
             _log(
                 "request warning ["
                 + missing_domain
@@ -781,6 +797,12 @@ def build_upstream_payload(
 
     selected_voice = _select_requested_voice(incoming, cfg)
     voice_mapping, resolved_voice_mapping = _resolve_voice_mapping(selected_voice, cfg)
+    derived_alias = bool(
+        voice_mapping is not None and voice_mapping.get("sample_derived", False)
+    )
+    transcript_required = bool(
+        cfg.get("upstream_capabilities", {}).get("transcript_required", True)
+    )
     explicit_reference_mode = _explicit_reference_mode(incoming)
     (
         alias_sample_path,
@@ -815,6 +837,7 @@ def build_upstream_payload(
             if voice_mapping is not None
             else "voice-map defaults resolved sample missing: {path}"
         ),
+        strict_missing=derived_alias,
     )
     if resolved_ref_audio is not None:
         output["ref_audio"] = resolved_ref_audio
@@ -830,6 +853,8 @@ def build_upstream_payload(
             if voice_mapping is not None
             else "voice-map defaults resolved transcript missing: {path}"
         ),
+        strict_missing=derived_alias and transcript_required,
+        skip_missing=derived_alias and not transcript_required,
     )
     if resolved_ref_text is not None:
         output["ref_text"] = resolved_ref_text

@@ -145,12 +145,16 @@ def _launchd_command(profile: dict[str, Any], component: Component, action: str)
     label = profile.get("label")
     if not isinstance(label, str) or not label:
         raise DriverError(f"{component.qualified_id}: launchd profile requires label")
-    domain = f'gui/$(id -u)/{shlex.quote(label)}'
+    gui_domain = f'gui/$(id -u)/{shlex.quote(label)}'
+    user_domain = f'user/$(id -u)/{shlex.quote(label)}'
     plist = profile.get("plist")
     if plist is not None and (not isinstance(plist, str) or not plist):
         raise DriverError(f"{component.qualified_id}: launchd plist must be a path string")
     if action == "status":
-        return f"launchctl print {domain}"
+        return (
+            f"launchctl print {gui_domain} 2>/dev/null || "
+            f"launchctl print {user_domain}"
+        )
     if action in {"start", "restart"}:
         bootstrap = (
             f"launchctl bootstrap gui/$(id -u) {_remote_root(plist)} || exit $?"
@@ -161,13 +165,18 @@ def _launchd_command(profile: dict[str, Any], component: Component, action: str)
             )
         )
         return (
-            f"if ! launchctl print {domain} >/dev/null 2>&1; then {bootstrap}; fi; "
-            f"launchctl kickstart -k {domain}"
+            f"if launchctl print {gui_domain} >/dev/null 2>&1; then "
+            f"launchctl kickstart -k {gui_domain}; "
+            f"elif launchctl print {user_domain} >/dev/null 2>&1; then "
+            f"launchctl kickstart -k {user_domain}; "
+            f"else {bootstrap}; launchctl kickstart -k {gui_domain}; fi"
         )
     if action == "stop":
         return (
-            f"if launchctl print {domain} >/dev/null 2>&1; then "
-            f"launchctl bootout {domain}; fi"
+            f"if launchctl print {gui_domain} >/dev/null 2>&1; then "
+            f"launchctl bootout {gui_domain}; "
+            f"elif launchctl print {user_domain} >/dev/null 2>&1; then "
+            f"launchctl bootout {user_domain}; fi"
         )
     raise DriverError(f"{component.qualified_id}: unsupported launchd action: {action}")
 

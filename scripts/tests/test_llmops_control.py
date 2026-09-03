@@ -1231,7 +1231,8 @@ class TopologyTests(ControlFixture):
         }
         for action in ("start", "restart"):
             command = _launchd_command(profile, component, action)
-            self.assertIn("if ! launchctl print", command)
+            self.assertIn("if launchctl print gui/$(id -u)", command)
+            self.assertIn("elif launchctl print user/$(id -u)", command)
             self.assertIn("launchctl bootstrap gui/$(id -u)", command)
             self.assertIn('"$HOME"/Library/LaunchAgents/org.example.test.plist', command)
             self.assertIn("|| exit $?", command)
@@ -1290,6 +1291,7 @@ class TopologyTests(ControlFixture):
                 "print",
                 "bootout",
                 "print",
+                "print",
                 "bootstrap",
                 "kickstart",
                 "print",
@@ -1297,10 +1299,48 @@ class TopologyTests(ControlFixture):
                 "print",
                 "bootout",
                 "print",
+                "print",
                 "bootstrap",
                 "kickstart",
             ],
         )
+
+    def test_launchd_uses_user_domain_when_gui_domain_is_hidden_over_ssh(self) -> None:
+        component = self.topology.resolve_component("agent")
+        launchctl = self.root / "launchctl"
+        calls = self.root / "launchd-calls"
+        launchctl.write_text(
+            "#!/bin/sh\n"
+            "printf '%s %s\\n' \"$1\" \"$2\" >> \"$LLMOPS_TEST_CALLS\"\n"
+            "case \"$1 $2\" in\n"
+            "  'print gui/'*) exit 113 ;;\n"
+            "  'print user/'*) exit 0 ;;\n"
+            "  'kickstart -k') exit 0 ;;\n"
+            "  *) exit 2 ;;\n"
+            "esac\n",
+            encoding="utf-8",
+        )
+        launchctl.chmod(0o755)
+        environment = {
+            **os.environ,
+            "PATH": f"{self.root}:{os.environ['PATH']}",
+            "LLMOPS_TEST_CALLS": str(calls),
+        }
+        profile = {"label": "org.example.test", "plist": "unused.plist"}
+        for action in ("status", "start"):
+            completed = subprocess.run(
+                ["/bin/sh", "-c", _launchd_command(profile, component, action)],
+                capture_output=True,
+                text=True,
+                check=False,
+                env=environment,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+        call_lines = calls.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(sum("print gui/" in line for line in call_lines), 2)
+        self.assertEqual(sum("print user/" in line for line in call_lines), 2)
+        self.assertTrue(any("kickstart -k" in line for line in call_lines))
+        self.assertFalse(any("bootstrap" in line for line in call_lines))
 
     def test_launchd_bootstrap_permission_failure_is_explicit(self) -> None:
         component = self.topology.resolve_component("agent")
@@ -1340,7 +1380,10 @@ class TopologyTests(ControlFixture):
         )
         self.assertEqual(completed.returncode, 77)
         self.assertIn("Operation not permitted", completed.stderr)
-        self.assertEqual(calls.read_text(encoding="utf-8").splitlines(), ["print", "bootstrap"])
+        self.assertEqual(
+            calls.read_text(encoding="utf-8").splitlines(),
+            ["print", "print", "bootstrap"],
+        )
 
     @mock.patch("llmops_kit.llmops_drivers.subprocess.run")
     def test_launchd_timeout_returns_bounded_failure(self, run: mock.Mock) -> None:

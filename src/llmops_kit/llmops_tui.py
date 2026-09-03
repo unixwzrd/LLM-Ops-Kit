@@ -102,7 +102,7 @@ def _textual_types() -> tuple[Any, ...]:
         from textual.app import App, ComposeResult
         from textual.containers import Horizontal, Vertical
         from textual.screen import ModalScreen
-        from textual.widgets import Button, Checkbox, DataTable, Header, Input, Label, RichLog, Select, Static, Tree
+        from textual.widgets import Button, DataTable, Header, Input, Label, RichLog, Select, Static, TextArea, Tree
     except ImportError as exc:
         raise RuntimeError(
             "Textual is not installed; repair the normal installation or install the tui extra"
@@ -115,7 +115,6 @@ def _textual_types() -> tuple[Any, ...]:
         Vertical,
         ModalScreen,
         Button,
-        Checkbox,
         DataTable,
         Header,
         Input,
@@ -123,6 +122,7 @@ def _textual_types() -> tuple[Any, ...]:
         RichLog,
         Select,
         Static,
+        TextArea,
         Tree,
     )
 
@@ -138,7 +138,6 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
         Vertical,
         ModalScreen,
         Button,
-        Checkbox,
         DataTable,
         Header,
         Input,
@@ -146,6 +145,7 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
         RichLog,
         Select,
         Static,
+        TextArea,
         Tree,
     ) = _textual_types()
 
@@ -195,11 +195,46 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
             return parse_schema_value(node, json.dumps(mapping, separators=(",", ":")))
         return parse_schema_value(node, raw)
 
+    class BooleanCheckbox(Button):
+        """Checkbox-shaped boolean control using Textual's reliable button path."""
+
+        BINDINGS = [("enter,space", "press", "Toggle")]
+
+        def __init__(
+            self,
+            label: str,
+            *,
+            value: bool = False,
+            id: Optional[str] = None,
+        ) -> None:
+            self._checkbox_label = label
+            self._value = bool(value)
+            super().__init__(self._rendered_label(), id=id, classes="boolean-checkbox")
+            self.set_class(self._value, "-on")
+
+        def _rendered_label(self) -> Any:
+            return Text(f"[{'X' if self._value else ' '}] {self._checkbox_label}")
+
+        @property
+        def value(self) -> bool:
+            return self._value
+
+        @value.setter
+        def value(self, value: bool) -> None:
+            self._value = bool(value)
+            self.label = self._rendered_label()
+            self.set_class(self._value, "-on")
+
+        def press(self) -> Any:
+            if not self.disabled and self.display:
+                self.value = not self.value
+            return self
+
     def schema_widget(row: dict[str, Any], value: Any, widget_id: str) -> Any:
         """Build the supported Textual control declared by one schema field."""
 
         if row.get("type") == "boolean" or row.get("widget") == "checkbox":
-            return Checkbox("Enabled", value=bool(value), id=widget_id)
+            return BooleanCheckbox(field_title(row), value=bool(value), id=widget_id)
         if row.get("allowed"):
             options = tuple((str(item), item) for item in row["allowed"])
             selected = value if value in row["allowed"] else row["allowed"][0]
@@ -218,14 +253,14 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
 
     def widget_raw(screen: Any, row: dict[str, Any], widget_id: str) -> str:
         if row.get("type") == "boolean" or row.get("widget") == "checkbox":
-            return "true" if screen.query_one(f"#{widget_id}", Checkbox).value else "false"
+            return "true" if screen.query_one(f"#{widget_id}", BooleanCheckbox).value else "false"
         if row.get("allowed"):
             return str(screen.query_one(f"#{widget_id}", Select).value)
         return screen.query_one(f"#{widget_id}", Input).value.strip()
 
     def set_widget_value(screen: Any, row: dict[str, Any], widget_id: str, value: Any) -> None:
         if row.get("type") == "boolean" or row.get("widget") == "checkbox":
-            screen.query_one(f"#{widget_id}", Checkbox).value = bool(value)
+            screen.query_one(f"#{widget_id}", BooleanCheckbox).value = bool(value)
         elif row.get("allowed"):
             allowed = row["allowed"]
             screen.query_one(f"#{widget_id}", Select).value = value if value in allowed else allowed[0]
@@ -356,6 +391,10 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                         row["allowed"] = sorted(provider_template.endpoints.get("provides", {}))
             self.initial_values = [self._initial_value(row) for row in self.rows]
             self.groups = list(dict.fromkeys(str(row.get("group") or "General") for row in self.rows))
+            self.group_heading_ids = {
+                group: f"schema-group-heading-{index}"
+                for index, group in enumerate(self.groups)
+            }
             self.advanced_visible = False
             self.shared_components = sorted(
                 item.qualified_id
@@ -403,7 +442,11 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                     for index, row in enumerate(self.rows):
                         group = str(row.get("group") or "General")
                         if group != previous_group:
-                            yield Static(group, classes="field-group")
+                            yield Static(
+                                group,
+                                id=self.group_heading_ids[group],
+                                classes="field-group",
+                            )
                             previous_group = group
                         classes = "schema-field advanced-field" if row.get("advanced") else "schema-field"
                         with Vertical(id=f"schema-row-{index}", classes=classes):
@@ -477,6 +520,13 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
 
         def on_select_changed(self, event: Any) -> None:
             if event.select.id == "schema-group":
+                group = str(event.value)
+                heading_id = self.group_heading_ids.get(group)
+                if heading_id is not None:
+                    self.query_one(f"#{heading_id}").scroll_visible(
+                        top=True,
+                        immediate=True,
+                    )
                 return
             try:
                 index = int(str(event.select.id).removeprefix("schema-field-"))
@@ -593,32 +643,62 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                 f"[{row.get('source', 'unknown')}]"
                 for row in fields
             )
+            details_text = (
+                json.dumps(
+                    {
+                        "status": self.status,
+                        "effective_configuration": effective,
+                        "template": self.component.template_id,
+                        "connections": self.component.connections,
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n\nFields and value sources\n"
+                + field_text
+            )
             with Vertical(classes="dialog details-dialog", id="details-dialog"):
                 yield Label(f"Details: {self.component.qualified_id}", classes="dialog-title")
                 yield Static(
-                    json.dumps(
-                        {
-                            "status": self.status,
-                            "effective_configuration": effective,
-                            "template": self.component.template_id,
-                            "connections": self.component.connections,
-                        },
-                        indent=2,
-                        sort_keys=True,
-                    )
-                    + "\n\nFields and value sources\n"
-                    + field_text,
+                    "Scroll with the mouse wheel, arrows, or Page Up/Down. Drag to select; Ctrl+C copies the selection.",
+                    classes="field-help",
+                )
+                yield TextArea(
+                    details_text,
+                    read_only=True,
+                    soft_wrap=True,
+                    show_line_numbers=False,
+                    id="details-body",
                     classes="dialog-body details-body",
                 )
+                yield Static("", id="details-copy-status", classes="field-help")
                 with Horizontal(classes="dialog-actions"):
                     yield Button("Close", id="close")
+                    yield Button("Copy selection", id="copy-selection")
+                    yield Button("Copy all", id="copy-all")
                     if self.template is not None:
                         for action in sorted(self.template.actions):
                             yield Button(action.replace("-", " ").title(), id=f"tool-action-{action}")
 
+        def on_mount(self) -> None:
+            self.query_one("#details-body", TextArea).focus()
+
         def on_button_pressed(self, event: Any) -> None:
             if event.button.id == "close":
                 self.dismiss(None)
+            elif event.button.id in {"copy-selection", "copy-all"}:
+                viewer = self.query_one("#details-body", TextArea)
+                text = viewer.selected_text if event.button.id == "copy-selection" else viewer.text
+                status = self.query_one("#details-copy-status", Static)
+                if text:
+                    self.app.copy_to_clipboard(text)
+                    status.update(
+                        "Copied selection to the terminal clipboard."
+                        if event.button.id == "copy-selection"
+                        else "Copied all details to the terminal clipboard."
+                    )
+                else:
+                    status.update("Select text in the details viewer first.")
             elif str(event.button.id).startswith("tool-action-"):
                 self.dismiss(str(event.button.id).removeprefix("tool-action-"))
 
@@ -805,7 +885,7 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                 yield Label(f"Clone {self.component.qualified_id}", classes="dialog-title")
                 yield Label("New component ID")
                 yield Input(id="clone-id")
-                yield Checkbox("Share existing reusable profile", value=True, id="clone-share-profile")
+                yield BooleanCheckbox("Share existing reusable profile", value=True, id="clone-share-profile")
                 with Horizontal(classes="dialog-actions"):
                     yield Button("Cancel", id="cancel")
                     yield Button("Review", id="review", variant="primary")
@@ -817,7 +897,7 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
             self.dismiss(
                 {
                     "new_id": self.query_one("#clone-id", Input).value.strip(),
-                    "share_profile": self.query_one("#clone-share-profile", Checkbox).value,
+                    "share_profile": self.query_one("#clone-share-profile", BooleanCheckbox).value,
                 }
             )
 
@@ -1131,7 +1211,7 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
         def compose(self) -> ComposeResult:
             with Vertical(classes="dialog", id="settings-dialog"):
                 yield Label("Local TUI Settings", classes="dialog-title")
-                yield Checkbox(
+                yield BooleanCheckbox(
                     "Automatic refresh",
                     value=self.preferences.auto_refresh,
                     id="settings-auto-refresh",
@@ -1162,7 +1242,7 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                 return
             self.dismiss(
                 UiPreferences(
-                    auto_refresh=self.query_one("#settings-auto-refresh", Checkbox).value,
+                    auto_refresh=self.query_one("#settings-auto-refresh", BooleanCheckbox).value,
                     refresh_seconds=seconds,
                     theme=str(self.query_one("#settings-theme", Select).value),
                 )
@@ -1523,11 +1603,9 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
         Select > SelectOverlay:focus { background: #111923; border: tall #8aa6ba; background-tint: transparent; }
         Select > SelectOverlay > .option-list--option-highlighted { background: #29445c; color: #ffffff; }
         Select > SelectOverlay > .option-list--option-hover { background: #243444; color: #ffffff; }
-        Checkbox { background: #18222d; color: #ffffff; border: tall #557086; }
-        Checkbox > .toggle--button { background: #243444; color: #8aa6ba; }
-        Checkbox.-on > .toggle--button { background: #243444; color: #43d17a; }
-        Checkbox:focus { background: #18222d; border: tall #8aa6ba; background-tint: transparent; }
-        Checkbox:focus > .toggle--label { background: #29445c; color: #ffffff; text-style: bold; }
+        .boolean-checkbox { width: auto; min-width: 0; height: 3; margin: 0; padding: 0 1; background: #18222d; color: #ffffff; border: tall #557086; text-align: left; }
+        .boolean-checkbox.-on { color: #43d17a; }
+        .boolean-checkbox:hover, .boolean-checkbox:focus { background: #29445c; color: #ffffff; border: tall #8aa6ba; background-tint: transparent; }
         #topology-dialog { width: 95%; height: 95%; padding: 1 2; border: thick #6f8ea3; background: #0b0f14; }
         #topology-filters { height: 5; }
         #topology-filters Select { width: 1fr; margin-right: 1; }
@@ -1535,6 +1613,9 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
         #topology-detail { height: 8; border-top: solid #6f8ea3; padding: 1; }
         .schema-dialog, .details-dialog, .catalog-dialog { width: 95%; height: 95%; max-height: 95%; }
         #schema-fields, #add-profile-fields, .details-body { height: 1fr; overflow-y: auto; padding-right: 1; }
+        #details-body { background: #0b0f14; color: #f5f7fa; border: tall #557086; }
+        #details-body:focus { border: tall #8aa6ba; }
+        #details-copy-status { height: 1; color: #9fe870; }
         #schema-tools { height: 3; margin-bottom: 1; }
         #schema-tools Select { width: 1fr; margin-right: 1; }
         #schema-tools Button { min-width: 16; }

@@ -37,6 +37,43 @@ def _free_port() -> int:
         raise unittest.SkipTest(f"local socket bind not permitted in this environment: {exc}") from exc
 
 
+def _bridge_args(
+    root: Path,
+    samples_dir: Path,
+    **overrides: object,
+) -> argparse.Namespace:
+    listen_host = socket.gethostbyname("localhost")
+    values: dict[str, object] = {
+        "listen_host": listen_host,
+        "listen_port": _free_port(),
+        "upstream_base": f"http://{listen_host}:{_free_port()}/v1",
+        "model": "",
+        "voice": "",
+        "prefer_incoming_voice": False,
+        "ref_audio": "",
+        "ref_text": "",
+        "response_format": "wav",
+        "timeout_seconds": 5,
+        "config_dir": str(root),
+        "pronounce_config": None,
+        "voice_map_config": None,
+        "samples_dir": str(samples_dir),
+    }
+    values.update(overrides)
+    return argparse.Namespace(**values)
+
+
+def _derived_alias_fixture(samples_dir: Path) -> tuple[str, str, dict[str, object]]:
+    alias = f"voice-{samples_dir.name}"
+    sample_name = f"{alias}.wav"
+    mapping = {
+        "alias": alias,
+        "sample": sample_name,
+        "sample_derived": True,
+    }
+    return alias, sample_name, mapping
+
+
 class _FakeUpstreamHandler(BaseHTTPRequestHandler):
     received: list[dict[str, object]] = []
     audio_bytes = b"RIFFfakewav"
@@ -130,22 +167,7 @@ class TTSBridgeServerTests(unittest.TestCase):
                 json.dumps({"Faith": {"sample": "faith.wav"}}),
                 encoding="utf-8",
             )
-            args = argparse.Namespace(
-                listen_host="127.0.0.1",
-                listen_port=11440,
-                upstream_base="http://127.0.0.1:11439/v1",
-                model="",
-                voice="",
-                prefer_incoming_voice=False,
-                ref_audio="",
-                ref_text="",
-                response_format="wav",
-                timeout_seconds=120,
-                config_dir=str(root),
-                pronounce_config=None,
-                voice_map_config=None,
-                samples_dir=str(samples_dir),
-            )
+            args = _bridge_args(root, samples_dir)
             cfg = MODULE.build_bridge_config(args)
             self.assertEqual(cfg["config_dir"], str(root.resolve()))
             self.assertEqual(cfg["pronounce_config"], str((root / "pronounce.json").resolve()))
@@ -170,22 +192,7 @@ class TTSBridgeServerTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            args = argparse.Namespace(
-                listen_host="127.0.0.1",
-                listen_port=11440,
-                upstream_base="http://127.0.0.1:11439/v1",
-                model="",
-                voice="",
-                prefer_incoming_voice=False,
-                ref_audio="",
-                ref_text="",
-                response_format="wav",
-                timeout_seconds=120,
-                config_dir=str(root),
-                pronounce_config=None,
-                voice_map_config=None,
-                samples_dir=str(samples_dir),
-            )
+            args = _bridge_args(root, samples_dir)
             cfg = MODULE.build_bridge_config(args)
             self.assertEqual(cfg["voice_map_defaults"]["sample_dir"], "mia")
             self.assertEqual(cfg["voice_map_defaults"]["sample"], "default.wav")
@@ -197,22 +204,7 @@ class TTSBridgeServerTests(unittest.TestCase):
             samples_dir.mkdir()
             bad = root / "pronounce.json"
             bad.write_text("{bad", encoding="utf-8")
-            args = argparse.Namespace(
-                listen_host="127.0.0.1",
-                listen_port=11440,
-                upstream_base="http://127.0.0.1:11439/v1",
-                model="",
-                voice="",
-                prefer_incoming_voice=False,
-                ref_audio="",
-                ref_text="",
-                response_format="wav",
-                timeout_seconds=120,
-                config_dir=str(root),
-                pronounce_config=None,
-                voice_map_config=None,
-                samples_dir=str(samples_dir),
-            )
+            args = _bridge_args(root, samples_dir)
             with self.assertRaises(MODULE.BridgeConfigError) as ctx:
                 MODULE.build_bridge_config(args)
             self.assertIn("pronounce config invalid JSON", str(ctx.exception))
@@ -224,29 +216,152 @@ class TTSBridgeServerTests(unittest.TestCase):
             samples_dir = root / "samples"
             samples_dir.mkdir()
             (root / "voice-map.json").write_text(
-                json.dumps({"Faith": {}}),
+                json.dumps(
+                    {
+                        "Faith": {
+                            "sample": "faith.wav",
+                            "reference_id": "ref_0123456789abcdef0123456789abcdef",
+                        }
+                    }
+                ),
                 encoding="utf-8",
             )
-            args = argparse.Namespace(
-                listen_host="127.0.0.1",
-                listen_port=11440,
-                upstream_base="http://127.0.0.1:11439/v1",
-                model="",
-                voice="",
-                prefer_incoming_voice=False,
-                ref_audio="",
-                ref_text="",
-                response_format="wav",
-                timeout_seconds=120,
-                config_dir=str(root),
-                pronounce_config=None,
-                voice_map_config=None,
-                samples_dir=str(samples_dir),
-            )
+            args = _bridge_args(root, samples_dir)
             with self.assertRaises(MODULE.BridgeConfigError) as ctx:
                 MODULE.build_bridge_config(args)
-            self.assertIn("exactly one of 'sample' or 'reference_id'", str(ctx.exception))
+            self.assertIn("cannot set both 'sample' and 'reference_id'", str(ctx.exception))
             self.assertIn("Faith", str(ctx.exception))
+
+    def test_build_bridge_config_derives_sample_from_alias_name(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            samples_dir = root / "samples"
+            samples_dir.mkdir()
+            alias_name = f"voice-{root.name}"
+            (root / "voice-map.json").write_text(
+                json.dumps({alias_name: {"language": "en"}}),
+                encoding="utf-8",
+            )
+            args = _bridge_args(root, samples_dir)
+            cfg = MODULE.build_bridge_config(args)
+            alias = cfg["voice_map"][alias_name.casefold()]
+            self.assertEqual(alias["sample"], f"{alias_name}.wav")
+            self.assertTrue(alias["sample_derived"])
+
+    def test_derived_alias_overrides_default_reference_id(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            samples_dir = root / "samples"
+            samples_dir.mkdir()
+            alias_name, sample_name, mapping = _derived_alias_fixture(samples_dir)
+            sample = samples_dir / sample_name
+            transcript = sample.with_suffix(".txt")
+            sample.write_bytes(b"wav")
+            transcript.write_text("exact sample transcript", encoding="utf-8")
+            cfg = {
+                "model": "",
+                "voice": "",
+                "prefer_incoming_voice": False,
+                "ref_audio": "",
+                "ref_text": "",
+                "response_format": "wav",
+                "pronounce_map": {},
+                "voice_map_defaults": {
+                    "reference_id": "ref_0123456789abcdef0123456789abcdef"
+                },
+                "voice_map": {
+                    alias_name.casefold(): mapping
+                },
+                "samples_dir": str(samples_dir),
+                "upstream_capabilities": {"transcript_required": True},
+            }
+            output, _, _ = MODULE.build_upstream_payload(
+                {"input": "hello", "voice": alias_name}, cfg
+            )
+            self.assertEqual(output["ref_audio"], str(sample.resolve()))
+            self.assertEqual(output["ref_text"], str(transcript.resolve()))
+            self.assertNotIn("reference_id", output)
+
+    def test_derived_alias_missing_sample_returns_422(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            samples_dir = Path(tmp)
+            alias_name, sample_name, mapping = _derived_alias_fixture(samples_dir)
+            cfg = {
+                "model": "",
+                "voice": "",
+                "prefer_incoming_voice": False,
+                "ref_audio": "",
+                "ref_text": "",
+                "response_format": "wav",
+                "pronounce_map": {},
+                "voice_map_defaults": {},
+                "voice_map": {
+                    alias_name.casefold(): mapping
+                },
+                "samples_dir": str(samples_dir),
+                "upstream_capabilities": {"transcript_required": True},
+            }
+            with self.assertRaises(MODULE.BridgeRequestError) as ctx:
+                MODULE.build_upstream_payload(
+                    {"input": "hello", "voice": alias_name}, cfg
+                )
+            self.assertEqual(ctx.exception.status, 422)
+            self.assertIn(sample_name, ctx.exception.message)
+
+    def test_derived_alias_missing_required_transcript_returns_422(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            samples_dir = Path(tmp)
+            alias_name, sample_name, mapping = _derived_alias_fixture(samples_dir)
+            sample = samples_dir / sample_name
+            sample.write_bytes(b"wav")
+            cfg = {
+                "model": "",
+                "voice": "",
+                "prefer_incoming_voice": False,
+                "ref_audio": "",
+                "ref_text": "",
+                "response_format": "wav",
+                "pronounce_map": {},
+                "voice_map_defaults": {},
+                "voice_map": {
+                    alias_name.casefold(): mapping
+                },
+                "samples_dir": str(samples_dir),
+                "upstream_capabilities": {"transcript_required": True},
+            }
+            with self.assertRaises(MODULE.BridgeRequestError) as ctx:
+                MODULE.build_upstream_payload(
+                    {"input": "hello", "voice": alias_name}, cfg
+                )
+            self.assertEqual(ctx.exception.status, 422)
+            self.assertIn(sample.with_suffix(".txt").name, ctx.exception.message)
+
+    def test_derived_alias_omits_missing_transcript_for_audio_only_model(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            samples_dir = Path(tmp)
+            alias_name, sample_name, mapping = _derived_alias_fixture(samples_dir)
+            sample = samples_dir / sample_name
+            sample.write_bytes(b"wav")
+            cfg = {
+                "model": "",
+                "voice": "",
+                "prefer_incoming_voice": False,
+                "ref_audio": "",
+                "ref_text": "",
+                "response_format": "wav",
+                "pronounce_map": {},
+                "voice_map_defaults": {},
+                "voice_map": {
+                    alias_name.casefold(): mapping
+                },
+                "samples_dir": str(samples_dir),
+                "upstream_capabilities": {"transcript_required": False},
+            }
+            output, _, _ = MODULE.build_upstream_payload(
+                {"input": "hello", "voice": alias_name}, cfg
+            )
+            self.assertEqual(output["ref_audio"], str(sample.resolve()))
+            self.assertNotIn("ref_text", output)
 
     def test_build_upstream_payload_applies_alias_case_insensitively(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -357,10 +472,13 @@ class TTSBridgeServerTests(unittest.TestCase):
             self.assertEqual(output["ref_text"], str((samples_dir / "missing.txt").resolve()))
 
     def test_health_payload_reports_config_paths_and_counts(self) -> None:
+        listen_host = socket.gethostbyname("localhost")
+        listen_port = _free_port()
+        upstream_port = _free_port()
         cfg = {
-            "upstream_base": "http://127.0.0.1:11439/v1",
-            "listen_host": "127.0.0.1",
-            "listen_port": 11440,
+            "upstream_base": f"http://{listen_host}:{upstream_port}/v1",
+            "listen_host": listen_host,
+            "listen_port": listen_port,
             "model": "model-path",
             "voice": "",
             "ref_audio": "/tmp/sample.wav",
