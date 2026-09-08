@@ -8,6 +8,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -75,7 +76,11 @@ class ModelctlMmprojTests(unittest.TestCase):
                     timeout=10,
                 )
                 self.assertEqual(started.returncode, 0, started.stderr)
-                argv = (root / "argv.txt").read_text(encoding="utf-8").splitlines()
+                argv_path = root / "argv.txt"
+                deadline = time.monotonic() + 3
+                while not argv_path.is_file() and time.monotonic() < deadline:
+                    time.sleep(0.05)
+                argv = argv_path.read_text(encoding="utf-8").splitlines()
                 index = argv.index("--mmproj")
                 self.assertEqual(argv[index + 1], str(mmproj))
             finally:
