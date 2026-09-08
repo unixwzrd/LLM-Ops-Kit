@@ -30,6 +30,7 @@ from llmops_kit.llmops_templates import (
     flatten_schema,
     load_template_registry,
     parse_schema_value,
+    validate_profile,
     validate_template_document,
 )
 from llmops_kit.llmops_topology import load_profile
@@ -38,6 +39,22 @@ from test_llmops_control import ControlFixture
 
 
 class SchemaConfigurationTests(ControlFixture):
+    def test_llama_cpp_template_exposes_chat_only_vision_projector(self) -> None:
+        template = load_template_registry(self.paths)["llama-cpp"]
+        paths = {row["path"] for row in flatten_schema(template.profile_schema)}
+        self.assertIn("mmproj_path", paths)
+
+        embedding = dict(template.defaults)
+        embedding.update(
+            {
+                "name": "embedding",
+                "type": "embedding",
+                "model_path": "/models/embedding.gguf",
+                "mmproj_path": "/models/mmproj.gguf",
+            }
+        )
+        self.assertTrue(any("mmproj_path" in finding for finding in validate_profile(template, embedding)))
+
     def test_schema_value_parser_supports_integer_or_string_fields(self) -> None:
         schema = {"type": ["integer", "string"]}
         self.assertEqual(parse_schema_value(schema, "12"), 12)
@@ -120,6 +137,7 @@ class SchemaConfigurationTests(ControlFixture):
             "type": "llm",
             "env": {
                 "MODEL": "/models/chat.gguf",
+                "MMPROJ": "/models/mmproj.gguf",
                 "HOST": "0.0.0.0",
                 "PORT": "11434",
                 "CTX_SIZE": "65536",
@@ -177,6 +195,7 @@ class SchemaConfigurationTests(ControlFixture):
         self.assertEqual(migrated_chat["env"], chat["env"])
         self.assertEqual(migrated_chat["environment"], chat["env"])
         self.assertEqual(migrated_chat["model_path"], "/models/chat.gguf")
+        self.assertEqual(migrated_chat["mmproj_path"], "/models/mmproj.gguf")
         self.assertEqual(migrated_chat["runtime"]["port"], 11434)
         self.assertEqual(migrated_chat["server"]["spec_type"], "mtp")
 

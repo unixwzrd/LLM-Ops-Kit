@@ -141,6 +141,10 @@ validate_model_settings() {
           exit 2
         fi
       fi
+      if [[ -n "${MMPROJ:-}" && ! -f "$MMPROJ" ]]; then
+        echo "Configured MMPROJ does not exist: $MMPROJ" >&2
+        exit 2
+      fi
       ;;
     embedding)
       for v in "${common_llama[@]}"; do
@@ -452,7 +456,7 @@ start_model() {
   SAMPLING_FLAGS=()
 
   if [[ "$MODEL_TYPE" == "llm" ]]; then
-    if [[ -n "${MMPROJ:-}" && -f "$MMPROJ" ]]; then
+    if [[ -n "${MMPROJ:-}" ]]; then
       MM_FLAGS+=(--mmproj "$MMPROJ")
     fi
     if [[ "${USE_CUSTOM_TEMPLATE:-0}" == "1" ]]; then

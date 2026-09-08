@@ -113,6 +113,9 @@ def probe_topology(topology: Topology) -> dict[str, Any]:
             model_path = values.get("MODEL")
             if model_path:
                 checks.append(_path_check(topology, component.host, f"{component.qualified_id}:model", model_path, enabled=component.enabled))
+            mmproj_path = values.get("MMPROJ")
+            if mmproj_path:
+                checks.append(_path_check(topology, component.host, f"{component.qualified_id}:mmproj", mmproj_path, enabled=component.enabled))
             python_path = values.get("TTS_PYTHON_BIN")
             if python_path:
                 checks.append(_executable_check(topology, component.host, f"{component.qualified_id}:python", python_path, enabled=component.enabled))

@@ -90,6 +90,7 @@ def resolve_references(values: dict[str, str], env: dict[str, str]) -> dict[str,
 def model_values(profile: dict[str, Any]) -> dict[str, str]:
     """Resolve a model profile into the stable modelctl runtime vocabulary."""
 
+    model_type = str(profile.get("type", profile.get("model_type", "llm")))
     runtime = profile.get("runtime") or profile.get("server") or {}
     llama = profile.get("llama") or {}
     sampling = profile.get("sampling") or {}
@@ -101,12 +102,16 @@ def model_values(profile: dict[str, Any]) -> dict[str, str]:
     if explicit is not None:
         if not isinstance(explicit, dict):
             raise ProfileError("model environment must be a JSON object")
-        return _clean(explicit)
+        values = _clean(explicit)
+        if model_type == "llm" and profile.get("mmproj_path") not in (None, ""):
+            values["MMPROJ"] = str(profile["mmproj_path"])
+        return values
     return _clean(
         {
             "MODEL_PROFILE": profile.get("name"),
-            "MODEL_TYPE": profile.get("type", profile.get("model_type", "llm")),
+            "MODEL_TYPE": model_type,
             "MODEL": profile.get("model_path"),
+            "MMPROJ": profile.get("mmproj_path") if model_type == "llm" else None,
             "PORT": runtime.get("port"),
             "HOST": runtime.get("host"),
             "THREADS": runtime.get("threads", "auto"),

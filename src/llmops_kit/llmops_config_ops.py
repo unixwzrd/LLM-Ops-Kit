@@ -157,6 +157,8 @@ def _normalize_v1_profile(document: dict[str, Any], template_id: str) -> None:
     if template_id == "llama-cpp" and isinstance(environment, dict):
         if environment.get("MODEL"):
             document.setdefault("model_path", environment["MODEL"])
+        if environment.get("MMPROJ"):
+            document.setdefault("mmproj_path", environment["MMPROJ"])
         runtime = document.setdefault("runtime", {})
         runtime.setdefault("host", environment.get("HOST", "127.0.0.1"))
         runtime.setdefault("port", _legacy_int(environment.get("PORT", 11434)))

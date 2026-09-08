@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added an optional schema-backed `mmproj_path` to llama.cpp chat profiles, including TUI editing, legacy `MMPROJ` migration, remote preflight checks, and fail-closed modelctl startup validation.
 - Resolved Bash through `PATH` across installers, updates, probes, acceptance tests, and operator documentation instead of assuming Intel Homebrew's `/usr/local/bin/bash`; upgraded CI actions to their Node.js 24 runtimes.
 - Made managed stack shutdown attempt every component in exact reverse dependency order even when one stop fails, while retaining aggregated failure reporting.
 - Verified successful stop commands against observed lifecycle and refused to report completion when a managed component remains running or becomes unreachable.

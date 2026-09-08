@@ -1,7 +1,7 @@
 {
   "template_version": 1,
   "id": "llama-cpp",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "adapter": "llama-cpp",
   "profile_kind": "model",
   "component_kind": "model",
@@ -17,7 +17,8 @@
       "template_id": {"type": "string", "const": "llama-cpp", "default": "llama-cpp"},
       "name": {"type": "string", "minLength": 1, "x-llmops-ui": {"group": "Identity", "order": 10, "label": "Profile name"}},
       "type": {"type": "string", "enum": ["llm", "embedding"], "default": "llm", "x-llmops-ui": {"group": "Identity", "order": 20, "widget": "select", "label": "Model role"}},
-      "model_path": {"type": "string", "minLength": 1, "x-llmops-ui": {"group": "Model", "order": 10, "widget": "path", "label": "Model file", "help": "Absolute or home-relative path to the GGUF model."}},
+      "model_path": {"type": "string", "minLength": 1, "x-llmops-ui": {"group": "Model", "order": 10, "widget": "path", "label": "Model file", "help": "Absolute or home-relative path to the GGUF language model."}},
+      "mmproj_path": {"type": "string", "minLength": 1, "x-llmops-ui": {"group": "Model", "order": 20, "widget": "path", "label": "Vision projector", "help": "Optional GGUF mmproj file used by multimodal chat models. This is not used by embedding profiles."}},
       "runtime": {
         "type": "object",
         "required": ["host", "port"],
@@ -62,7 +63,10 @@
         ]
       },
       "sampling": {"type": "object", "additionalProperties": true}
-    }
+    },
+    "allOf": [
+      {"if": {"properties": {"type": {"const": "embedding"}}, "required": ["type"]}, "then": {"not": {"required": ["mmproj_path"]}}}
+    ]
   },
   "defaults": {"schema_version": 2, "template_id": "llama-cpp", "name": "model", "type": "llm", "model_path": "/path/to/model.gguf", "runtime": {"binary": "llama-server", "host": "127.0.0.1", "port": 11434, "threads": "auto"}, "llama": {"ctx_size": 32768, "gpu_layers": "auto", "batch_size": 2048, "ubatch_size": 512}, "template": {"enabled": false}, "server": {"cache_prompt": true, "spec_type": "none", "extra_flags": []}},
   "bindings": {"resolver": "modelctl"},

@@ -226,9 +226,15 @@ llmops component configure local-ai:chat \
 llmops component configure local-ai:chat \
   --set profile.llama.ctx_size=65536 \
   --apply --yes
+
+llmops component configure local-ai:chat \
+  --set profile.mmproj_path=/models/mmproj-model.gguf \
+  --apply --yes
 ```
 
 `--unset` restores a schema default when one exists. Arrays and objects use JSON literals. Unknown paths, invalid values, read-only fields, and cross-field constraint violations fail before any file is replaced.
+
+`profile.mmproj_path` is an optional llama.cpp chat-model field. Model resolution passes it to `llama-server` as `--mmproj`; preflight and startup fail when the configured file is missing. Embedding profiles reject the field, and the generic TTS model template does not expose it.
 
 Create reusable profiles and disabled components without editing JSON:
 

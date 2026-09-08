@@ -4,6 +4,7 @@
   "name": "chat",
   "type": "llm",
   "model_path": "/path/to/chat-model.gguf",
+  "mmproj_path": "/path/to/mmproj-model.gguf",
   "runtime": {
     "host": "127.0.0.1",
     "port": 11434

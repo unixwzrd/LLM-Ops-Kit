@@ -30,16 +30,45 @@ class ProfileTests(unittest.TestCase):
                 "name": "chat",
                 "type": "llm",
                 "model_path": "/models/chat.gguf",
+                "mmproj_path": "/models/mmproj.gguf",
                 "runtime": {"host": "127.0.0.1", "port": 11434},
                 "llama": {"ctx_size": 32768, "use_mlock": True},
                 "server": {"cache_prompt": True, "extra_flags": ["--metrics"]},
             }
         )
         self.assertEqual(values["MODEL"], "/models/chat.gguf")
+        self.assertEqual(values["MMPROJ"], "/models/mmproj.gguf")
         self.assertEqual(values["MODEL_PROFILE"], "chat")
         self.assertEqual(values["PORT"], "11434")
         self.assertEqual(values["USE_MLOCK"], "1")
         self.assertEqual(values["EXTRA_FLAGS"], "--metrics")
+
+    def test_embedding_profile_does_not_resolve_vision_projector(self) -> None:
+        values = model_values(
+            {
+                "schema_version": 2,
+                "name": "embedding",
+                "type": "embedding",
+                "model_path": "/models/embedding.gguf",
+                "mmproj_path": "/models/unused-mmproj.gguf",
+            }
+        )
+        self.assertNotIn("MMPROJ", values)
+
+    def test_structured_vision_projector_overrides_legacy_environment(self) -> None:
+        values = model_values(
+            {
+                "schema_version": 2,
+                "name": "chat",
+                "type": "llm",
+                "mmproj_path": "/models/current-mmproj.gguf",
+                "environment": {
+                    "MODEL": "/models/chat.gguf",
+                    "MMPROJ": "/models/legacy-mmproj.gguf",
+                },
+            }
+        )
+        self.assertEqual(values["MMPROJ"], "/models/current-mmproj.gguf")
 
     def test_service_environment_is_explicit_json(self) -> None:
         self.assertEqual(
