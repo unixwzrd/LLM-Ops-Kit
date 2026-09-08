@@ -55,19 +55,21 @@ class ProfileTests(unittest.TestCase):
         )
         self.assertNotIn("MMPROJ", values)
 
-    def test_structured_vision_projector_overrides_legacy_environment(self) -> None:
+    def test_structured_model_paths_override_legacy_environment(self) -> None:
         values = model_values(
             {
                 "schema_version": 2,
                 "name": "chat",
                 "type": "llm",
+                "model_path": "/models/current-chat.gguf",
                 "mmproj_path": "/models/current-mmproj.gguf",
                 "environment": {
-                    "MODEL": "/models/chat.gguf",
+                    "MODEL": "/models/legacy-chat.gguf",
                     "MMPROJ": "/models/legacy-mmproj.gguf",
                 },
             }
         )
+        self.assertEqual(values["MODEL"], "/models/current-chat.gguf")
         self.assertEqual(values["MMPROJ"], "/models/current-mmproj.gguf")
 
     def test_service_environment_is_explicit_json(self) -> None:

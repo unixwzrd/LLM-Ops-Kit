@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.9.0b48 - 2026-09-08
+
+- Made structured llama.cpp model and projector paths override retained legacy environment values consistently, and aborted readiness waits when a launched component exits instead of waiting through the full health timeout.
+- Forwarded model-proxy streaming responses as soon as upstream data is available instead of buffering up to the configured chunk size, preventing slow SSE generations from triggering downstream stale-stream retries.
+
 ## 0.9.0b47 - 2026-09-07
 
 - Allowed explicit `component start`, `stop`, and `restart` operations for externally owned components while continuing to exclude them from stack-wide lifecycle operations.

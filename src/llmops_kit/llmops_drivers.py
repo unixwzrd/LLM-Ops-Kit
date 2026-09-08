@@ -796,11 +796,21 @@ class ComponentRunner:
         if health.kind == "none":
             return CommandResult(component.qualified_id, "health", "none", 0, "", "")
         deadline = time.monotonic() + health.timeout_seconds
+        next_status_check = 0.0
         last: Optional[CommandResult] = None
         while time.monotonic() < deadline:
             last = self.probe_health(component)
             if last.ok:
                 return last
+            now = time.monotonic()
+            if now >= next_status_check:
+                status = self.status(component)
+                if self.lifecycle_from_result(component, status) == "stopped":
+                    detail = status.stderr or status.stdout or "component is stopped"
+                    raise DriverError(
+                        f"{component.qualified_id}: exited before readiness: {detail}"
+                    )
+                next_status_check = now + 5.0
             time.sleep(1.0)
         detail = last.stderr or last.stdout if last is not None else "no health result"
         raise DriverError(f"{component.qualified_id}: readiness timed out: {detail}")

@@ -1083,6 +1083,20 @@ class TopologyTests(ControlFixture):
         self.assertIn("start timed out after 900 seconds", result.stderr)
         self.assertEqual(run.call_args.kwargs["timeout"], 900)
 
+    def test_readiness_fails_immediately_when_component_exits(self) -> None:
+        component = self.topology.resolve_component("chat")
+        runner = ComponentRunner(self.topology)
+        runner.probe_health = mock.Mock(
+            return_value=CommandResult(component.qualified_id, "health", "curl", 7, "", "refused")
+        )
+        runner.status = mock.Mock(
+            return_value=CommandResult(component.qualified_id, "status", "modelctl status", 1, "", "")
+        )
+        with self.assertRaisesRegex(DriverError, "exited before readiness"):
+            runner.wait_healthy(component)
+        runner.probe_health.assert_called_once_with(component)
+        runner.status.assert_called_once_with(component)
+
     def test_status_record_has_no_legacy_status_alias(self) -> None:
         self.write_json(
             self.paths.products_file,

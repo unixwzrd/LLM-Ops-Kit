@@ -75,6 +75,22 @@ def decode_body(data: bytes) -> tuple[str | None, Any | None]:
         return text, None
 
 
+def read_available_chunk(response: Any, size: int) -> bytes:
+    """Read currently available upstream data without filling the whole buffer.
+
+    ``HTTPResponse.read(size)`` may wait for ``size`` bytes or EOF. That
+    behavior turns an SSE proxy into a response buffer when individual events
+    are much smaller than the configured chunk size. ``read1`` performs at
+    most one underlying buffered read, allowing each available event to be
+    forwarded immediately while preserving the response bytes unchanged.
+    """
+
+    read1 = getattr(response, "read1", None)
+    if callable(read1):
+        return read1(size)
+    return response.read(size)
+
+
 def redact_headers(headers: dict[str, str]) -> dict[str, str]:
     redacted = {}
     for k, v in headers.items():
@@ -868,7 +884,7 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
                 self.end_headers()
 
                 while True:
-                    chunk = resp.read(self.stream_chunk_size)
+                    chunk = read_available_chunk(resp, self.stream_chunk_size)
                     if not chunk:
                         upstream_eof = True
                         break

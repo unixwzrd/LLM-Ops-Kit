@@ -103,6 +103,8 @@ def model_values(profile: dict[str, Any]) -> dict[str, str]:
         if not isinstance(explicit, dict):
             raise ProfileError("model environment must be a JSON object")
         values = _clean(explicit)
+        if profile.get("model_path") not in (None, ""):
+            values["MODEL"] = str(profile["model_path"])
         if model_type == "llm" and profile.get("mmproj_path") not in (None, ""):
             values["MMPROJ"] = str(profile["mmproj_path"])
         return values

@@ -656,6 +656,28 @@ class _BlockingCaptureHandler(_CaptureHandler):
         self.wfile.write(response_body)
 
 
+class _IncrementalStreamingHandler(_CaptureHandler):
+    first_event_sent = threading.Event()
+    release_final_event = threading.Event()
+    first_event = b'data: {"choices":[{"delta":{"content":"first"}}]}\n\n'
+    final_event = b"data: [DONE]\n\n"
+
+    def do_POST(self) -> None:
+        length = int(self.headers.get("Content-Length", "0"))
+        body = self.rfile.read(length)
+        type(self).received_bodies.append(body)
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.end_headers()
+        self.wfile.write(type(self).first_event)
+        self.wfile.flush()
+        type(self).first_event_sent.set()
+        if not type(self).release_final_event.wait(2):
+            raise TimeoutError("test did not release final SSE event")
+        self.wfile.write(type(self).final_event)
+        self.wfile.flush()
+
+
 class ProxyTapPassthroughTests(unittest.TestCase):
     def _start_server(self, handler_class):
         server = HTTPServer(("127.0.0.1", 0), handler_class)
@@ -1057,6 +1079,72 @@ class ProxyTapPassthroughTests(unittest.TestCase):
 
             raw_log = (log_dir / "proxy.raw.log").read_text(encoding="utf-8")
             self.assertIn(upstream_response.decode("utf-8"), raw_log)
+
+    def test_streaming_event_is_forwarded_before_upstream_eof(self) -> None:
+        _IncrementalStreamingHandler.received_bodies = []
+        _IncrementalStreamingHandler.first_event_sent = threading.Event()
+        _IncrementalStreamingHandler.release_final_event = threading.Event()
+        upstream, upstream_thread = self._start_server(_IncrementalStreamingHandler)
+        self.addCleanup(upstream.shutdown)
+        self.addCleanup(upstream.server_close)
+        self.addCleanup(upstream_thread.join, 1)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_dir = Path(tmpdir)
+
+            class FakeRenderer:
+                def render(self, **context):
+                    return "rendered incremental streaming prompt"
+
+            proxy_handler = self._make_proxy_handler(
+                log_dir,
+                f"http://127.0.0.1:{upstream.server_port}",
+                FakeRenderer(),
+            )
+            proxy, proxy_thread = self._start_server(proxy_handler)
+            self.addCleanup(proxy.shutdown)
+            self.addCleanup(proxy.server_close)
+            self.addCleanup(proxy_thread.join, 1)
+
+            result: dict[str, bytes | Exception] = {}
+            client_received_first = threading.Event()
+
+            def make_request() -> None:
+                try:
+                    request = Request(
+                        f"http://127.0.0.1:{proxy.server_port}/v1/chat/completions",
+                        data=b'{"messages":[{"role":"user","content":"hello"}],"stream":true}',
+                        headers={"Content-Type": "application/json"},
+                        method="POST",
+                    )
+                    with urlopen(request, timeout=5) as response:
+                        result["first"] = response.readline()
+                        client_received_first.set()
+                        result["remaining"] = response.read()
+                except Exception as exc:
+                    result["error"] = exc
+                    client_received_first.set()
+
+            client = threading.Thread(target=make_request, daemon=True)
+            client.start()
+            self.assertTrue(_IncrementalStreamingHandler.first_event_sent.wait(2))
+            self.assertTrue(
+                client_received_first.wait(1),
+                "proxy buffered the first SSE event until upstream EOF",
+            )
+            self.assertEqual(
+                result.get("first"),
+                _IncrementalStreamingHandler.first_event.splitlines(keepends=True)[0],
+            )
+
+            _IncrementalStreamingHandler.release_final_event.set()
+            client.join(5)
+            self.assertFalse(client.is_alive())
+            self.assertNotIn("error", result)
+            self.assertEqual(
+                result.get("first", b"") + result.get("remaining", b""),
+                _IncrementalStreamingHandler.first_event + _IncrementalStreamingHandler.final_event,
+            )
 
     def test_no_proxy_added_truncation_markers_in_logs(self) -> None:
         _CaptureHandler.received_bodies = []
