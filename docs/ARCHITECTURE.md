@@ -34,7 +34,7 @@ Component start satisfies missing upstream dependencies. Component restart affec
 
 The executor is idempotent. A failed start stops only components started by that invocation and leaves pre-existing services untouched. Mutations use a lifecycle lock; status, health, drift, plans, effective configuration, and logs are read-only. Interactive clients dispatch long-running mutations to detached short-lived workers that persist an operation record. No privileged daemon is required, and closing a client does not cancel an accepted operation.
 
-Managed user launchd operations use one load-if-needed contract: start and restart inspect the configured domain, bootstrap the reviewed plist only when unloaded, and then kickstart. Stop is an idempotent bootout. External launchd components remain read-only and are never bootstrapped by the control plane.
+Managed user launchd operations use one load-if-needed contract: start and restart inspect the configured domain, bootstrap the reviewed plist only when unloaded, and then kickstart. Stop is an idempotent bootout. Externally owned components are excluded from stack-wide lifecycle operations, but an explicit component command may operate a configured external launchd job.
 
 ## Module Boundaries
 

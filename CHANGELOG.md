@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.9.0b47 - 2026-09-07
+
+- Allowed explicit `component start`, `stop`, and `restart` operations for externally owned components while continuing to exclude them from stack-wide lifecycle operations.
+
 ## 0.9.0b46 - 2026-09-07
 
 - Added an optional schema-backed `mmproj_path` to llama.cpp chat profiles, including TUI editing, legacy `MMPROJ` migration, remote preflight checks, and fail-closed modelctl startup validation.

@@ -1582,7 +1582,11 @@ class PlannerTests(ControlFixture):
         stopped = [item.component.qualified_id for item in stack_plan(stack, "stop")]
         self.assertEqual(stopped, list(reversed(started)))
 
-    def test_stack_lifecycle_skips_externally_owned_components(self) -> None:
+    @mock.patch("llmops_kit.llmops_drivers.subprocess.run")
+    def test_stack_lifecycle_skips_externally_owned_components_but_explicit_action_runs(
+        self,
+        run: mock.Mock,
+    ) -> None:
         stack_config = json.loads((self.paths.stacks_dir / "sample.json").read_text(encoding="utf-8"))
         stack_config["components"][0]["ownership"] = "external"
         self.write_json(self.paths.stacks_dir / "sample.json", stack_config)
@@ -1604,9 +1608,12 @@ class PlannerTests(ControlFixture):
         self.assertIn("sample:chat", status_components)
 
         chat = topology.resolve_component("chat")
+        run.return_value = subprocess.CompletedProcess([], 0, "restarted\n", "")
         runner = ComponentRunner(topology)
-        with self.assertRaisesRegex(DriverError, "externally owned component is read-only"):
-            runner.run(chat, "restart")
+        result = runner.run(chat, "restart")
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, "restarted")
+        run.assert_called_once()
 
     def test_disabled_component_cannot_be_operated_directly(self) -> None:
         stack = json.loads((self.paths.stacks_dir / "sample.json").read_text(encoding="utf-8"))

@@ -46,7 +46,8 @@ COMPONENT_SCHEMA: dict[str, Any] = {
             "description": (
                 "Managed components participate in LLM-Ops start and stop operations; "
                 "external components remain enabled for dependency and health observation "
-                "but are started and stopped by the operator."
+                "and are excluded from stack-wide lifecycle operations. Explicit component "
+                "start, stop, and restart commands remain available to the operator."
             ),
         },
         "restart_policy": {

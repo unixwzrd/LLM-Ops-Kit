@@ -440,8 +440,6 @@ class ComponentRunner:
     ) -> CommandResult:
         """Run one component action and capture output."""
 
-        if component.ownership == "external" and action in {"start", "stop", "restart"}:
-            raise DriverError(f"{component.qualified_id}: externally owned component is read-only")
         script = build_component_command(
             self.topology,
             component,
