@@ -10,6 +10,7 @@ import os
 import pwd
 import subprocess
 import tempfile
+import threading
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import replace
@@ -28,7 +29,7 @@ from llmops_kit.llmops_cli import _validate_host_operation as validate_host_oper
 from llmops_kit.llmops_cli import stack_operations
 from llmops_kit.llmops_config import load_config
 from llmops_kit.llmops_drivers import CommandResult, ComponentObservation, ComponentRunner, DriverError, LogChannelRecord, _launchd_command, build_component_command, resolve_log_channels
-from llmops_kit.llmops_executor import Executor, ExecutionError, Operation, component_plan, operation_lock, stack_plan
+from llmops_kit.llmops_executor import Executor, ExecutionError, Operation, component_plan, operation_batches, operation_lock, stack_plan
 from llmops_kit.llmops_inventory import InventoryError, load_inventory
 from llmops_kit.llmops_lifecycle_state import LifecycleStateStore
 from llmops_kit.llmops_paths import resolve_paths
@@ -1596,6 +1597,19 @@ class PlannerTests(ControlFixture):
         stopped = [item.component.qualified_id for item in stack_plan(stack, "stop")]
         self.assertEqual(stopped, list(reversed(started)))
 
+    def test_stack_lifecycle_batches_independent_components(self) -> None:
+        stack = self.topology.stacks["sample"]
+        start_batches = [
+            [operation.component.component_id for operation in batch]
+            for batch in operation_batches(stack_plan(stack, "start"))
+        ]
+        stop_batches = [
+            [operation.component.component_id for operation in batch]
+            for batch in operation_batches(stack_plan(stack, "stop"))
+        ]
+        self.assertEqual(start_batches, [["chat", "embedding"], ["proxy"], ["agent"]])
+        self.assertEqual(stop_batches, [["agent"], ["embedding", "proxy"], ["chat"]])
+
     @mock.patch("llmops_kit.llmops_drivers.subprocess.run")
     def test_stack_lifecycle_skips_externally_owned_components_but_explicit_action_runs(
         self,
@@ -1644,6 +1658,48 @@ class PlannerTests(ControlFixture):
 
 
 class ExecutorTests(ControlFixture):
+    def test_stack_executes_independent_wave_concurrently(self) -> None:
+        barrier = threading.Barrier(2)
+
+        class ConcurrentRunner(FakeRunner):
+            def run(self, component, action):
+                if action == "start" and component.component_id in {"chat", "embedding"}:
+                    barrier.wait(timeout=5)
+                return super().run(component, action)
+
+        executor = Executor(self.topology, runner=ConcurrentRunner())
+        executor.execute(stack_plan(self.topology.stacks["sample"], "start"))
+
+    def test_failed_start_wave_rolls_back_successful_sibling(self) -> None:
+        runner = FakeRunner(fail_start="sample:chat")
+        executor = Executor(self.topology, runner=runner)
+
+        with self.assertRaisesRegex(ExecutionError, "sample:chat: start failed"):
+            executor.execute(stack_plan(self.topology.stacks["sample"], "start"))
+
+        self.assertEqual(runner.running, set())
+        self.assertIn(("sample:embedding", "stop"), runner.calls)
+
+    def test_stack_execution_reports_live_progress(self) -> None:
+        events: list[tuple[str, str]] = []
+        runner = FakeRunner()
+        executor = Executor(
+            self.topology,
+            runner=runner,
+            progress=lambda event, operation: events.append(
+                (event, operation.component.component_id)
+            ),
+        )
+
+        executor.execute(stack_plan(self.topology.stacks["sample"], "start"))
+
+        self.assertIn(("starting", "chat"), events)
+        self.assertIn(("starting", "embedding"), events)
+        self.assertIn(("ready", "chat"), events)
+        self.assertIn(("ready", "agent"), events)
+        self.assertLess(events.index(("ready", "chat")), events.index(("starting", "proxy")))
+        self.assertLess(events.index(("ready", "proxy")), events.index(("starting", "agent")))
+
     def test_idempotent_stop_persists_requested_down_state(self) -> None:
         runner = FakeRunner()
         executor = Executor(self.topology, runner=runner)
