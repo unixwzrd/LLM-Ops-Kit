@@ -161,9 +161,13 @@ class RemoteUpdateTests(unittest.TestCase):
             {"ok": True, "valid": True, "config_hash": "def456"}
         )
         completed = subprocess.CompletedProcess([], 0, output, "")
-        with mock.patch.object(llmops_update, "_run_remote", return_value=completed):
+        with mock.patch.object(llmops_update, "_run_remote", return_value=completed) as run_remote:
             result = llmops_update._remote_verify("peer", HOST, "beta-2", 10)
         self.assertEqual(result, {"version": "beta-2", "catalog_hash": "abc123", "config_hash": "def456"})
+        self.assertIn(
+            "LLMOPS_AUTO_UPDATE_ACTIVE=1",
+            run_remote.call_args.args[1],
+        )
 
     def test_remote_apply_reselects_target_when_old_peer_has_it_as_previous(self) -> None:
         completed = subprocess.CompletedProcess([], 0, "selected previous\n", "")

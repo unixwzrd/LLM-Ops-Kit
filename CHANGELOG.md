@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.9.0b49 - 2026-09-08
+
+- Started and stopped independent stack components concurrently in dependency-safe waves, retaining readiness gates, deterministic result ordering, bounded startup rollback, and best-effort shutdown failure collection; direct CLI stack operations now stream flushed per-component progress instead of appearing idle during long starts or stops.
+- Prevented manifest auto-update output from contaminating explicit-version remote deployment verification before the authority manifest is advanced.
+
 ## 0.9.0b48 - 2026-09-08
 
 - Made structured llama.cpp model and projector paths override retained legacy environment values consistently, and aborted readiness waits when a launched component exits instead of waiting through the full health timeout.

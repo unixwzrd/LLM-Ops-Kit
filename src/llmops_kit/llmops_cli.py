@@ -2162,7 +2162,16 @@ def cmd_stack_run(args: argparse.Namespace) -> int:
         payload = _collect_status(status_args)
         emit(payload, json_output=args.json)
         return _status_exit_code(payload)
-    executor = Executor(CURRENT_TOPOLOGY)
+    progress = None
+    if not args.json:
+        def progress(event: str, operation: Any) -> None:
+            print(
+                f"{event}: {operation.component.qualified_id}",
+                file=sys.stderr,
+                flush=True,
+            )
+
+    executor = Executor(CURRENT_TOPOLOGY, progress=progress)
     operations = stack_operations(args)
     results = executor.execute(operations)
     emit([result.as_dict() for result in results], json_output=args.json)

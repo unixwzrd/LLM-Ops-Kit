@@ -390,7 +390,7 @@ def _remote_verify(name: str, host: dict[str, object], version: str, timeout: in
             'printf "VERSION=%s\\n" "$active"',
             'catalog="$root/current-config/catalog.json"',
             'if test -f "$catalog"; then printf "CATALOG=%s\\n" "$(shasum -a 256 "$catalog" | awk \'{print $1}\')"; else printf "CATALOG=\\n"; fi',
-            f"{llmops} config hash --json",
+            f"LLMOPS_AUTO_UPDATE_ACTIVE=1 {llmops} config hash --json",
         ]
     )
     completed = _run_remote(host, script, timeout)
