@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.9.0b51 - 2026-10-14
+
+- Start each consumer as soon as its own planned dependencies are ready, rather than waiting for unrelated members of a startup wave. Limit concurrent lifecycle commands to eight, retain shutdown waves and the restart stop/start barrier, and drain in-flight starts before rolling back a failed invocation.
+- Bound HTTP, TCP, and RTK health-probe subprocesses by the configured status/readiness timeout, including SSH transport, so a stalled probe cannot wait indefinitely.
+
 ## 0.9.0b50 - 2026-10-14
 
 - Reconciled the SSH tunnel template with its launchd-only runtime driver: profiles now require a validated launchd label, may omit a plist for an already-loaded job, and no longer advertise inert action callbacks.

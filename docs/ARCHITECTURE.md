@@ -1,7 +1,7 @@
 # Architecture
 
 **Created**: 2026-07-16
-**Updated**: 2026-07-21
+**Updated**: 2026-10-14
 
 Back: [Documentation index](./INDEX.md)
 
@@ -30,7 +30,7 @@ Canonical configuration is converted into a validated topology, dependency plan,
 canonical configuration -> schema validation -> topology -> dependency plan -> adapter -> local or remote transport
 ```
 
-Component start satisfies missing upstream dependencies. Component restart affects only the target by default. Component stop refuses active dependents unless `--force` or `--cascade` is used. CLI and TUI call the same mutation preparation service, so interface code cannot bypass dependent-impact checks. Stack operations include only managed lifecycle components and execute dependency-safe waves concurrently: every component in a startup wave must become ready before the next wave begins, while shutdown uses inverse dependency waves and continues collecting independent stop failures. Externally owned services and tool components remain visible in stack status but are not mutated as a side effect of stack lifecycle commands.
+Component start satisfies missing upstream dependencies. Component restart affects only the target by default. Component stop refuses active dependents unless `--force` or `--cascade` is used. CLI and TUI call the same mutation preparation service, so interface code cannot bypass dependent-impact checks. Stack operations include only managed lifecycle components, with at most eight concurrent commands. Startup releases each consumer when its own planned dependencies become ready, without waiting for unrelated slow services. Shutdown retains inverse dependency waves and continues collecting independent stop failures. Stack restart finishes its entire stop phase before admitting starts. A startup failure prevents further admission, drains already admitted operations, and rolls back only newly started components in reverse plan order. Results remain in deterministic plan order; live progress reflects actual admission and completion. Externally owned services and tool components remain visible in stack status but are not mutated as a side effect of stack lifecycle commands.
 
 The executor is idempotent. A failed start stops only components started by that invocation and leaves pre-existing services untouched. Mutations use a lifecycle lock; status, health, drift, plans, effective configuration, and logs are read-only. Interactive clients dispatch long-running mutations to detached short-lived workers that persist an operation record. No privileged daemon is required, and closing a client does not cancel an accepted operation.
 

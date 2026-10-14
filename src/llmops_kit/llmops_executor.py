@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import fcntl
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import logging
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from contextlib import contextmanager
 from dataclasses import dataclass
+from itertools import groupby
 from pathlib import Path
 from typing import Any, Callable, Iterator, Optional
 
@@ -40,6 +42,9 @@ class ExecutionError(RuntimeError):
     """Raised when a planned lifecycle operation fails."""
 
 
+_LOGGER = logging.getLogger(__name__)
+
+
 @dataclass(frozen=True)
 class Operation:
     """One ordered component lifecycle operation."""
@@ -56,6 +61,9 @@ class Operation:
             "driver": self.component.driver,
             "action": self.action,
         }
+
+
+OperationOutcome = tuple[Operation, Optional[CommandResult], bool, Optional[Exception]]
 
 
 @dataclass(frozen=True)
@@ -204,10 +212,17 @@ class Executor:
         self.progress = progress
 
     def _report(self, event: str, operation: Operation) -> None:
-        """Emit an optional synchronous lifecycle progress event."""
+        """Keep an optional progress consumer from interrupting lifecycle safety."""
 
         if self.progress is not None:
-            self.progress(event, operation)
+            try:
+                self.progress(event, operation)
+            except Exception as exc:
+                self.progress = None
+                _LOGGER.warning(
+                    "Lifecycle progress disabled after callback failure (%s)",
+                    type(exc).__name__,
+                )
 
     def active_dependents(self, component: Component) -> list[Component]:
         """Return running downstream dependents, excluding the target."""
@@ -264,7 +279,7 @@ class Executor:
         return self.execute(list(prepared.operations))
 
     def execute(self, operations: list[Operation]) -> list[CommandResult]:
-        """Execute dependency-safe waves, rolling back newly started components on failure."""
+        """Start dependency-ready components without unrelated readiness barriers."""
 
         results: list[CommandResult] = []
         started: list[Component] = []
@@ -277,45 +292,13 @@ class Executor:
         with operation_lock(lock_path):
             try:
                 desired = state_store.load()
-                for batch in operation_batches(operations):
-                    pending_event = {
-                        "start": "starting",
-                        "stop": "stopping",
-                        "restart": "restarting",
-                    }.get(batch[0].action, "running")
-                    for operation in batch:
-                        self._report(pending_event, operation)
-                    with ThreadPoolExecutor(max_workers=len(batch)) as pool:
-                        futures = {
-                            pool.submit(self._execute_operation, operation): index
-                            for index, operation in enumerate(batch)
-                        }
-                        ordered_outcomes: list[
-                            Optional[
-                                tuple[
-                                    Operation,
-                                    Optional[CommandResult],
-                                    bool,
-                                    Optional[Exception],
-                                ]
-                            ]
-                        ] = [None] * len(batch)
-                        for future in as_completed(futures):
-                            outcome = future.result()
-                            ordered_outcomes[futures[future]] = outcome
-                            operation, result, _, failure = outcome
-                            if failure is not None:
-                                event = "failed"
-                            elif operation.action == "start":
-                                event = "ready" if result is not None else "already running"
-                            elif operation.action == "stop":
-                                event = "stopped" if result is not None else "already stopped"
-                            elif operation.action == "restart":
-                                event = "ready"
-                            else:
-                                event = "complete"
-                            self._report(event, operation)
-                    outcomes = [outcome for outcome in ordered_outcomes if outcome is not None]
+                batches: list[list[Operation]] = []
+                for action, items in groupby(operations, key=lambda item: item.action):
+                    group = list(items)
+                    validated = operation_batches(group)
+                    batches.extend([group] if action == "start" else validated)
+                for batch in batches:
+                    outcomes = self._execute_batch(batch)
                     batch_failure: Optional[Exception] = None
                     for operation, result, newly_started, failure in outcomes:
                         component = operation.component
@@ -347,14 +330,72 @@ class Executor:
                 raise
         return results
 
+    def _execute_batch(self, operations: list[Operation]) -> list[OperationOutcome]:
+        """Drain in-flight work on failure and retain plan-order rollback evidence."""
+
+        starting = operations[0].action == "start"
+        pending = dict(enumerate(operations))
+        unready = {operation.component.qualified_id for operation in operations}
+        if starting and len(unready) != len(operations):
+            raise ExecutionError("startup plan repeats a component")
+        outcomes: dict[int, OperationOutcome] = {}
+        failed = False
+        workers = min(8, len(operations))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures: dict[Future[OperationOutcome], int] = {}
+            while pending or futures:
+                if not failed:
+                    ready = [
+                        index
+                        for index, operation in pending.items()
+                        if not starting or not unready.intersection(operation.component.depends_on)
+                    ]
+                    for index in ready[:workers - len(futures)]:
+                        operation = pending.pop(index)
+                        event = {
+                            "start": "starting",
+                            "stop": "stopping",
+                            "restart": "restarting",
+                        }.get(operation.action, "running")
+                        self._report(event, operation)
+                        futures[pool.submit(self._execute_operation, operation)] = index
+                if not futures:
+                    if failed:
+                        break
+                    raise ExecutionError("lifecycle plan contains an unresolved dependency cycle")
+                completed, _ = wait(futures, return_when=FIRST_COMPLETED)
+                # Inspect all completed failures before admitting any more work.
+                for future in sorted(completed, key=lambda item: futures[item]):
+                    index = futures.pop(future)
+                    outcome = future.result()
+                    outcomes[index] = outcome
+                    operation, result, _, failure = outcome
+                    if failure is not None:
+                        failed = starting
+                        event = "failed"
+                    else:
+                        unready.discard(operation.component.qualified_id)
+                        if operation.action == "start":
+                            event = "ready" if result is not None else "already running"
+                        elif operation.action == "stop":
+                            event = "stopped" if result is not None else "already stopped"
+                        elif operation.action == "restart":
+                            event = "ready"
+                        else:
+                            event = "complete"
+                    self._report(event, operation)
+        return [outcomes[index] for index in sorted(outcomes)]
+
     def _execute_operation(
         self,
         operation: Operation,
-    ) -> tuple[Operation, Optional[CommandResult], bool, Optional[Exception]]:
-        """Execute one operation inside a dependency wave."""
+    ) -> OperationOutcome:
+        """Execute one operation, including its readiness or shutdown gate."""
 
         component = operation.component
         action = operation.action
+        result: Optional[CommandResult] = None
+        newly_started = False
         try:
             if action == "start":
                 if self.runner.is_running(component):
@@ -364,10 +405,8 @@ class Executor:
                     return operation, result, False, ExecutionError(
                         f"{component.qualified_id}: start failed: {result.stderr or result.stdout}"
                     )
-                try:
-                    self.runner.wait_healthy(component)
-                except (DriverError, ExecutionError, LifecycleStateError) as exc:
-                    return operation, result, True, exc
+                newly_started = True
+                self.runner.wait_healthy(component)
                 return operation, result, True, None
             if action == "restart":
                 result = self.runner.run(component, "restart")
@@ -375,10 +414,7 @@ class Executor:
                     return operation, result, False, ExecutionError(
                         f"{component.qualified_id}: restart failed: {result.stderr or result.stdout}"
                     )
-                try:
-                    self.runner.wait_healthy(component)
-                except (DriverError, ExecutionError, LifecycleStateError) as exc:
-                    return operation, result, False, exc
+                self.runner.wait_healthy(component)
                 return operation, result, False, None
             if action == "stop":
                 if not self.runner.is_running(component):
@@ -388,14 +424,16 @@ class Executor:
                     return operation, result, False, ExecutionError(
                         f"{component.qualified_id}: stop failed: {result.stderr or result.stdout}"
                     )
-                try:
-                    self.runner.wait_stopped(component)
-                except (DriverError, ExecutionError, LifecycleStateError) as exc:
-                    return operation, result, False, exc
+                self.runner.wait_stopped(component)
                 return operation, result, False, None
             return operation, self.runner.run(component, action), False, None
-        except (DriverError, ExecutionError, LifecycleStateError) as exc:
-            return operation, None, False, exc
+        except Exception as exc:
+            failure = (
+                exc
+                if isinstance(exc, (DriverError, ExecutionError, LifecycleStateError))
+                else ExecutionError(f"{component.qualified_id}: {action} failed: {exc}")
+            )
+            return operation, result, newly_started, failure
 
     def inspect(self, operations: list[Operation]) -> list[CommandResult]:
         """Execute read-only status or log operations without taking the lifecycle lock."""

@@ -1,7 +1,7 @@
 # Operator Checklist
 
 **Created**: 2026-07-20
-**Updated**: 2026-08-07
+**Updated**: 2026-10-14
 
 Back: [Documentation index](./INDEX.md)
 
@@ -22,6 +22,8 @@ Back: [Documentation index](./INDEX.md)
 - [ ] Use `llmops component version <component>` to compare desired and observed immutable runtimes; treat `stale-runtime` as attention.
 - [ ] Treat `authority-only` as unobserved, not stopped; inspect it from the owning account.
 - [ ] Use `component plan` before first-time lifecycle changes.
+- [ ] During startup, expect independent dependency chains to overlap; `ready` for an upstream admits its consumers without waiting for unrelated models. A full stack restart still completes all stops before starting anything.
+- [ ] Treat restart and upgrade separately: restart uses installed artifacts, while a reviewed `llmops update` installs an approved immutable toolkit artifact. Restart does not deploy staged Hermes, RTK, or MLX-Audio candidates.
 - [ ] Confirm the equivalent command shown by `llmops tui` before mutation.
 - [ ] Run `llmops component logs <component> --list`, review the appropriate bounded channel or follow it, and verify the reported host, execution user, remote path, and readiness.
 - [ ] Use `llmops operation list` and `llmops operation show <operation-id>` for lifecycle work dispatched from the TUI.

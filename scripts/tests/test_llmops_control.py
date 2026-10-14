@@ -630,6 +630,98 @@ class InventoryTests(ControlFixture):
             load_inventory(self.paths.inventory_file)
 
 
+class HealthProbeTests(ControlFixture):
+    @mock.patch("llmops_kit.llmops_drivers.subprocess.run")
+    def test_http_health_timeout_uses_status_timeout_and_resolved_transport(
+        self,
+        run: mock.Mock,
+    ) -> None:
+        component = self.topology.resolve_component("proxy")
+        component = replace(
+            component,
+            execution_user="service-user",
+            health=replace(
+                component.health,
+                kind="http",
+                target="http://127.0.0.1:11434/health",
+                timeout_seconds=7,
+            ),
+            timeouts=replace(component.timeouts, status=17),
+        )
+        run.side_effect = subprocess.TimeoutExpired(["ssh", "health"], 7)
+
+        result = ComponentRunner(self.topology).probe_health(component)
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.returncode, 124)
+        self.assertIn("health probe timed out after 7 seconds", result.stderr)
+        self.assertEqual(run.call_args.kwargs["timeout"], 7)
+        command = run.call_args.args[0]
+        self.assertEqual(command[0], "ssh")
+        self.assertIn("service-user@agent.local", command)
+        self.assertIn("curl -fsS", command[-1])
+
+    @mock.patch("llmops_kit.llmops_drivers.subprocess.run")
+    def test_tcp_health_timeout_uses_configured_health_timeout(
+        self,
+        run: mock.Mock,
+    ) -> None:
+        component = self.topology.resolve_component("proxy")
+        component = replace(
+            component,
+            health=replace(
+                component.health,
+                kind="tcp",
+                target="127.0.0.1:11434",
+                timeout_seconds=11,
+            ),
+            timeouts=replace(component.timeouts, status=31),
+        )
+        run.side_effect = subprocess.TimeoutExpired(["nc", "health"], 11)
+
+        result = ComponentRunner(self.topology).probe_health(component)
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.returncode, 124)
+        self.assertIn("health probe timed out after 11 seconds", result.stderr)
+        self.assertEqual(run.call_args.kwargs["timeout"], 11)
+        command = run.call_args.args[0]
+        self.assertEqual(command[:2], ["/bin/sh", "-c"])
+        self.assertIn("nc -z -w 3 127.0.0.1 11434", command[-1])
+
+    @mock.patch("llmops_kit.llmops_drivers.subprocess.run")
+    def test_rtk_health_timeout_uses_status_timeout_and_resolved_transport(
+        self,
+        run: mock.Mock,
+    ) -> None:
+        profile = json.loads(
+            (self.paths.agents_dir / "sample-agent.json").read_text(encoding="utf-8")
+        )
+        profile.update({"template_id": "rtk", "executable": "~/.local/bin/rtk"})
+        self.write_json(self.paths.agents_dir / "sample-agent.json", profile)
+        component = self.topology.resolve_component("agent")
+        component = replace(
+            component,
+            execution_user="service-user",
+            timeouts=replace(component.timeouts, status=19),
+        )
+        run.side_effect = subprocess.TimeoutExpired(["ssh", "rtk", "telemetry"], 19)
+
+        result = ComponentRunner(self.topology).probe_health(component)
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.returncode, 124)
+        self.assertIn("health probe timed out after 19 seconds", result.stderr)
+        self.assertEqual(run.call_args.kwargs["timeout"], 19)
+        command = run.call_args.args[0]
+        self.assertEqual(command[0], "ssh")
+        self.assertIn("service-user@agent.local", command)
+        self.assertIn("rtk telemetry status", command[-1])
+
+
 class TopologyTests(ControlFixture):
     def test_stack_loads_and_validates(self) -> None:
         self.assertEqual(validate_topology(self.topology), [])
@@ -1658,6 +1750,21 @@ class PlannerTests(ControlFixture):
 
 
 class ExecutorTests(ControlFixture):
+    @staticmethod
+    def execute_in_thread(executor, operations):
+        results = []
+        failures = []
+
+        def execute():
+            try:
+                results.extend(executor.execute(operations))
+            except Exception as exc:  # noqa: BLE001 - surfaced to the test thread
+                failures.append(exc)
+
+        thread = threading.Thread(target=execute)
+        thread.start()
+        return thread, results, failures
+
     def test_stack_executes_independent_wave_concurrently(self) -> None:
         barrier = threading.Barrier(2)
 
@@ -1669,6 +1776,232 @@ class ExecutorTests(ControlFixture):
 
         executor = Executor(self.topology, runner=ConcurrentRunner())
         executor.execute(stack_plan(self.topology.stacks["sample"], "start"))
+
+    def test_start_admission_is_bounded_to_eight_workers(self) -> None:
+        admission_lock = threading.Lock()
+        eight_admitted = threading.Event()
+        ninth_admitted = threading.Event()
+        release_starts = threading.Event()
+        admitted: list[str] = []
+
+        class BoundedRunner(FakeRunner):
+            def run(self, component, action):
+                if action == "start":
+                    with admission_lock:
+                        admitted.append(component.qualified_id)
+                        if len(admitted) == 8:
+                            eight_admitted.set()
+                        elif len(admitted) == 9:
+                            ninth_admitted.set()
+                    if not release_starts.wait(timeout=5):
+                        raise DriverError("test timed out waiting to release admitted starts")
+                return super().run(component, action)
+
+        base = self.topology.resolve_component("chat")
+        operations = [
+            Operation(
+                replace(base, component_id=f"independent-{index}", depends_on=()),
+                "start",
+            )
+            for index in range(9)
+        ]
+        thread, results, failures = self.execute_in_thread(
+            Executor(self.topology, runner=BoundedRunner()),
+            operations,
+        )
+        try:
+            self.assertTrue(eight_admitted.wait(timeout=5))
+            self.assertEqual(len(admitted), 8)
+            self.assertFalse(ninth_admitted.is_set())
+            release_starts.set()
+            self.assertTrue(ninth_admitted.wait(timeout=5))
+        finally:
+            release_starts.set()
+            thread.join(timeout=5)
+
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(failures, [])
+        self.assertEqual(
+            [result.component for result in results],
+            [operation.component.qualified_id for operation in operations],
+        )
+
+    def test_ready_dependency_starts_dependent_while_unrelated_readiness_is_blocked(self) -> None:
+        embedding_health_entered = threading.Event()
+        release_embedding_health = threading.Event()
+        proxy_started = threading.Event()
+
+        class RollingRunner(FakeRunner):
+            def run(self, component, action):
+                result = super().run(component, action)
+                if action == "start" and component.component_id == "proxy":
+                    proxy_started.set()
+                return result
+
+            def wait_healthy(self, component):
+                if component.component_id == "embedding":
+                    embedding_health_entered.set()
+                    if not release_embedding_health.wait(timeout=5):
+                        raise DriverError("test timed out waiting to release embedding readiness")
+                return super().wait_healthy(component)
+
+        plan = stack_plan(self.topology.stacks["sample"], "start")
+        thread, results, failures = self.execute_in_thread(
+            Executor(self.topology, runner=RollingRunner()),
+            plan,
+        )
+        try:
+            self.assertTrue(embedding_health_entered.wait(timeout=5))
+            self.assertTrue(proxy_started.wait(timeout=5))
+        finally:
+            release_embedding_health.set()
+            thread.join(timeout=5)
+
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(failures, [])
+        self.assertEqual(
+            [result.component for result in results],
+            [operation.component.qualified_id for operation in plan],
+        )
+
+    def test_dependent_waits_until_all_dependencies_are_ready(self) -> None:
+        embedding_health_entered = threading.Event()
+        proxy_health_entered = threading.Event()
+        release_embedding_health = threading.Event()
+        release_proxy_health = threading.Event()
+        proxy_health_complete = threading.Event()
+        agent_started = threading.Event()
+
+        class DependencyRunner(FakeRunner):
+            def run(self, component, action):
+                result = super().run(component, action)
+                if action == "start" and component.component_id == "agent":
+                    agent_started.set()
+                return result
+
+            def wait_healthy(self, component):
+                if component.component_id == "embedding":
+                    embedding_health_entered.set()
+                    if not release_embedding_health.wait(timeout=5):
+                        raise DriverError("test timed out waiting to release embedding readiness")
+                elif component.component_id == "proxy":
+                    proxy_health_entered.set()
+                    if not release_proxy_health.wait(timeout=5):
+                        raise DriverError("test timed out waiting to release proxy readiness")
+                    proxy_health_complete.set()
+                return super().wait_healthy(component)
+
+        thread, _, failures = self.execute_in_thread(
+            Executor(self.topology, runner=DependencyRunner()),
+            stack_plan(self.topology.stacks["sample"], "start"),
+        )
+        try:
+            self.assertTrue(embedding_health_entered.wait(timeout=5))
+            self.assertTrue(proxy_health_entered.wait(timeout=5))
+            self.assertFalse(agent_started.is_set())
+            release_proxy_health.set()
+            self.assertTrue(proxy_health_complete.wait(timeout=5))
+            self.assertFalse(agent_started.is_set())
+            release_embedding_health.set()
+            self.assertTrue(agent_started.wait(timeout=5))
+        finally:
+            release_proxy_health.set()
+            release_embedding_health.set()
+            thread.join(timeout=5)
+
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(failures, [])
+
+    def test_start_failure_drains_inflight_success_before_bounded_rollback(self) -> None:
+        embedding_health_entered = threading.Event()
+        release_embedding_health = threading.Event()
+        embedding_health_complete = threading.Event()
+        agent_started = threading.Event()
+
+        class FailingRunner(FakeRunner):
+            def run(self, component, action):
+                if action == "start" and component.component_id == "proxy":
+                    if not embedding_health_entered.wait(timeout=5):
+                        raise DriverError("test timed out waiting for in-flight embedding start")
+                result = super().run(component, action)
+                if action == "start" and component.component_id == "agent":
+                    agent_started.set()
+                if action == "stop" and component.component_id == "embedding":
+                    if not embedding_health_complete.is_set():
+                        raise DriverError("embedding rolled back before its start completed")
+                return result
+
+            def wait_healthy(self, component):
+                if component.component_id == "embedding":
+                    embedding_health_entered.set()
+                    if not release_embedding_health.wait(timeout=5):
+                        raise DriverError("test timed out waiting to release embedding readiness")
+                    embedding_health_complete.set()
+                return super().wait_healthy(component)
+
+        runner = FailingRunner(running={"sample:chat"}, fail_start="sample:proxy")
+        thread, _, failures = self.execute_in_thread(
+            Executor(self.topology, runner=runner),
+            stack_plan(self.topology.stacks["sample"], "start"),
+        )
+        try:
+            self.assertTrue(embedding_health_entered.wait(timeout=5))
+            self.assertFalse(agent_started.is_set())
+            release_embedding_health.set()
+        finally:
+            release_embedding_health.set()
+            thread.join(timeout=5)
+
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(len(failures), 1)
+        self.assertRegex(str(failures[0]), "sample:proxy: start failed")
+        self.assertTrue(embedding_health_complete.is_set())
+        self.assertFalse(agent_started.is_set())
+        self.assertEqual(runner.running, {"sample:chat"})
+        self.assertIn(("sample:embedding", "stop"), runner.calls)
+        self.assertNotIn(("sample:chat", "stop"), runner.calls)
+
+    def test_restart_start_phase_waits_for_all_stops_to_complete(self) -> None:
+        chat_stop_entered = threading.Event()
+        release_chat_stop = threading.Event()
+        chat_stop_complete = threading.Event()
+        first_start = threading.Event()
+
+        class RestartRunner(FakeRunner):
+            def run(self, component, action):
+                if action == "start":
+                    first_start.set()
+                return super().run(component, action)
+
+            def wait_stopped(self, component):
+                if component.component_id == "chat":
+                    chat_stop_entered.set()
+                    if not release_chat_stop.wait(timeout=5):
+                        raise DriverError("test timed out waiting to release final stop")
+                    chat_stop_complete.set()
+                return super().wait_stopped(component)
+
+        components = {
+            component.qualified_id
+            for component in self.topology.stacks["sample"].components.values()
+        }
+        runner = RestartRunner(running=components)
+        thread, _, failures = self.execute_in_thread(
+            Executor(self.topology, runner=runner),
+            stack_plan(self.topology.stacks["sample"], "restart"),
+        )
+        try:
+            self.assertTrue(chat_stop_entered.wait(timeout=5))
+            self.assertFalse(first_start.is_set())
+            release_chat_stop.set()
+            self.assertTrue(chat_stop_complete.wait(timeout=5))
+            self.assertTrue(first_start.wait(timeout=5))
+        finally:
+            release_chat_stop.set()
+            thread.join(timeout=5)
+
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(failures, [])
 
     def test_failed_start_wave_rolls_back_successful_sibling(self) -> None:
         runner = FakeRunner(fail_start="sample:chat")
@@ -1699,6 +2032,98 @@ class ExecutorTests(ControlFixture):
         self.assertIn(("ready", "agent"), events)
         self.assertLess(events.index(("ready", "chat")), events.index(("starting", "proxy")))
         self.assertLess(events.index(("ready", "proxy")), events.index(("starting", "agent")))
+
+    def test_progress_failure_does_not_interrupt_success_or_state_persistence(self) -> None:
+        runner = FakeRunner()
+        callback_events: list[str] = []
+
+        def progress(event, operation):
+            callback_events.append(event)
+            if event == "ready":
+                self.assertTrue(
+                    any(action == "start" for _, action in runner.calls),
+                    operation.component.qualified_id,
+                )
+                raise ValueError("observer included sensitive details")
+
+        executor = Executor(self.topology, runner=runner, progress=progress)
+        stack = self.topology.stacks["sample"]
+        components = {component.qualified_id for component in stack.components.values()}
+
+        with self.assertLogs("llmops_kit.llmops_executor", level="WARNING") as logs:
+            results = executor.execute(stack_plan(stack, "start"))
+
+        self.assertEqual({result.component for result in results}, components)
+        self.assertEqual(runner.running, components)
+        self.assertEqual(
+            LifecycleStateStore(self.paths.lifecycle_state_file).load(),
+            {component: "running" for component in components},
+        )
+        self.assertIsNone(executor.progress)
+        self.assertEqual(callback_events.count("ready"), 1)
+        self.assertEqual(
+            logs.output,
+            [
+                "WARNING:llmops_kit.llmops_executor:"
+                "Lifecycle progress disabled after callback failure (ValueError)"
+            ],
+        )
+        self.assertNotIn("sensitive details", logs.output[0])
+        with operation_lock(self.paths.run_dir / "orchestrator.lock"):
+            pass
+
+    def test_progress_failure_does_not_prevent_failure_drain_and_rollback(self) -> None:
+        embedding_health_entered = threading.Event()
+        release_embedding_health = threading.Event()
+        embedding_health_complete = threading.Event()
+
+        class FailingRunner(FakeRunner):
+            def run(self, component, action):
+                if action == "start" and component.component_id == "proxy":
+                    if not embedding_health_entered.wait(timeout=5):
+                        raise DriverError("test timed out waiting for in-flight embedding start")
+                if action == "stop" and component.component_id == "embedding":
+                    if not embedding_health_complete.is_set():
+                        raise DriverError("embedding rolled back before its start completed")
+                return super().run(component, action)
+
+            def wait_healthy(self, component):
+                if component.component_id == "embedding":
+                    embedding_health_entered.set()
+                    if not release_embedding_health.wait(timeout=5):
+                        raise DriverError("test timed out waiting to release embedding readiness")
+                    embedding_health_complete.set()
+                return super().wait_healthy(component)
+
+        runner = FailingRunner(fail_start="sample:proxy")
+
+        def progress(event, operation):
+            if event == "ready":
+                self.assertTrue(any(action == "start" for _, action in runner.calls))
+                raise RuntimeError("observer failed")
+
+        executor = Executor(self.topology, runner=runner, progress=progress)
+        thread, _, failures = self.execute_in_thread(
+            executor,
+            stack_plan(self.topology.stacks["sample"], "start"),
+        )
+        try:
+            self.assertTrue(embedding_health_entered.wait(timeout=5))
+            release_embedding_health.set()
+        finally:
+            release_embedding_health.set()
+            thread.join(timeout=5)
+
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(len(failures), 1)
+        self.assertRegex(str(failures[0]), "sample:proxy: start failed")
+        self.assertTrue(embedding_health_complete.is_set())
+        self.assertIsNone(executor.progress)
+        self.assertEqual(runner.running, set())
+        self.assertIn(("sample:chat", "stop"), runner.calls)
+        self.assertIn(("sample:embedding", "stop"), runner.calls)
+        with operation_lock(self.paths.run_dir / "orchestrator.lock"):
+            pass
 
     def test_idempotent_stop_persists_requested_down_state(self) -> None:
         runner = FakeRunner()
@@ -1753,6 +2178,25 @@ class ExecutorTests(ControlFixture):
         with self.assertRaisesRegex(Exception, "readiness timed out"):
             executor.execute(component_plan(self.topology, chat, "start"))
         self.assertNotIn("sample:chat", runner.running)
+        self.assertIn(("sample:chat", "stop"), runner.calls)
+
+    def test_unexpected_readiness_error_rolls_back_the_started_component(self) -> None:
+        class UnexpectedHealthRunner(FakeRunner):
+            def wait_healthy(self, component):
+                raise OSError("probe transport broke")
+
+        runner = UnexpectedHealthRunner()
+        executor = Executor(self.topology, runner=runner)
+        chat = self.topology.resolve_component("chat")
+
+        with self.assertRaisesRegex(
+            ExecutionError,
+            "sample:chat: start failed: probe transport broke",
+        ):
+            executor.execute(component_plan(self.topology, chat, "start"))
+
+        self.assertNotIn("sample:chat", runner.running)
+        self.assertIn(("sample:chat", "start"), runner.calls)
         self.assertIn(("sample:chat", "stop"), runner.calls)
 
     def test_stack_stop_continues_after_failure_and_persists_successes(self) -> None:

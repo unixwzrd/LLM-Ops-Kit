@@ -726,15 +726,7 @@ class ComponentRunner:
                 if host.transport == "local"
                 else host.ssh_base() + [script]
             )
-            completed = subprocess.run(command, capture_output=True, text=True, check=False)
-            return CommandResult(
-                component.qualified_id,
-                "health",
-                " ".join(shlex.quote(token) for token in command),
-                completed.returncode,
-                completed.stdout.strip(),
-                completed.stderr.strip(),
-            )
+            return self._run_health_command(component, command)
         if health.kind == "none":
             return None
         if health.kind == "driver":
@@ -754,7 +746,25 @@ class ComponentRunner:
             if host.transport == "local"
             else host.ssh_base() + [script]
         )
-        completed = subprocess.run(command, capture_output=True, text=True, check=False)
+        return self._run_health_command(component, command)
+
+    def _run_health_command(self, component: Component, command: list[str]) -> CommandResult:
+        """Bound transport time even when a remote probe or SSH connection stalls."""
+
+        timeout = min(component.timeouts.status, component.health.timeout_seconds)
+        try:
+            completed = subprocess.run(
+                command, capture_output=True, text=True, check=False, timeout=timeout
+            )
+        except subprocess.TimeoutExpired:
+            return CommandResult(
+                component.qualified_id,
+                "health",
+                shlex.join(command),
+                124,
+                "",
+                f"health probe timed out after {timeout} seconds",
+            )
         return CommandResult(
             component.qualified_id,
             "health",
