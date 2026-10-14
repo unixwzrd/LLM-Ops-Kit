@@ -47,3 +47,12 @@ bash ~/.local/llm-ops/current/scripts/uninstall-runtime.sh --purge
 ```
 
 Normal uninstall preserves canonical configuration, data, state, and cache. Purge removes LLM-Ops-Kit-owned roots. Model weights, agent state, logs owned by other products, and source defaults are never removed.
+
+Release retention is local and plan-first:
+
+```bash
+llmops maintenance releases --plan
+llmops maintenance releases --apply --plan-digest <digest-from-reviewed-plan>
+```
+
+The default policy protects both `current` and `previous`; `--drop-previous` is reserved and currently refused. Apply requires the digest from a reviewed matching plan and serializes with local update, rollback, and lifecycle orchestration. Unmanaged legacy directories and incomplete releases are retained and reported without blocking removal of independently verified owned releases. Retention refuses unsafe root structure, selector or inode drift, non-owned paths, writable or unexpected symlink/mount boundaries, and releases referenced by processes, open files, active configuration, recorded runtime state, or user LaunchAgent plists. Process references expose only the PID and reference category.

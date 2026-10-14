@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.9.0b52 - 2026-10-14
+
+- Added fail-closed `llmops maintenance releases` planning and reviewed-digest apply modes for installer-owned immutable releases, serialized with update, rollback, and lifecycle operations. Current and previous always remain protected; candidates require verified installed manifests and ownership, stable filesystem identities, and no process, open-file, active-configuration, recorded-runtime, or LaunchAgent references. Legacy unmanaged directories are retained without blocking independently verified candidates.
+
 ## 0.9.0b51 - 2026-10-14
 
 - Start each consumer as soon as its own planned dependencies are ready, rather than waiting for unrelated members of a startup wave. Limit concurrent lifecycle commands to eight, retain shutdown waves and the restart stop/start barrier, and drain in-flight starts before rolling back a failed invocation.

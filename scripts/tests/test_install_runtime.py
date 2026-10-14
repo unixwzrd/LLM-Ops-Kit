@@ -6,11 +6,13 @@ from __future__ import annotations
 import os
 import json
 import re
+import signal
 import shutil
 import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -185,6 +187,98 @@ class InstallerTests(unittest.TestCase):
             self.assertEqual(completed.returncode, 2)
             self.assertIn("this beta supports macOS only", completed.stderr)
             self.assertFalse(install.exists())
+
+    def test_rollback_uses_legacy_four_argument_state_writer_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            install = root / "install"
+            releases = install / "releases"
+            current = releases / "b52"
+            previous = releases / "b51"
+            for release in (current, previous):
+                (release / "app/bin").mkdir(parents=True)
+                (release / "scripts").mkdir()
+                llmops = release / "app/bin/llmops"
+                llmops.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+                llmops.chmod(0o755)
+            calls = root / "old-parser-calls"
+            old_python = previous / "app/bin/python"
+            old_python.write_text(
+                "#!/bin/bash\n"
+                "[[ $# -eq 6 ]] || { echo unexpected-argument-count=$# >&2; exit 91; }\n"
+                f"printf '%s|%s\\n' \"$#\" \"$LLMOPS_STATE_HOME\" >> {calls!s}\n"
+                f"exec {sys.executable!s} \"$@\"\n",
+                encoding="utf-8",
+            )
+            old_python.chmod(0o755)
+            (install / "current").symlink_to(current)
+            (install / "previous").symlink_to(previous)
+            state = root / "state"
+            env = {**os.environ, "PYTHONPATH": str(REPO_ROOT / "src")}
+            self.run_command(
+                [
+                    BASH,
+                    str(INSTALLER),
+                    "--prefix",
+                    str(install),
+                    "--public-bin-dir",
+                    str(root / "bin"),
+                    "--state-home",
+                    str(state),
+                    "--rollback",
+                ],
+                env,
+            )
+            self.assertEqual((install / "current").resolve(), previous.resolve())
+            self.assertEqual(
+                calls.read_text(encoding="utf-8").splitlines(),
+                [f"6|{state}", f"6|{state}"],
+            )
+            metadata = json.loads((install / "install.json").read_text(encoding="utf-8"))
+            self.assertEqual(metadata["state_home"], str(state))
+
+    @unittest.skipUnless(sys.platform == "darwin", "runtime installer supports macOS only")
+    def test_interrupted_repair_releases_install_mutation_lock(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            install = root / "install"
+            active = install / "releases/b52"
+            active.mkdir(parents=True)
+            (install / "current").symlink_to(active)
+            fake_bin = root / "fake-bin"
+            fake_bin.mkdir()
+            entered = root / "readlink-entered"
+            readlink = fake_bin / "readlink"
+            readlink.write_text(
+                f"#!/bin/sh\ntouch {entered!s}\nexec sleep 30\n", encoding="utf-8"
+            )
+            readlink.chmod(0o755)
+            process = subprocess.Popen(
+                [
+                    BASH,
+                    str(INSTALLER),
+                    "--prefix",
+                    str(install),
+                    "--public-bin-dir",
+                    str(root / "bin"),
+                    "--state-home",
+                    str(root / "state"),
+                    "--repair",
+                ],
+                env={**os.environ, "PATH": f"{fake_bin}:{os.environ.get('PATH', '')}"},
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                start_new_session=True,
+            )
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline and not entered.exists():
+                time.sleep(0.02)
+            self.assertTrue(entered.exists(), "repair did not reach the paused readlink fixture")
+            self.assertTrue((install / "update.lock").is_dir())
+            os.killpg(process.pid, signal.SIGTERM)
+            process.communicate(timeout=5)
+            self.assertFalse((install / "update.lock").exists())
 
     def test_release_archive_is_installable_and_proxy_render_uses_application_python(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

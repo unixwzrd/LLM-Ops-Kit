@@ -2,7 +2,7 @@
 
 ![LLM-Ops-Kit](docs/images/LLM-OPS-Kit-banner.png)
 
-[![Release](https://img.shields.io/github/v/release/unixwzrd/LLM-Ops-Kit?include_prereleases&label=release)](https://github.com/unixwzrd/LLM-Ops-Kit/releases/latest)
+[![Release](https://img.shields.io/github/v/release/unixwzrd/LLM-Ops-Kit?include_prereleases&label=release)](https://github.com/unixwzrd/LLM-Ops-Kit/releases)
 [![CI](https://github.com/unixwzrd/LLM-Ops-Kit/actions/workflows/ci.yml/badge.svg)](https://github.com/unixwzrd/LLM-Ops-Kit/actions/workflows/ci.yml)
 [![Platform](https://img.shields.io/badge/platform-macOS-555555)](#supported-beta-platform)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE.md)
@@ -24,13 +24,13 @@ The installer owns its UV-managed Python runtime. It does not require Git, syste
 
 ## Install
 
-Download and verify the installer from the latest published release:
+The current beta is **0.9.0b52**. Download and verify that beta's installer explicitly; GitHub's `/releases/latest` redirect excludes prereleases and can select an older release:
 
 ```bash
-curl -fsSLO https://github.com/unixwzrd/LLM-Ops-Kit/releases/latest/download/install-llmops
-curl -fsSLO https://github.com/unixwzrd/LLM-Ops-Kit/releases/latest/download/install-llmops.sha256
+curl -fsSLO https://github.com/unixwzrd/LLM-Ops-Kit/releases/download/0.9.0b52/install-llmops
+curl -fsSLO https://github.com/unixwzrd/LLM-Ops-Kit/releases/download/0.9.0b52/install-llmops.sha256
 shasum -a 256 -c install-llmops.sha256
-bash install-llmops --repository unixwzrd/LLM-Ops-Kit
+bash install-llmops --repository unixwzrd/LLM-Ops-Kit --version 0.9.0b52
 ```
 
 Then create and validate a local configuration:

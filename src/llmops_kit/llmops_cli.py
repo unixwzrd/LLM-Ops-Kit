@@ -58,6 +58,7 @@ try:
     from .llmops_executor import ExecutionError, Executor, component_plan, stack_plan
     from .llmops_inventory import InventoryError, load_inventory
     from .llmops_lifecycle_state import LifecycleStateError, LifecycleStateStore
+    from .llmops_maintenance import MaintenanceError, maintain_releases, render_text
     from .llmops_init import InitError, ModelCandidate, discover_model_profiles, initialize
     from .llmops_migration import MigrationError, migrate
     from .llmops_operations import list_records, load_record, record_path
@@ -97,6 +98,7 @@ except ImportError:  # Direct source execution.
     from llmops_executor import ExecutionError, Executor, component_plan, stack_plan
     from llmops_inventory import InventoryError, load_inventory
     from llmops_lifecycle_state import LifecycleStateError, LifecycleStateStore
+    from llmops_maintenance import MaintenanceError, maintain_releases, render_text
     from llmops_init import InitError, ModelCandidate, discover_model_profiles, initialize
     from llmops_migration import MigrationError, migrate
     from llmops_operations import list_records, load_record, record_path
@@ -129,7 +131,27 @@ PUBLIC_COMMANDS = {
     "update": "Check, plan, or apply verified local and remote releases",
     "tui": "Open the optional Textual operations console",
     "operation": "Inspect persisted background lifecycle operations",
+    "maintenance": "Plan or apply local toolkit release retention",
 }
+
+
+def cmd_maintenance_releases(args: argparse.Namespace) -> int:
+    """Plan or apply local immutable-release retention."""
+
+    install_root = Path(os.environ.get("LLMOPS_HOME", "~/.local/llm-ops")).expanduser()
+    paths = resolve_paths()
+    payload = maintain_releases(
+        install_root / "install.json",
+        apply=args.apply,
+        drop_previous=args.drop_previous,
+        config_roots=(paths.config_home,),
+        plan_digest=args.plan_digest,
+    )
+    if args.json:
+        print(json.dumps(payload, indent=2, sort_keys=True))
+    else:
+        print(render_text(payload))
+    return 0
 
 
 def print_public_help() -> None:
@@ -2406,6 +2428,23 @@ def build_parser() -> argparse.ArgumentParser:
     operation_show.add_argument("operation_id")
     operation_show.set_defaults(func=cmd_operation_show)
 
+    maintenance = sub.add_parser("maintenance")
+    maintenance_sub = maintenance.add_subparsers(dest="maintenance_command", required=True)
+    maintenance_releases = maintenance_sub.add_parser("releases")
+    maintenance_mode = maintenance_releases.add_mutually_exclusive_group()
+    maintenance_mode.add_argument("--plan", action="store_true", help="preview retention (default)")
+    maintenance_mode.add_argument("--apply", action="store_true", help="remove eligible old releases")
+    maintenance_releases.add_argument(
+        "--drop-previous",
+        action="store_true",
+        help="reserved; currently refused so previous remains protected",
+    )
+    maintenance_releases.add_argument(
+        "--plan-digest",
+        help="reviewed digest emitted by a matching plan; required by --apply",
+    )
+    maintenance_releases.set_defaults(func=cmd_maintenance_releases, topology_required=False)
+
     component = sub.add_parser("component")
     component_sub = component.add_subparsers(dest="component_command", required=True)
     component_list = component_sub.add_parser("list")
@@ -2576,6 +2615,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         ConfigOperationError,
         TemplateError,
         ProductInventoryError,
+        MaintenanceError,
     ) as exc:
         if args.json:
             print(json.dumps({"ok": False, "error": str(exc)}, indent=2, sort_keys=True))

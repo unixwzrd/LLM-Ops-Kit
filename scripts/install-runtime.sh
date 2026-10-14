@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 022
 
 SOURCE_DIR="${LLMOPS_SOURCE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 INSTALL_BASE="${LLMOPS_INSTALL_BASE:-$HOME/.local/llm-ops}"
@@ -37,6 +38,28 @@ expand_path() {
     \~/*) printf '%s/%s\n' "$HOME" "${1#\~/}" ;;
     *) printf '%s\n' "$1" ;;
   esac
+}
+
+UPDATE_LOCK=""
+UPDATE_LOCK_TOKEN=""
+
+release_update_lock() {
+  [[ -n "$UPDATE_LOCK" && -d "$UPDATE_LOCK" ]] || return 0
+  if [[ -f "$UPDATE_LOCK/owner" && "$(<"$UPDATE_LOCK/owner")" == "$UPDATE_LOCK_TOKEN" ]]; then
+    rm -f "$UPDATE_LOCK/owner"
+    rmdir "$UPDATE_LOCK" 2>/dev/null || true
+  fi
+}
+
+acquire_update_lock() {
+  UPDATE_LOCK="$INSTALL_BASE/update.lock"
+  UPDATE_LOCK_TOKEN="$$-$(date +%s)-${RANDOM:-0}"
+  if ! mkdir -m 700 "$UPDATE_LOCK" 2>/dev/null; then
+    echo "install-runtime.sh: another install mutation holds $UPDATE_LOCK" >&2
+    return 2
+  fi
+  printf '%s\n' "$UPDATE_LOCK_TOKEN" > "$UPDATE_LOCK/owner"
+  chmod 600 "$UPDATE_LOCK/owner"
 }
 
 replace_link() {
@@ -124,9 +147,9 @@ link_pre_beta_runtime() {
 
 write_state() {
   local root="$1" release="$2" python_bin="${3:-$1/app/bin/python}"
-  "$python_bin" -m llmops_kit.llmops_install_state \
+  LLMOPS_STATE_HOME="$STATE_HOME" "$python_bin" -m llmops_kit.llmops_install_state \
     "$STATE_HOME/install.json" "$INSTALL_BASE" "$PUBLIC_BIN_DIR" "$release"
-  "$python_bin" -m llmops_kit.llmops_install_state \
+  LLMOPS_STATE_HOME="$STATE_HOME" "$python_bin" -m llmops_kit.llmops_install_state \
     "$INSTALL_BASE/install.json" "$INSTALL_BASE" "$PUBLIC_BIN_DIR" "$release"
 }
 
@@ -156,6 +179,14 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
   echo "install-runtime.sh: this beta supports macOS only" >&2
   exit 2
 fi
+
+mkdir -p "$INSTALL_BASE" "$INSTALL_BASE/releases" "$STATE_HOME" "$STATE_HOME/run"
+chmod 755 "$INSTALL_BASE" "$INSTALL_BASE/releases" "$STATE_HOME" "$STATE_HOME/run"
+acquire_update_lock
+trap release_update_lock EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 if [[ "$ROLLBACK" -eq 1 ]]; then
   [[ -L "$CURRENT" && -L "$PREVIOUS" ]] || { echo "install-runtime.sh: current and previous releases are required" >&2; exit 2; }
@@ -211,7 +242,7 @@ current_config_created=0
 
 cleanup() {
   local status=$?
-  trap - EXIT INT TERM
+  trap - EXIT HUP INT TERM
   [[ "$release_created" -eq 1 ]] && rm -rf "$staging"
   if [[ "$status" -ne 0 ]]; then
     if [[ "$switched" -eq 1 ]]; then
@@ -229,12 +260,13 @@ cleanup() {
     [[ "$current_config_created" -eq 1 ]] && rm -f "$INSTALL_BASE/current-config"
     [[ "$config_revision_created" -eq 1 ]] && rm -rf "$config_revision"
   fi
+  release_update_lock
   exit "$status"
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT HUP INT TERM
 
 [[ ! -e "$release" ]] || { echo "install-runtime.sh: release already exists: $release" >&2; exit 2; }
-mkdir -p "$staging" "$INSTALL_BASE/releases" "$INSTALL_BASE/python" "$STATE_HOME"
+mkdir -p "$staging" "$INSTALL_BASE/python"
 release_created=1
 uv_bin="$(resolve_uv)"
 UV_PYTHON_INSTALL_DIR="$INSTALL_BASE/python" "$uv_bin" python install "$PYTHON_VERSION" --no-bin --compile-bytecode
@@ -256,10 +288,12 @@ cp "$SOURCE_DIR/scripts/lib/common.sh" "$staging/scripts/lib/common.sh"
 for metadata in RELEASE.json release-manifest.json; do
   [[ -f "$SOURCE_DIR/$metadata" ]] && cp "$SOURCE_DIR/$metadata" "$staging/$metadata"
 done
+chmod 644 "$staging/RELEASE.json" "$staging/release-manifest.json"
 if [[ -L "$CURRENT" && -d "$CURRENT/config" ]]; then
   cp -a "$CURRENT/config" "$staging/config"
 fi
 [[ -x "$staging/app/bin/llmops" ]] || { echo "install-runtime.sh: application installation is incomplete" >&2; exit 2; }
+chmod -R go-w "$staging"
 "$staging/app/bin/llmops" --help >/dev/null
 if [[ -d "$staging/config" && ! -L "$INSTALL_BASE/current-config" ]]; then
   config_hash="$(LLMOPS_CONFIG_HOME="$staging/config" "$staging/app/bin/llmops" config hash | awk -F= '$1 == "config_hash" {print $2}')"
@@ -281,7 +315,9 @@ switched=1
 replace_link "$release" "$CURRENT"
 link_runtime "$CURRENT"
 write_state "$CURRENT" "$release"
-trap - EXIT INT TERM
+chmod 644 "$INSTALL_BASE/install.json" "$STATE_HOME/install.json"
+release_update_lock
+trap - EXIT HUP INT TERM
 echo "INSTALLED: $release"
 echo "CURRENT: $(readlink "$CURRENT")"
 [[ -L "$PREVIOUS" ]] && echo "PREVIOUS: $(readlink "$PREVIOUS")"
