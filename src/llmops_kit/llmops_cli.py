@@ -1614,7 +1614,12 @@ def _load_observer_catalog(config_home: Optional[Path] = None) -> Optional[dict[
 
 
 def _is_authority_operation(args: argparse.Namespace) -> bool:
-    """Return whether a command must inspect or mutate canonical desired state."""
+    """Return whether a command needs canonical state or the lifecycle lock."""
+
+    if args.command == "stack" and getattr(args, "stack_command", "") in {
+        "start", "stop", "restart",
+    }:
+        return True
 
     if args.command == "migrate-schema":
         return True
@@ -1637,6 +1642,9 @@ def _is_authority_operation(args: argparse.Namespace) -> bool:
         "clone",
         "retire",
         "restore",
+        "start",
+        "stop",
+        "restart",
     }
 
 
@@ -1666,17 +1674,20 @@ def _route_authority_operation(
             f"host is not trusted to request authority mutations: {current_host or 'unknown'}"
         )
     authority_host = str(catalog.get("authority_host", ""))
-    if not authority_host or authority_host == current_host:
+    if not authority_host:
         return None
     target = _catalog_hosts(catalog).get(authority_host)
     if target is None:
         raise TopologyError(f"catalog authority host not found: {authority_host}")
+    if _is_local_status_host(authority_host, target, current_host):
+        return None
     command = _host_command(target, operation, json_output=args.json)
     return _execute_host_operation(
         authority_host,
         command,
         json_output=args.json,
         timeout=900,
+        stream_output=True,
     )
 
 
@@ -1776,10 +1787,15 @@ def cmd_host_operation(args: argparse.Namespace) -> int:
     return _execute_host_operation(args.host, command, json_output=args.json, timeout=args.host_timeout)
 
 
-def _execute_host_operation(host_name: str, command: list[str], *, json_output: bool, timeout: int) -> int:
+def _execute_host_operation(
+    host_name: str, command: list[str], *, json_output: bool, timeout: int,
+    stream_output: bool = False,
+) -> int:
     """Execute one allowlisted command on a trusted catalog host."""
 
     try:
+        if stream_output and not json_output:
+            return subprocess.run(command, check=False, timeout=timeout).returncode
         completed = subprocess.run(
             command,
             capture_output=True,

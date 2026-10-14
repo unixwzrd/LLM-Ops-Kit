@@ -97,8 +97,6 @@ def _auto_update(
 def tui_authority_command(config_home: Path, arguments: list[str]) -> Optional[list[str]]:
     """Return an SSH command that runs the TUI on its designated authority."""
 
-    if os.environ.get("LLMOPS_TUI_AUTHORITY_ROUTED") == "1":
-        return None
     try:
         catalog = json.loads((config_home / "catalog.json").read_text(encoding="utf-8"))
         resolved = json.loads((config_home / "resolved.json").read_text(encoding="utf-8"))
@@ -107,7 +105,7 @@ def tui_authority_command(config_home: Path, arguments: list[str]) -> Optional[l
     current_host = str(resolved.get("host", ""))
     authority_host = str(catalog.get("authority_host", ""))
     trusted = set(catalog.get("trusted_control_hosts", []))
-    if not authority_host or authority_host == current_host:
+    if not authority_host:
         return None
     if current_host not in trusted or authority_host not in trusted:
         raise RuntimeError("TUI authority routing requires trusted current and authority hosts")
@@ -119,6 +117,10 @@ def tui_authority_command(config_home: Path, arguments: list[str]) -> Optional[l
     target = hosts.get(authority_host)
     if target is None:
         raise RuntimeError(f"TUI authority host is absent from the catalog: {authority_host}")
+    if llmops_cli._is_local_status_host(authority_host, target, current_host):
+        return None
+    if os.environ.get("LLMOPS_TUI_AUTHORITY_ROUTED") == "1":
+        raise RuntimeError("routed TUI is not running as the designated authority user and host")
     operation = ["tui", *arguments]
     command = llmops_cli._host_command(target, operation, json_output=False)
     command.insert(1, "-t")

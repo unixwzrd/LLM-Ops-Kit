@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.9.0b54 - 2026-10-14
+
+- Routed deployed stack and component lifecycle mutations through the designated authority host and service user, so trusted controllers share its lifecycle lock rather than competing across host-local locks. Same-host aliases no longer bypass routing when the invoking OS user differs. Authority-routed TUI sessions verify their actual user/host context; ordinary human CLI progress remains streamed through SSH, while JSON remains bounded structured output. Explicit isolated configuration overrides retain their local test behavior.
+
 ## 0.9.0b53 - 2026-10-14
 
 - Superseded the unpublished b52 candidate. Legacy four-argument state writes now resolve the canonical state root from `LLMOPS_STATE_HOME`, XDG state, or the HOME default instead of deriving it from `install.json`; installer safety mode repair removes group/world write access without broadening private directory permissions. Runtime wrapper writes now atomically replace legacy symlinks instead of following them into immutable release scripts. Retention keeps selector-protected releases explicit even when legacy content is tainted and retains ordinary unmanaged files such as `.DS_Store` without blocking clean owned candidates.

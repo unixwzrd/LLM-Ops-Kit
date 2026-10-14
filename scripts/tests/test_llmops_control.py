@@ -819,6 +819,118 @@ class TopologyTests(ControlFixture):
     def test_component_tags_are_loaded(self) -> None:
         self.assertEqual(self.topology.resolve_component("chat").tags, ("model", "chat"))
 
+    def test_lifecycle_actions_require_authority_but_reads_do_not(self) -> None:
+        for command in ("component", "stack"):
+            for action in ("start", "stop", "restart", "status", "plan", "list", "logs"):
+                with self.subTest(command=command, action=action):
+                    args = argparse.Namespace(command=command)
+                    setattr(args, f"{command}_command", action)
+                    self.assertEqual(
+                        llmops_cli._is_authority_operation(args),
+                        action in {"start", "stop", "restart"},
+                    )
+
+    def test_lifecycle_routes_to_authority_user_and_shares_its_lock(self) -> None:
+        catalog = {
+            "authority_host": "model-host",
+            "trusted_control_hosts": ["agent-host", "model-host"],
+            "hosts": [{"name": "model-host", "host": "model.local", "user": "operator"}],
+        }
+        runner = FakeRunner()
+
+        def execute_on_authority(*_args, **_kwargs):
+            Executor(self.topology, runner=runner).execute(
+                stack_plan(self.topology.stacks["sample"], "start")
+            )
+            return 0
+
+        for requester in ("agent-host", "model-host"):
+            for command in ("stack", "component"):
+                for action in ("start", "stop", "restart"):
+                    with self.subTest(requester=requester, command=command, action=action):
+                        args = argparse.Namespace(command=command, json=False)
+                        setattr(args, f"{command}_command", action)
+                        target = "sample" if command == "stack" else "sample:chat"
+                        with (
+                            mock.patch.object(llmops_cli, "_load_observer_catalog", return_value=catalog),
+                            mock.patch.object(llmops_cli, "_current_snapshot_host", return_value=requester),
+                            mock.patch.object(llmops_cli.pwd, "getpwuid") as user,
+                            mock.patch.object(llmops_cli, "_execute_host_operation", side_effect=execute_on_authority) as execute,
+                            operation_lock(self.paths.run_dir / "orchestrator.lock"),
+                        ):
+                            user.return_value.pw_name = "controller"
+                            with self.assertRaisesRegex(ExecutionError, "another lifecycle operation"):
+                                llmops_cli._route_authority_operation(
+                                    args, [command, action, target], config_home=self.paths.config_home
+                                )
+                            self.assertIn("operator@model.local", execute.call_args.args[1])
+        self.assertEqual(runner.calls, [])
+        execute_on_authority()
+        self.assertTrue(runner.calls)
+
+    def test_authority_lifecycle_executes_locally_only_for_matching_user(self) -> None:
+        catalog = {
+            "authority_host": "model-host",
+            "trusted_control_hosts": ["model-host"],
+            "hosts": [{"name": "model-host", "host": "model.local", "user": "operator"}],
+        }
+        args = argparse.Namespace(command="stack", stack_command="start", json=False)
+        with (
+            mock.patch.object(llmops_cli, "_load_observer_catalog", return_value=catalog),
+            mock.patch.object(llmops_cli, "_current_snapshot_host", return_value="model-host"),
+            mock.patch.object(llmops_cli, "_execute_host_operation") as execute,
+        ):
+            self.assertIsNone(llmops_cli._route_authority_operation(
+                args, ["stack", "start", "sample"], config_home=self.paths.config_home
+            ))
+        execute.assert_not_called()
+
+    def test_untrusted_lifecycle_request_is_refused_before_ssh(self) -> None:
+        args = argparse.Namespace(command="stack", stack_command="restart", json=False)
+        with (
+            mock.patch.object(llmops_cli, "_load_observer_catalog", return_value={"trusted_control_hosts": ["model-host"]}),
+            mock.patch.object(llmops_cli, "_current_snapshot_host", return_value="untrusted"),
+            mock.patch.object(llmops_cli, "_execute_host_operation") as execute,
+        ):
+            with self.assertRaisesRegex(TopologyError, "not trusted"):
+                llmops_cli._route_authority_operation(
+                    args, ["stack", "restart", "sample"], config_home=self.paths.config_home
+                )
+        execute.assert_not_called()
+
+    def test_tui_same_host_alias_different_user_still_routes(self) -> None:
+        self.write_json(self.paths.config_home / "catalog.json", {
+            "authority_host": "model-host",
+            "trusted_control_hosts": ["model-host"],
+            "hosts": [{"name": "model-host", "host": "model.local", "user": "operator"}],
+        })
+        self.write_json(self.paths.config_home / "resolved.json", {"host": "model-host"})
+        with mock.patch.object(llmops_cli.pwd, "getpwuid") as user:
+            user.return_value.pw_name = "controller"
+            with mock.patch.dict(os.environ, {"LLMOPS_TUI_AUTHORITY_ROUTED": "0"}):
+                command = tui_authority_command(self.paths.config_home, [])
+            self.assertIn("operator@model.local", command)
+            with mock.patch.dict(os.environ, {"LLMOPS_TUI_AUTHORITY_ROUTED": "1"}):
+                with self.assertRaisesRegex(RuntimeError, "designated authority"):
+                    tui_authority_command(self.paths.config_home, [])
+            user.return_value.pw_name = "operator"
+            self.assertIsNone(tui_authority_command(self.paths.config_home, []))
+
+    def test_authority_human_progress_is_not_buffered_and_transport_errors_fail(self) -> None:
+        with mock.patch.object(llmops_cli.subprocess, "run", return_value=mock.Mock(returncode=2)) as run:
+            result = llmops_cli._execute_host_operation(
+                "model-host", ["ssh", "model.local", "llmops stack start sample"],
+                json_output=False, timeout=900, stream_output=True,
+            )
+        self.assertEqual(result, 2)
+        self.assertNotIn("capture_output", run.call_args.kwargs)
+        for error in (OSError("SSH unavailable"), subprocess.TimeoutExpired("ssh", 900)):
+            with self.subTest(error=error), mock.patch.object(llmops_cli.subprocess, "run", side_effect=error):
+                with self.assertRaisesRegex(TopologyError, "host operation failed"):
+                    llmops_cli._execute_host_operation(
+                        "model-host", ["ssh"], json_output=False, timeout=900, stream_output=True,
+                    )
+
     def test_effective_component_reports_profile_host_and_resolved_values(self) -> None:
         llmops_cli.CURRENT_TOPOLOGY = self.topology
         payload = llmops_cli._effective_component(self.topology.resolve_component("chat"))

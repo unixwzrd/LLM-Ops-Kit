@@ -22,6 +22,7 @@ Back: [Documentation index](./INDEX.md)
 - [ ] Use `llmops component version <component>` to compare desired and observed immutable runtimes; treat `stale-runtime` as attention.
 - [ ] Treat `authority-only` as unobserved, not stopped; inspect it from the owning account.
 - [ ] Use `component plan` before first-time lifecycle changes.
+- [ ] Run deployed lifecycle commands through ordinary `llmops` entry points on trusted controllers; they forward to the authority host and configured service user, sharing its lock. A competing mutation fails explicitly instead of stopping another controller's startup. Do not use isolated `--config-home` or `--inventory` overrides to operate the same deployed stack concurrently. Check TUI background operation receipts on the authority host.
 - [ ] During startup, expect independent dependency chains to overlap; `ready` for an upstream admits its consumers without waiting for unrelated models. A full stack restart still completes all stops before starting anything.
 - [ ] Treat restart and upgrade separately: restart uses installed artifacts, while a reviewed `llmops update` installs an approved immutable toolkit artifact. Restart does not deploy staged Hermes, RTK, or MLX-Audio candidates.
 - [ ] Confirm the equivalent command shown by `llmops tui` before mutation.
