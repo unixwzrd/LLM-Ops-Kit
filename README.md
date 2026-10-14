@@ -24,13 +24,13 @@ The installer owns its UV-managed Python runtime. It does not require Git, syste
 
 ## Install
 
-The current beta is **0.9.0b52**. Download and verify that beta's installer explicitly; GitHub's `/releases/latest` redirect excludes prereleases and can select an older release:
+The current beta candidate is **0.9.0b53**. It supersedes the unpublished b52 candidate. Download and verify that beta's installer explicitly; GitHub's `/releases/latest` redirect excludes prereleases and can select an older release:
 
 ```bash
-curl -fsSLO https://github.com/unixwzrd/LLM-Ops-Kit/releases/download/0.9.0b52/install-llmops
-curl -fsSLO https://github.com/unixwzrd/LLM-Ops-Kit/releases/download/0.9.0b52/install-llmops.sha256
+curl -fsSLO https://github.com/unixwzrd/LLM-Ops-Kit/releases/download/0.9.0b53/install-llmops
+curl -fsSLO https://github.com/unixwzrd/LLM-Ops-Kit/releases/download/0.9.0b53/install-llmops.sha256
 shasum -a 256 -c install-llmops.sha256
-bash install-llmops --repository unixwzrd/LLM-Ops-Kit --version 0.9.0b52
+bash install-llmops --repository unixwzrd/LLM-Ops-Kit --version 0.9.0b53
 ```
 
 Then create and validate a local configuration:

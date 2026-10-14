@@ -112,24 +112,28 @@ resolve_uv() {
 }
 
 link_runtime() {
-  local root="$1" name wrapper
+  local root="$1" name wrapper temporary
   mkdir -p "$INSTALL_BASE/bin" "$PUBLIC_BIN_DIR"
   wrapper="$INSTALL_BASE/bin/llmops"
+  temporary="${wrapper}.new.$$"
   printf '%s\n' '#!/usr/bin/env bash' 'set -euo pipefail' \
     "export LLMOPS_HOME=\"$INSTALL_BASE\"" \
     "if [[ -z \"\${LLMOPS_CONFIG_HOME:-}\" && -L \"$INSTALL_BASE/current-config\" ]]; then export LLMOPS_CONFIG_HOME=\"$INSTALL_BASE/current-config\"; fi" \
-    "exec \"$INSTALL_BASE/current/app/bin/llmops\" \"\$@\"" > "$wrapper"
-  chmod 755 "$wrapper"
+    "exec \"$INSTALL_BASE/current/app/bin/llmops\" \"\$@\"" > "$temporary"
+  chmod 755 "$temporary"
+  mv -f "$temporary" "$wrapper"
   ln -sfn "$wrapper" "$PUBLIC_BIN_DIR/llmops"
   for name in "${RUNTIME_COMMANDS[@]}"; do
     [[ -x "$root/scripts/$name" ]] || continue
     wrapper="$root/bin/$name"
     mkdir -p "$root/bin"
+    temporary="${wrapper}.new.$$"
     printf '%s\n' '#!/usr/bin/env bash' 'set -euo pipefail' \
       "export LLMOPS_PYTHON_BIN=\"$root/app/bin/python\"" \
       "if [[ -z \"\${LLMOPS_CONFIG_HOME:-}\" && -L \"$INSTALL_BASE/current-config\" ]]; then export LLMOPS_CONFIG_HOME=\"$INSTALL_BASE/current-config\"; fi" \
-      "exec \"$root/scripts/$name\" \"\$@\"" > "$wrapper"
-    chmod 755 "$wrapper"
+      "exec \"$root/scripts/$name\" \"\$@\"" > "$temporary"
+    chmod 755 "$temporary"
+    mv -f "$temporary" "$wrapper"
     ln -sfn "$root/bin/$name" "$INSTALL_BASE/bin/$name"
   done
 }
@@ -181,7 +185,7 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
 fi
 
 mkdir -p "$INSTALL_BASE" "$INSTALL_BASE/releases" "$STATE_HOME" "$STATE_HOME/run"
-chmod 755 "$INSTALL_BASE" "$INSTALL_BASE/releases" "$STATE_HOME" "$STATE_HOME/run"
+chmod go-w "$INSTALL_BASE" "$INSTALL_BASE/releases" "$STATE_HOME" "$STATE_HOME/run"
 acquire_update_lock
 trap release_update_lock EXIT
 trap 'exit 129' HUP

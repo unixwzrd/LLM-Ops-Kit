@@ -2,9 +2,13 @@
 
 ## Unreleased
 
+## 0.9.0b53 - 2026-10-14
+
+- Superseded the unpublished b52 candidate. Legacy four-argument state writes now resolve the canonical state root from `LLMOPS_STATE_HOME`, XDG state, or the HOME default instead of deriving it from `install.json`; installer safety mode repair removes group/world write access without broadening private directory permissions. Runtime wrapper writes now atomically replace legacy symlinks instead of following them into immutable release scripts. Retention keeps selector-protected releases explicit even when legacy content is tainted and retains ordinary unmanaged files such as `.DS_Store` without blocking clean owned candidates.
+
 ## 0.9.0b52 - 2026-10-14
 
-- Added fail-closed `llmops maintenance releases` planning and reviewed-digest apply modes for installer-owned immutable releases, serialized with update, rollback, and lifecycle operations. Current and previous always remain protected; candidates require verified installed manifests and ownership, stable filesystem identities, and no process, open-file, active-configuration, recorded-runtime, or LaunchAgent references. Legacy unmanaged directories are retained without blocking independently verified candidates.
+- Unpublished and superseded by b53. Added fail-closed `llmops maintenance releases` planning and reviewed-digest apply modes for installer-owned immutable releases, serialized with update, rollback, and lifecycle operations. Current and previous always remain protected; candidates require verified installed manifests and ownership, stable filesystem identities, and no process, open-file, active-configuration, recorded-runtime, or LaunchAgent references. Legacy unmanaged directories are retained without blocking independently verified candidates.
 
 ## 0.9.0b51 - 2026-10-14
 

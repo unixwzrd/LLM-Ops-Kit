@@ -8,6 +8,11 @@ import json
 import os
 from pathlib import Path
 
+try:
+    from .llmops_paths import resolve_paths
+except ImportError:  # Direct source execution.
+    from llmops_paths import resolve_paths
+
 
 def write_state(
     path: Path, *, install_root: str, public_bin: str, state_home: str, release: str
@@ -41,7 +46,7 @@ def main() -> int:
     parser.add_argument("release", nargs="?")
     args = parser.parse_args()
     if args.release is None:
-        state_home = os.environ.get("LLMOPS_STATE_HOME", str(args.state_file.parent))
+        state_home = str(resolve_paths().state_home)
         release = args.state_home_or_release
     else:
         state_home = args.state_home_or_release

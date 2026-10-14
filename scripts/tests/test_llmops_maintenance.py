@@ -141,6 +141,30 @@ class ReleaseMaintenanceTests(unittest.TestCase):
             unknown = next(row for row in payload["releases"] if row["release"] == "manual-copy")
             self.assertEqual(unknown["action"], "skip")
 
+    def test_ds_store_is_retained_without_blocking_owned_candidate(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            install = self.fixture(root)
+            ds_store = install / "releases/.DS_Store"
+            ds_store.write_bytes(b"fixture metadata")
+            with mock.patch("subprocess.run", side_effect=self.no_references):
+                payload = self.maintain(install, apply=True)
+            self.assertEqual(payload["removed"], ["b49"])
+            self.assertTrue(ds_store.is_file())
+            row = next(item for item in payload["releases"] if item["release"] == ".DS_Store")
+            self.assertEqual(row["action"], "skip")
+            self.assertEqual(row["reason"], "unmanaged regular file retained")
+
+    def test_tainted_previous_is_still_reported_as_protected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            install = self.fixture(Path(temporary))
+            (install / "previous/scripts/llmops").write_text("tampered\n", encoding="utf-8")
+            with mock.patch("subprocess.run", side_effect=self.no_references):
+                payload = self.maintain(install)
+            row = next(item for item in payload["releases"] if item["release"] == "b50")
+            self.assertEqual(row["action"], "keep")
+            self.assertEqual(row["reason"], "previous")
+
     def test_drop_previous_requires_apply_and_removes_selector(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

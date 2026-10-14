@@ -477,7 +477,15 @@ def _inventory(
     rows: list[dict[str, object]] = []
     for path in sorted(releases.iterdir(), key=lambda item: item.name):
         row: dict[str, object] = {"release": path.name, "path": str(path), "action": "keep"}
-        if path.is_symlink() or not path.is_dir():
+        if path.is_symlink():
+            row.update(action="blocked", reason="unexpected release entry")
+        elif path == current:
+            row["reason"] = "current"
+        elif path == previous and not drop_previous:
+            row["reason"] = "previous"
+        elif path.is_file():
+            row.update(action="skip", reason="unmanaged regular file retained")
+        elif not path.is_dir():
             row.update(action="blocked", reason="unexpected release entry")
         else:
             try:
@@ -488,10 +496,6 @@ def _inventory(
                 continue
             if release_version is None:
                 row.update(action="skip", reason="unmanaged or incomplete release retained")
-            elif path == current:
-                row["reason"] = "current"
-            elif path == previous and not drop_previous:
-                row["reason"] = "previous"
             else:
                 try:
                     _validate_tree(path, root, releases.stat().st_dev)

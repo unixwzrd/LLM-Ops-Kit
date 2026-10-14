@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import json
 import re
@@ -15,6 +16,9 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
+
+from llmops_kit import llmops_install_state
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 INSTALLER = REPO_ROOT / "scripts" / "install-runtime.sh"
@@ -51,6 +55,28 @@ class InstallerTests(unittest.TestCase):
         with tarfile.open(output / f"LLM-Ops-Kit-{version}.tar.xz", "r:xz") as bundle:
             bundle.extractall(extracted, filter="data")
         return extracted / f"LLM-Ops-Kit-{version}"
+
+    def test_legacy_state_writer_uses_default_state_home_for_install_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary)
+            metadata = home / "install/install.json"
+            argv = ["llmops_install_state", str(metadata), str(home / "install"), str(home / "bin"), "b53"]
+            with mock.patch.dict(os.environ, {"HOME": str(home)}, clear=True), mock.patch.object(sys, "argv", argv):
+                self.assertEqual(llmops_install_state.main(), 0)
+            state = json.loads(metadata.read_text(encoding="utf-8"))
+            self.assertEqual(state["state_home"], str(home / ".local/state/llm-ops"))
+
+    def test_legacy_state_writer_preserves_custom_state_home(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary)
+            custom = home / "private-state"
+            metadata = home / "install/install.json"
+            argv = ["llmops_install_state", str(metadata), str(home / "install"), str(home / "bin"), "b53"]
+            environment = {"HOME": str(home), "LLMOPS_STATE_HOME": str(custom)}
+            with mock.patch.dict(os.environ, environment, clear=True), mock.patch.object(sys, "argv", argv):
+                self.assertEqual(llmops_install_state.main(), 0)
+            state = json.loads(metadata.read_text(encoding="utf-8"))
+            self.assertEqual(state["state_home"], str(custom))
 
     def test_fresh_upgrade_repair_uninstall_and_purge(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -108,6 +134,14 @@ class InstallerTests(unittest.TestCase):
             self.run_command(common + ["--release-id", "release-2"], env)
             self.assertEqual((install / "current").resolve(), (install / "releases" / "release-2").resolve())
             self.assertEqual((install / "previous").resolve(), (install / "releases" / "release-1").resolve())
+            archived_script = install / "current/scripts/llmops"
+            archived_sha256 = hashlib.sha256(archived_script.read_bytes()).hexdigest()
+            (install / "bin/llmops").unlink()
+            (install / "bin/llmops").symlink_to(archived_script)
+            self.run_command(common + ["--repair"], env)
+            self.assertFalse((install / "bin/llmops").is_symlink())
+            self.assertTrue((install / "bin/llmops").is_file())
+            self.assertEqual(hashlib.sha256(archived_script.read_bytes()).hexdigest(), archived_sha256)
             self.assertTrue((install / "current-config").is_symlink())
             retained = install / "releases" / "release-2" / "retained-marker"
             retained.write_text("preserve existing immutable release\n", encoding="utf-8")
@@ -214,6 +248,9 @@ class InstallerTests(unittest.TestCase):
             (install / "current").symlink_to(current)
             (install / "previous").symlink_to(previous)
             state = root / "state"
+            install.chmod(0o700)
+            state.mkdir(mode=0o700)
+            (state / "run").mkdir(mode=0o700)
             env = {**os.environ, "PYTHONPATH": str(REPO_ROOT / "src")}
             self.run_command(
                 [
@@ -236,6 +273,9 @@ class InstallerTests(unittest.TestCase):
             )
             metadata = json.loads((install / "install.json").read_text(encoding="utf-8"))
             self.assertEqual(metadata["state_home"], str(state))
+            self.assertEqual(install.stat().st_mode & 0o777, 0o700)
+            self.assertEqual(state.stat().st_mode & 0o777, 0o700)
+            self.assertEqual((state / "run").stat().st_mode & 0o777, 0o700)
 
     @unittest.skipUnless(sys.platform == "darwin", "runtime installer supports macOS only")
     def test_interrupted_repair_releases_install_mutation_lock(self) -> None:

@@ -50,6 +50,8 @@ Normal uninstall preserves canonical configuration, data, state, and cache. Purg
 
 Release retention is local and plan-first:
 
+The unpublished b52 candidate is superseded by b53 because legacy rollback state writes could record the install root as `state_home`; b53 resolves the canonical state root from the normal environment-based path contract.
+
 ```bash
 llmops maintenance releases --plan
 llmops maintenance releases --apply --plan-digest <digest-from-reviewed-plan>
