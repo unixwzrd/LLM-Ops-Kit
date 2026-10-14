@@ -39,6 +39,49 @@ from test_llmops_control import ControlFixture
 
 
 class SchemaConfigurationTests(ControlFixture):
+    def test_ssh_tunnel_profile_creation_uses_launchd_contract(self) -> None:
+        template = load_template_registry(self.paths)["ssh-tunnel"]
+        self.assertEqual(template.defaults["label"], "org.example.ssh-tunnel")
+        self.assertNotIn("actions", template.defaults)
+        self.assertNotIn("oneOf", template.profile_schema)
+
+        plan = create_profile(
+            self.paths,
+            name="desktop-tunnel",
+            template_id="ssh-tunnel",
+            values=None,
+            apply=True,
+        )
+        profile = json.loads(Path(plan["path"]).read_text(encoding="utf-8"))
+        self.assertEqual(profile["label"], "org.example.ssh-tunnel")
+        self.assertNotIn("plist", profile)
+        self.assertNotIn("actions", profile)
+
+    def test_ssh_tunnel_accepts_existing_minimal_plist_profile(self) -> None:
+        template = load_template_registry(self.paths)["ssh-tunnel"]
+        profile = {
+            "schema_version": 2,
+            "template_id": "ssh-tunnel",
+            "name": "desktop-tunnel",
+            "label": "ai.example.desktop-tunnel",
+            "plist": "~/Library/LaunchAgents/ai.example.desktop-tunnel.plist",
+        }
+        self.assertEqual(validate_profile(template, profile), [])
+
+    def test_ssh_tunnel_rejects_actions_only_and_invalid_labels(self) -> None:
+        template = load_template_registry(self.paths)["ssh-tunnel"]
+        actions_only = {
+            "schema_version": 2,
+            "template_id": "ssh-tunnel",
+            "name": "desktop-tunnel",
+            "actions": {"start": ["/usr/bin/true"]},
+        }
+        self.assertTrue(any("label" in error for error in validate_profile(template, actions_only)))
+
+        invalid_label = dict(template.defaults)
+        invalid_label["label"] = "org.example invalid"
+        self.assertTrue(any("label" in error for error in validate_profile(template, invalid_label)))
+
     def test_llama_cpp_template_exposes_chat_only_vision_projector(self) -> None:
         template = load_template_registry(self.paths)["llama-cpp"]
         paths = {row["path"] for row in flatten_schema(template.profile_schema)}

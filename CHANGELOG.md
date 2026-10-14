@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.9.0b50 - 2026-10-14
+
+- Reconciled the SSH tunnel template with its launchd-only runtime driver: profiles now require a validated launchd label, may omit a plist for an already-loaded job, and no longer advertise inert action callbacks.
+- Recorded the b49 provenance mismatch without retagging it: the `.60` build came from `7dde0b1`, while published tag `0.9.0b49` points to `dbf5604`; the `.67` source tree is equivalent to merge commit `2a3abfd`.
+
 ## 0.9.0b49 - 2026-09-08
 
 - Started and stopped independent stack components concurrently in dependency-safe waves, retaining readiness gates, deterministic result ordering, bounded startup rollback, and best-effort shutdown failure collection; direct CLI stack operations now stream flushed per-component progress instead of appearing idle during long starts or stops.
