@@ -24,7 +24,7 @@ The installer owns its UV-managed Python runtime. It does not require Git, syste
 
 ## Install
 
-The current beta candidate is **0.9.0b54**. It adds authority-host lifecycle serialization to the unpublished b53 candidate. Download and verify that beta's installer explicitly; GitHub's `/releases/latest` redirect excludes prereleases and can select an older release:
+The current published beta is **[0.9.0b54](https://github.com/unixwzrd/LLM-Ops-Kit/releases/tag/0.9.0b54)**. It adds authority-host lifecycle serialization to the unpublished b53 candidate. Download and verify that beta's installer explicitly; GitHub's `/releases/latest` redirect excludes prereleases and can select an older release:
 
 ```bash
 curl -fsSLO https://github.com/unixwzrd/LLM-Ops-Kit/releases/download/0.9.0b54/install-llmops

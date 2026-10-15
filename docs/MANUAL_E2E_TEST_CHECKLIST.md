@@ -1,11 +1,27 @@
 # Manual End-to-End Acceptance
 
 **Created**: 2026-07-17
-**Updated**: 2026-08-07
+**Updated**: 2026-10-14
 
 Back: [Documentation index](./INDEX.md)
 
 Record artifact version, SHA-256, host, architecture, timestamp, result, and evidence path for every section. Do not carry proof-of-concept or earlier release-candidate checks forward without rerunning them against the final artifact.
+
+## b54 Release Disposition
+
+Published prerelease `0.9.0b54` is frozen to clean source `007b0578d95e96f5f8f080fd2f726a1424cf9d84` and archive SHA-256 `9149eb9df7786cc75db474256cdf235d830531669a0f12c5472f98f98584dec6`. The documentation changes recording publication are later commits; they do not replace that artifact.
+
+| Acceptance area | Exact b54 evidence |
+|---|---|
+| Source and CI | 288 tests, release precheck, and exact-commit macOS CI passed |
+| Installed artifact | 108 control tests passed on Apple Silicon and Intel with source excluded |
+| Fresh installation | Normal and minimal installs, repair, preserving uninstall, reinstall, and purge passed in disposable homes on both architectures; Textual presence/absence and installed-wheel provenance verified |
+| Live operations | All three contexts remain on b54; authority-lock contention refused before mutation, one authority-controlled startup completed, 11 components healthy, and nine protocol checks passed |
+| Retention | Current and previous are protected; incomplete or altered legacy installations are retained, not reclassified to bypass guards |
+
+These are targeted b54 acceptance results, not a claim that every historical scenario below was repeated. Earlier rollback/return-forward evidence remains historical; the current development policy is fix-forward, with no additional live version cycling or stack restart merely for release bookkeeping. Normal uninstall and purge acceptance affects disposable fixtures only. Published-asset verification is recorded in the release closure evidence and must not be inferred solely from a successful upload.
+
+The remaining sections are the reusable manual scenario checklist. An unchecked historical box is not an assertion that the corresponding b54 check failed, and an older checked box is not substitute evidence for a new artifact.
 
 ## Preserve
 

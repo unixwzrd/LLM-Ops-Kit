@@ -1,22 +1,22 @@
 # Quickstart
 
 **Created**: 2026-07-16
-**Updated**: 2026-07-21
+**Updated**: 2026-10-14
 
 Back: [Documentation index](./INDEX.md)
 
 ## Install
 
-Download and verify the installer from the latest published GitHub release:
+Download and verify the installer for the published `0.9.0b54` beta explicitly. GitHub's `releases/latest` redirect selects stable releases, not the newest prerelease:
 
 ```bash
-curl -fsSLO https://github.com/unixwzrd/LLM-Ops-Kit/releases/latest/download/install-llmops
-curl -fsSLO https://github.com/unixwzrd/LLM-Ops-Kit/releases/latest/download/install-llmops.sha256
+curl -fsSLO https://github.com/unixwzrd/LLM-Ops-Kit/releases/download/0.9.0b54/install-llmops
+curl -fsSLO https://github.com/unixwzrd/LLM-Ops-Kit/releases/download/0.9.0b54/install-llmops.sha256
 shasum -a 256 -c install-llmops.sha256
-bash install-llmops --repository unixwzrd/LLM-Ops-Kit
+bash install-llmops --repository unixwzrd/LLM-Ops-Kit --version 0.9.0b54
 ```
 
-Add `--version <tag>` to install a specific release instead of the latest one.
+Replace `0.9.0b54` with another explicitly selected release tag when required.
 
 The installer bootstraps a verified UV binary when necessary, installs a managed Python under `~/.local/llm-ops/python/`, installs the project and Textual from the archive's offline wheelhouse, and switches the immutable `current` release only after verification. It does not require a checkout or modify shell startup files.
 

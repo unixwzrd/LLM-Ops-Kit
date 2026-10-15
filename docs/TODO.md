@@ -1,7 +1,7 @@
 # Maintainer TODO
 
 **Created**: 2026-07-16
-**Updated**: 2026-08-07
+**Updated**: 2026-10-14
 
 Back: [Documentation index](./INDEX.md)
 
@@ -33,6 +33,8 @@ Back: [Documentation index](./INDEX.md)
 
 ## Beta Release Gates
 
+Current disposition: `0.9.0b54` is a published prerelease at clean source `007b0578d95e96f5f8f080fd2f726a1424cf9d84`. The exact-artifact checks and historical/live boundaries are recorded in [Manual End-to-End Acceptance](./MANUAL_E2E_TEST_CHECKLIST.md#b54-release-disposition). The older gate entries below retain their original evidence and are not a request to repeat live rollback or full-stack restarts during documentation closure.
+
 - [x] Replay historical Hermes image-generation context through the installed media-history template and confirm textual tool-result image payloads and duplicate assistant base64 copies are removed.
 - [x] Capture a dedicated Hermes vision request and confirm its raw request retains the structured `image_url` while the rendered prompt contains one Qwen vision placeholder. The two captured upstream requests reached the model and returned `500 Compute error`, which is an upstream vision execution issue rather than Jinja image removal.
 - [x] Pass the dependency-complete source suite and precheck in the packaged UV environment. Source candidate `0.9.0b22` passes precheck on 2026-07-23, including the dedicated-vision-after-tool-history regression.
@@ -50,7 +52,7 @@ Back: [Documentation index](./INDEX.md)
 - [x] Produce clean local release commits and build exclusively from committed source; precheck covers documentation links, secret/private-path scans, archive content, and ignored-file audits. The operator's pre-existing `.gitignore` edit remains intentionally outside the release commits.
 - [x] Regenerate the two missing standardized operational reports from 48 hourly archived source records. The reports preserve transient migration and cold-cycle exceptions rather than describing the cycles as uninterrupted steady state.
 - [x] Run non-blocking installer experiments on Debian and Rocky. Both stop before mutation with the documented macOS-only beta error; Linux support is not claimed.
-- [ ] Obtain explicit user approval before push or tag, then require green macOS CI and publish a GitHub prerelease with checksums, manifest, changelog, upgrade, and rollback instructions.
+- [x] Obtain explicit user approval before push or tag, then require green macOS CI and publish a GitHub prerelease with checksums, manifest, changelog, upgrade, and recovery instructions. Completed for b54; published-asset installation verification is recorded separately from upload.
 
 ## Deferred From Beta
 
