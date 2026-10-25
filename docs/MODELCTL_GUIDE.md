@@ -1,7 +1,7 @@
 # Model Profiles
 
 **Created**: 2026-07-16
-**Updated**: 2026-07-23
+**Updated**: 2026-10-24
 
 Back: [Documentation index](./INDEX.md)
 
@@ -26,7 +26,7 @@ Models are canonical JSON documents under `~/.config/llm-ops/models/`. `modelctl
     "ubatch_size": 512,
     "use_mlock": true,
     "use_no_mmap": true,
-    "direct_io": true
+    "direct_io": false
   },
   "template": {
     "enabled": false,
@@ -41,6 +41,8 @@ Models are canonical JSON documents under `~/.config/llm-ops/models/`. `modelctl
 
 Embedding and TTS profiles use `type: embedding` or `type: tts`. Temporary emergency overrides may be exported into the process environment. Persisted behavior belongs in JSON.
 
+The llama.cpp driver probes the configured server's help once at startup. Builds advertising `--load-mode` receive `mmap+mlock` for memory locking with mapping enabled, `mlock` for locking with mapping disabled, `none` for disabled mapping without locking, and `dio` for direct I/O. Otherwise chat keeps the server's `auto` loading policy and embedding explicitly requests `mmap`. Older builds retain their legacy loading switches. Direct I/O and memory locking cannot be represented together by the new interface and fail with an explicit configuration error; choose one rather than silently losing either setting. No version numbers or model-specific names select this behavior.
+
 `Qwen-3_5-stock-template.jinja` is retained as the unchanged upstream baseline. `Qwen-3_5-media-history-template.jinja` is derived from it and removes image-producing textual tool call/result pairs and assistant calls that duplicate media bytes. Tool-result images are often truncated before reaching history and cannot be reconstructed reliably. The template detects explicit image result structure instead of scanning arbitrary text for short base64 signatures. It does not attempt base64 validation in Jinja.
 
 Native structured multimodal message parts remain intact. A dedicated vision request therefore renders `<|vision_start|><|image_pad|><|vision_end|>` while the model engine receives and processes the corresponding image data separately. The model profile and model-proxy diagnostic renderer must reference the same selected template so diagnostic rendering matches llama.cpp prompt construction.
@@ -54,3 +56,5 @@ llmops component status <stack>:<model-component>
 There are no launcher-name profiles, repository shell profiles, model registry mutation, or implicit agent switching.
 
 Each model start archives a nonempty prior server log before opening a new one. Lifecycle events are appended to `~/.local/state/llm-ops/logs/model-lifecycle.log`. If a managed process exits unexpectedly, the next status inspection records `unexpected_exit_detected` before clearing stale PID state. Automatic restart remains an explicit future policy rather than a default because model memory and startup cost vary substantially.
+
+llama.cpp stdout and stderr are captured directly into that model log, including failures before its own logging initialization. The driver does not also request a separate internal `--log-file` writer, avoiding duplicate writes to the same file. Early argument errors are included in the reported startup failure.

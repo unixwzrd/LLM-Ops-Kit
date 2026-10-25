@@ -1,11 +1,13 @@
 # Status Semantics
 
 **Created**: 2026-07-21
-**Updated**: 2026-08-20
+**Updated**: 2026-10-25
 
 Back: [Documentation index](./INDEX.md)
 
 `llmops status`, component status, stack status, JSON output, and the Textual console consume one shared observation record. Status is intentionally not compressed into one ambiguous field.
+
+`llmops status` lists all configured components by default, including disabled ones. `--all` remains an explicit compatible spelling of that default; use `--enabled-only` to hide disabled components. The visibility flags are mutually exclusive and apply to selectors, JSON, local observation and peer aggregation. Including a disabled component in status does not enable it or add it to stack startup; lifecycle plans continue to respect its configuration.
 
 | Field | Values | Meaning |
 |---|---|---|
@@ -48,6 +50,7 @@ Examples:
 
 ```bash
 llmops status
+llmops status --enabled-only
 llmops status model-proxy --json
 llmops component status model-proxy --json
 llmops stack status <stack> --json

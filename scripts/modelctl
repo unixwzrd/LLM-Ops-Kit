@@ -427,6 +427,41 @@ status_model() {
   return 1
 }
 
+configure_llama_loading() {
+  local help="$1" mode="auto"
+  if [[ "$help" == *"--load-mode"* ]]; then
+    if [[ "${DIRECT_IO:-0}" == "1" ]]; then
+      if [[ "${USE_MLOCK:-0}" == "1" ]]; then
+        echo "llama-server: DIRECT_IO and USE_MLOCK cannot be combined with --load-mode" >&2
+        return 2
+      fi
+      mode="dio"
+    elif [[ "${USE_NO_MMAP:-0}" == "1" ]]; then
+      mode="none"
+      [[ "${USE_MLOCK:-0}" == "1" ]] && mode="mlock"
+    elif [[ "${USE_MLOCK:-0}" == "1" ]]; then
+      mode="mmap+mlock"
+    elif [[ "$MODEL_TYPE" == "embedding" ]]; then
+      mode="mmap"
+    fi
+    RUNTIME_FLAGS+=(--load-mode "$mode")
+  else
+    [[ "${USE_MLOCK:-0}" == "1" ]] && RUNTIME_FLAGS+=(--mlock)
+    if [[ "${USE_NO_MMAP:-0}" == "1" ]]; then
+      RUNTIME_FLAGS+=(--no-mmap)
+    elif [[ "$MODEL_TYPE" == "embedding" ]]; then
+      RUNTIME_FLAGS+=(--mmap)
+    fi
+    if [[ "${DIRECT_IO:-0}" == "1" ]]; then
+      if [[ "$help" == *"--direct-io"* ]]; then
+        RUNTIME_FLAGS+=(--direct-io)
+      else
+        echo "WARNING: DIRECT_IO=1 but llama-server does not support --direct-io; skipping."
+      fi
+    fi
+  fi
+}
+
 start_model() {
   print_model_settings
 
@@ -455,6 +490,15 @@ start_model() {
   RUNTIME_FLAGS=()
   SAMPLING_FLAGS=()
 
+  local llama_help=""
+  if [[ "$MODEL_TYPE" == "llm" || "$MODEL_TYPE" == "embedding" ]]; then
+    llama_help="$("$LLAMA_SERVER_BIN" --help 2>&1)" || {
+      echo "llama-server capability check failed: $llama_help" >&2
+      return 1
+    }
+    configure_llama_loading "$llama_help"
+  fi
+
   if [[ "$MODEL_TYPE" == "llm" ]]; then
     if [[ -n "${MMPROJ:-}" ]]; then
       MM_FLAGS+=(--mmproj "$MMPROJ")
@@ -466,21 +510,8 @@ start_model() {
     if [[ "${VERBOSE_PROMPT:-0}" == "1" ]]; then
       DEBUG_FLAGS+=(--verbose-prompt)
     fi
-    if [[ "${USE_MLOCK:-0}" == "1" ]]; then
-      RUNTIME_FLAGS+=(--mlock)
-    fi
-    if [[ "${USE_NO_MMAP:-0}" == "1" ]]; then
-      RUNTIME_FLAGS+=(--no-mmap)
-    fi
     if [[ "${USE_NO_WEBUI:-1}" == "1" ]]; then
       RUNTIME_FLAGS+=(--no-webui)
-    fi
-    if [[ "${DIRECT_IO:-0}" == "1" ]]; then
-      if "$LLAMA_SERVER_BIN" --help 2>&1 | rg -q -- '--direct-io'; then
-        RUNTIME_FLAGS+=(--direct-io)
-      else
-        echo "WARNING: DIRECT_IO=1 but llama-server does not support --direct-io; skipping."
-      fi
     fi
     if [[ -n "${CACHE_TYPE_K:-}" ]]; then
       RUNTIME_FLAGS+=(--cache-type-k "$CACHE_TYPE_K")
@@ -519,9 +550,9 @@ start_model() {
       RUNTIME_FLAGS+=(--no-host)
     fi
     if [[ "${DISABLE_TOOL_GRAMMAR:-0}" == "1" ]]; then
-      if "$LLAMA_SERVER_BIN" --help 2>&1 | rg -q -- '--no-tool-grammar'; then
+      if [[ "$llama_help" == *"--no-tool-grammar"* ]]; then
         EXTRA_ARGS+=(--no-tool-grammar)
-      elif "$LLAMA_SERVER_BIN" --help 2>&1 | rg -q -- '--disable-tool-grammar'; then
+      elif [[ "$llama_help" == *"--disable-tool-grammar"* ]]; then
         EXTRA_ARGS+=(--disable-tool-grammar)
       else
         echo "WARNING: DISABLE_TOOL_GRAMMAR=1 but llama-server has no known tool-grammar disable flag; skipping."
@@ -540,16 +571,9 @@ start_model() {
     [[ -n "${PRESENCE_PENALTY:-}" ]] && SAMPLING_FLAGS+=(--presence-penalty "$PRESENCE_PENALTY")
     [[ -n "${REPEAT_PENALTY:-}" ]] && SAMPLING_FLAGS+=(--repeat-penalty "$REPEAT_PENALTY")
   elif [[ "$MODEL_TYPE" == "embedding" ]]; then
-    MODE_FLAGS+=(--embedding --pooling "$POOLING" --mmap)
+    MODE_FLAGS+=(--embedding --pooling "$POOLING")
     if [[ "${USE_NO_WEBUI:-1}" == "1" ]]; then
       RUNTIME_FLAGS+=(--no-webui)
-    fi
-    if [[ "${DIRECT_IO:-0}" == "1" ]]; then
-      if "$LLAMA_SERVER_BIN" --help 2>&1 | rg -q -- '--direct-io'; then
-        RUNTIME_FLAGS+=(--direct-io)
-      else
-        echo "WARNING: DIRECT_IO=1 but llama-server does not support --direct-io; skipping."
-      fi
     fi
     if [[ -n "${CACHE_TYPE_K:-}" ]]; then
       RUNTIME_FLAGS+=(--cache-type-k "$CACHE_TYPE_K")
@@ -593,10 +617,11 @@ start_model() {
     (( ${#RUNTIME_FLAGS[@]} > 0 )) && llama_cmd+=("${RUNTIME_FLAGS[@]}")
     (( ${#TEMPLATE_FLAGS[@]} > 0 )) && llama_cmd+=("${TEMPLATE_FLAGS[@]}")
     (( ${#DEBUG_FLAGS[@]} > 0 )) && llama_cmd+=("${DEBUG_FLAGS[@]}")
-    llama_cmd+=(--log-timestamps --log-file "$LOG_FILE")
+    llama_cmd+=(--log-timestamps)
     (( ${#MODE_FLAGS[@]} > 0 )) && llama_cmd+=("${MODE_FLAGS[@]}")
     (( ${#EXTRA_ARGS[@]} > 0 )) && llama_cmd+=("${EXTRA_ARGS[@]}")
-    nohup "${llama_cmd[@]}" >/dev/null 2>&1 &
+    # Capture parser/dyld failures as well as runtime logs, with one log writer.
+    nohup "${llama_cmd[@]}" >"$LOG_FILE" 2>&1 &
     pid="$!"
   fi
 

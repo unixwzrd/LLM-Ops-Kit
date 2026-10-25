@@ -1495,7 +1495,7 @@ def _inspect_status(components: list[Any], args: argparse.Namespace) -> list[dic
         )
         observed_runtime = "" if observation is None else _observed_runtime(observation)
         uptime_seconds, started_at, uptime_source = _uptime_fields(observation, lifecycle)
-        desired_runtime = metadata["toolkit_version"]
+        desired_runtime = metadata["runtime_id"]
         runtime_drift = bool(observed_runtime and observed_runtime != desired_runtime)
         drift = "stale-runtime" if runtime_drift else metadata["drift"]
         condition = _condition(
@@ -1557,7 +1557,7 @@ def _inspect_status(components: list[Any], args: argparse.Namespace) -> list[dic
 def _runtime_metadata() -> dict[str, Any]:
     """Return local runtime and configuration identity for status records."""
 
-    release_root = Path(sys.executable).absolute().parents[2]
+    release_root = Path(sys.executable).absolute().parents[2].resolve()
     release_file = release_root / "RELEASE.json"
     version = __version__
     try:
@@ -1584,6 +1584,7 @@ def _runtime_metadata() -> dict[str, Any]:
         last_sync = ""
     return {
         "toolkit_version": version,
+        "runtime_id": release_root.name if release_root.parent.name in {"releases", "versions"} else version,
         "catalog_hash": catalog_hash,
         "config_hash": config_hash,
         "authority": authority,
@@ -1977,7 +1978,15 @@ def _remote_status(
         return [], detail
     if not isinstance(payload, list):
         return [], "remote status returned an invalid payload"
-    return [item for item in payload if isinstance(item, dict)], ""
+    records = [item for item in payload if isinstance(item, dict)]
+    if not args.all:
+        # Older peers default to enabled-only; newer peers may include all.
+        # Filter locally instead of passing a flag older peers do not know.
+        records = [
+            item for item in records
+            if item.get("lifecycle") != "disabled" and item.get("enabled", True) is not False
+        ]
+    return records, ""
 
 
 def _is_local_status_host(
@@ -2028,7 +2037,11 @@ def _catalog_status(args: argparse.Namespace, catalog: dict[str, Any]) -> list[d
     payload: list[dict[str, Any]] = []
     for host_name, items, error in results:
         if not error:
-            payload.extend(items)
+            if args.all:
+                payload.extend(items)
+            else:
+                selected_ids = {str(item.get("id")) for item in by_host[host_name]}
+                payload.extend(item for item in items if item.get("component") in selected_ids)
             continue
         for component in by_host[host_name]:
             if component.get("enabled", True) is False:
@@ -2293,13 +2306,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     status = sub.add_parser("status")
     status.add_argument("selector", nargs="?")
-    status.add_argument("--all", action="store_true", help="include disabled components")
+    visibility = status.add_mutually_exclusive_group()
+    visibility.add_argument("--all", action="store_true", help="include disabled components (default)")
+    visibility.add_argument(
+        "--enabled-only", dest="all", action="store_false", help="hide disabled components"
+    )
     status.add_argument("--verbose", action="store_true", help="include driver output for every match")
     status.add_argument("--workers", type=int, default=8)
     status.add_argument("--host-timeout", type=int, default=20)
     status.add_argument("--host", dest="status_host", help=argparse.SUPPRESS)
     status.add_argument("--local", action="store_true", help=argparse.SUPPRESS)
-    status.set_defaults(func=cmd_status)
+    status.set_defaults(func=cmd_status, all=True)
 
     product = sub.add_parser("product")
     product_sub = product.add_subparsers(dest="product_action", required=True)
