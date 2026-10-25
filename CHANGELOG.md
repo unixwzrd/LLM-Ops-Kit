@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- List disabled configured components in `llmops status` by default, retaining `--all` as a compatible explicit alias and adding `--enabled-only` for filtered listings. Preserve the same visibility across local and mixed-version peer observations without changing lifecycle selection or enabling services.
+
+- Detect the installed llama.cpp loading interface and translate existing memory-map, memory-lock and direct-I/O settings to `--load-mode` when available, retaining legacy switches for older builds. Reject an unrepresentable direct-I/O plus memory-lock combination rather than silently changing its meaning. Capture server stdout/stderr in the model log so argument-parser and loader failures are included in startup diagnostics.
+- Compare observed runtime directory IDs with the selected immutable runtime ID, not its package version, so explicitly named local installations are not incorrectly reported as stale. Package versions remain separate; processes on a different runtime ID still report drift.
+
 ## 0.9.0b54 - 2026-10-14
 
 - Routed deployed stack and component lifecycle mutations through the designated authority host and service user, so trusted controllers share its lifecycle lock rather than competing across host-local locks. Same-host aliases no longer bypass routing when the invoking OS user differs. Authority-routed TUI sessions verify their actual user/host context; ordinary human CLI progress remains streamed through SSH, while JSON remains bounded structured output. Explicit isolated configuration overrides retain their local test behavior.

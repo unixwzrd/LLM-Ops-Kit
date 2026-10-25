@@ -35,6 +35,7 @@ from llmops_kit.llmops_lifecycle_state import LifecycleStateStore
 from llmops_kit.llmops_paths import resolve_paths
 from llmops_kit.llmops_products import ProductInventory
 from llmops_kit.llmops_topology import (
+    Component,
     Topology,
     TopologyError,
     dependency_closure,
@@ -1197,6 +1198,38 @@ class TopologyTests(ControlFixture):
         observation = ComponentObservation("running", "healthy", "observed", lifecycle)
         self.assertEqual(llmops_cli._observed_runtime(observation), "0.9.0b9")
 
+    def test_runtime_metadata_distinguishes_release_id_from_package_version(self) -> None:
+        root = self.topology.paths.config_home.parent / "installation"
+        release = root / "releases" / "local-hotfix"
+        (release / "app" / "bin").mkdir(parents=True)
+        (release / "RELEASE.json").write_text(json.dumps({"version": "fixture-version"}), encoding="utf-8")
+        (root / "current").symlink_to(release, target_is_directory=True)
+        with mock.patch.object(llmops_cli, "CURRENT_TOPOLOGY", self.topology, create=True), mock.patch.object(
+            llmops_cli.sys, "executable", str(root / "current" / "app" / "bin" / "python")
+        ):
+            metadata = llmops_cli._runtime_metadata()
+        self.assertEqual(metadata["toolkit_version"], "fixture-version")
+        self.assertEqual(metadata["runtime_id"], release.name)
+
+    def test_status_compares_runtime_ids_and_still_flags_older_processes(self) -> None:
+        component = self.topology.resolve_component("chat")
+        args = type("Args", (), {"selector": "chat", "verbose": False, "workers": 1})()
+        metadata = {"toolkit_version": "fixture-version", "runtime_id": "local-hotfix", "drift": "none"}
+        for observed, expected_drift in (("local-hotfix", False), ("fixture-version", True)):
+            with self.subTest(observed=observed):
+                result = CommandResult(
+                    component.qualified_id, "status", "status", 0,
+                    f"started_runtime_root=/opt/llm-ops/releases/{observed}\n", "",
+                )
+                observation = ComponentObservation("running", "healthy", "observed", result)
+                with mock.patch.object(llmops_cli, "CURRENT_TOPOLOGY", self.topology, create=True), mock.patch.object(
+                    llmops_cli, "_runtime_metadata", return_value=metadata
+                ), mock.patch("llmops_kit.llmops_cli.ComponentRunner.inspect", return_value=observation):
+                    item = llmops_cli._inspect_status([component], args)[0]
+                self.assertEqual(item["desired_runtime"], metadata["runtime_id"])
+                self.assertEqual(item["runtime_drift"], expected_drift)
+                self.assertEqual(item["drift"], "stale-runtime" if expected_drift else "none")
+
     def test_elapsed_seconds_and_uptime_format(self) -> None:
         self.assertEqual(llmops_cli._elapsed_seconds("42:03"), 2523)
         self.assertEqual(llmops_cli._elapsed_seconds("02:03:04"), 7384)
@@ -1753,6 +1786,120 @@ class TopologyTests(ControlFixture):
                 host_name="model-host",
                 destination=self.root / "snapshot",
             )
+
+
+class StatusVisibilityTests(ControlFixture):
+    def setUp(self) -> None:
+        super().setUp()
+        stack = self.topology.stacks["sample"]
+        stack.components["agent"] = replace(stack.components["agent"], enabled=False)
+
+    @staticmethod
+    def observations(components: list[Component], _args: argparse.Namespace) -> list[dict[str, str]]:
+        """Return deterministic records without observing processes or hosts."""
+        return [
+            {
+                "component": component.qualified_id,
+                "lifecycle": "running" if component.enabled else "disabled",
+                "condition": "ok",
+            }
+            for component in components
+        ]
+
+    def test_parser_lists_all_by_default_and_flags_are_mutually_exclusive(self) -> None:
+        parser = llmops_cli.build_parser()
+        self.assertTrue(parser.parse_args(["status"]).all)
+        self.assertTrue(parser.parse_args(["status", "--all"]).all)
+        self.assertFalse(parser.parse_args(["status", "--enabled-only"]).all)
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            parser.parse_args(["status", "--all", "--enabled-only"])
+
+    def test_local_json_lists_disabled_by_default_and_can_filter(self) -> None:
+        for flags, expected_count in (([], 4), (["--all"], 4), (["--enabled-only"], 3)):
+            with self.subTest(flags=flags):
+                args = llmops_cli.build_parser().parse_args(["--json", "status", "--local", *flags])
+                output = io.StringIO()
+                with mock.patch.object(llmops_cli, "CURRENT_TOPOLOGY", self.topology, create=True), mock.patch.object(
+                    llmops_cli, "_inspect_status", side_effect=self.observations
+                ), redirect_stdout(output):
+                    result = llmops_cli.cmd_status(args)
+                records = json.loads(output.getvalue())
+                self.assertEqual(result, 0)
+                self.assertEqual(len(records), expected_count)
+                disabled = [item for item in records if item["lifecycle"] == "disabled"]
+                self.assertEqual(len(disabled), 1 if args.all else 0)
+
+    def test_disabled_selector_is_visible_by_default(self) -> None:
+        args = llmops_cli.build_parser().parse_args(["status", "agent", "--local"])
+        with mock.patch.object(llmops_cli, "CURRENT_TOPOLOGY", self.topology, create=True), mock.patch.object(
+            llmops_cli, "_inspect_status", side_effect=self.observations
+        ):
+            records = llmops_cli._collect_status(args)
+        self.assertEqual(records, [{"component": "sample:agent", "lifecycle": "disabled", "condition": "ok"}])
+
+    def test_human_status_reports_disabled_without_probing_its_process(self) -> None:
+        component = self.topology.resolve_component("agent")
+        args = llmops_cli.build_parser().parse_args(["status", component.component_id, "--local"])
+        output = io.StringIO()
+        with mock.patch.object(llmops_cli, "CURRENT_TOPOLOGY", self.topology, create=True), mock.patch.object(
+            llmops_cli, "_runtime_metadata", return_value={"toolkit_version": "fixture", "runtime_id": "fixture", "drift": "none"}
+        ), mock.patch("llmops_kit.llmops_cli.ComponentRunner.inspect") as inspect, redirect_stdout(output):
+            result = llmops_cli.cmd_status(args)
+        self.assertEqual(result, 0)
+        self.assertIn(component.qualified_id, output.getvalue())
+        self.assertIn("disabled", output.getvalue())
+        inspect.assert_not_called()
+
+    def test_remote_default_requests_all_for_old_peers_and_filtered_mode_handles_new_peers(self) -> None:
+        host = {"host": "fixture-peer.local", "user": "fixture-user", "public_bin_dir": "~/.local/bin"}
+        records = [{"component": "fixture:enabled", "lifecycle": "running"},
+                   {"component": "fixture:disabled", "lifecycle": "disabled"}]
+        for flags in ([], ["--all"], ["--enabled-only"]):
+            with self.subTest(flags=flags):
+                args = llmops_cli.build_parser().parse_args(["status", *flags])
+                completed = mock.Mock(returncode=0, stdout=json.dumps(records), stderr="")
+                with mock.patch.object(llmops_cli.subprocess, "run", return_value=completed) as run:
+                    payload, error = llmops_cli._remote_status("fixture-peer", host, None, args)
+                remote_command = run.call_args.args[0][-1]
+                self.assertEqual(error, "")
+                self.assertEqual("--all" in remote_command, args.all)
+                self.assertNotIn("--enabled-only", remote_command)
+                self.assertEqual(payload, records if args.all else records[:1])
+
+    def test_catalog_visibility_filters_peer_rows_using_configured_selection(self) -> None:
+        snapshot = self.root / "visibility-snapshot"
+        write_host_snapshot(self.topology, host_name="model-host", destination=snapshot)
+        catalog = json.loads((snapshot / "catalog.json").read_text(encoding="utf-8"))
+        peer_records = [
+            {"component": component.qualified_id, "lifecycle": "running", "condition": "ok"}
+            for component in self.topology.all_components() if component.host == "agent-host"
+        ]
+        for flags, expected_count in (([], 4), (["--all"], 4), (["--enabled-only"], 3)):
+            with self.subTest(flags=flags):
+                args = llmops_cli.build_parser().parse_args(["status", *flags])
+                with mock.patch.object(llmops_cli, "CURRENT_TOPOLOGY", self.topology, create=True), mock.patch.object(
+                    llmops_cli, "_current_snapshot_host", return_value="model-host"
+                ), mock.patch.object(llmops_cli, "_inspect_status", side_effect=self.observations), mock.patch.object(
+                    llmops_cli, "_remote_status", return_value=(peer_records, "")
+                ):
+                    payload = llmops_cli._catalog_status(args, catalog)
+                self.assertEqual(len(payload), expected_count)
+                self.assertEqual(any(item["component"] == "sample:agent" for item in payload), args.all)
+
+    def test_status_visibility_does_not_enable_components_or_change_lifecycle_plans(self) -> None:
+        stack = self.topology.stacks["sample"]
+        before = {action: stack_plan(stack, action) for action in ("start", "stop", "restart")}
+        args = llmops_cli.build_parser().parse_args(["status", "--local"])
+        with mock.patch.object(llmops_cli, "CURRENT_TOPOLOGY", self.topology, create=True), mock.patch.object(
+            llmops_cli, "_inspect_status", side_effect=self.observations
+        ):
+            self.assertEqual(len(llmops_cli._collect_status(args)), len(stack.components))
+        self.assertFalse(stack.components["agent"].enabled)
+        for action, operations in before.items():
+            self.assertEqual(stack_plan(stack, action), operations)
+            self.assertTrue(all(
+                item.action == "skip" for item in operations if item.component.component_id == "agent"
+            ))
 
 
 class PlannerTests(ControlFixture):

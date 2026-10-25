@@ -39,7 +39,9 @@ class ModelctlMmprojTests(unittest.TestCase):
         fake_server = root / "fake-llama-server"
         fake_server.write_text(
             "#!/usr/bin/env bash\n"
+            'if [[ "${1:-}" == "--help" ]]; then printf "%s\\n" "${FAKE_LLAMA_HELP:-}"; exit 0; fi\n'
             "printf '%s\\n' \"$@\" > \"$FAKE_LLAMA_ARGS\"\n"
+            'if [[ -n "${FAKE_LLAMA_ERROR:-}" ]]; then echo "$FAKE_LLAMA_ERROR" >&2; exit 1; fi\n'
             "trap 'exit 0' TERM INT\n"
             "while :; do sleep 1; done\n",
             encoding="utf-8",
@@ -59,6 +61,103 @@ class ModelctlMmprojTests(unittest.TestCase):
             }
         )
         return env
+
+    def _start_with_loading(
+        self, *, modern: bool, model_type: str = "llm", **settings: str
+    ) -> list[str]:
+        """Launch an isolated fake server and return its captured arguments."""
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            mmproj = root / "mmproj.gguf"
+            mmproj.touch()
+            env = self._environment(root, mmproj_path=mmproj)
+            profile_path = Path(env["LLMOPS_CONFIG_HOME"]) / "models" / "vision-chat.json"
+            profile = json.loads(profile_path.read_text(encoding="utf-8"))
+            profile["type"] = model_type
+            if model_type == "embedding":
+                profile["template_id"] = "embedding"
+                profile.pop("mmproj_path")
+            profile_path.write_text(json.dumps(profile), encoding="utf-8")
+            env.update(
+                USE_MLOCK="0", USE_NO_MMAP="0", DIRECT_IO="0",
+                FAKE_LLAMA_HELP="--load-mode MODE" if modern else "--mmap --mlock --no-mmap --direct-io",
+            )
+            env.update(settings)
+            try:
+                result = subprocess.run(
+                    [str(MODELCTL), "vision-chat", "start"],
+                    capture_output=True, text=True, env=env, timeout=15, check=False,
+                )
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                return (root / "argv.txt").read_text(encoding="utf-8").splitlines()
+            finally:
+                subprocess.run(
+                    [str(MODELCTL), "vision-chat", "stop"],
+                    capture_output=True, text=True, env=env, timeout=15, check=False,
+                )
+
+    def test_modern_loading_preserves_memory_settings(self) -> None:
+        for settings, mode in (
+            ({}, "auto"),
+            ({"USE_MLOCK": "1"}, "mmap+mlock"),
+            ({"USE_NO_MMAP": "1"}, "none"),
+            ({"USE_MLOCK": "1", "USE_NO_MMAP": "1"}, "mlock"),
+            ({"DIRECT_IO": "1"}, "dio"),
+        ):
+            with self.subTest(settings=settings):
+                argv = self._start_with_loading(modern=True, **settings)
+                self.assertEqual(argv[argv.index("--load-mode") + 1], mode)
+                for obsolete in ("--mlock", "--mmap", "--no-mmap", "--direct-io"):
+                    self.assertNotIn(obsolete, argv)
+
+    def test_modern_embedding_uses_mmap_loading_mode(self) -> None:
+        argv = self._start_with_loading(modern=True, model_type="embedding")
+        self.assertEqual(argv[argv.index("--load-mode") + 1], "mmap")
+        self.assertNotIn("--mmap", argv)
+        self.assertIn("--embedding", argv)
+
+    def test_legacy_loading_switches_are_retained(self) -> None:
+        argv = self._start_with_loading(modern=False, USE_MLOCK="1", USE_NO_MMAP="1", DIRECT_IO="1")
+        for flag in ("--mlock", "--no-mmap", "--direct-io"):
+            self.assertIn(flag, argv)
+        self.assertNotIn("--load-mode", argv)
+        argv = self._start_with_loading(modern=False, model_type="embedding")
+        self.assertIn("--mmap", argv)
+
+    def test_modern_direct_io_and_mlock_fail_before_launch(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            mmproj = root / "mmproj.gguf"
+            mmproj.touch()
+            env = self._environment(root, mmproj_path=mmproj)
+            env.update(FAKE_LLAMA_HELP="--load-mode MODE", DIRECT_IO="1", USE_MLOCK="1")
+            result = subprocess.run(
+                [str(MODELCTL), "vision-chat", "start"],
+                capture_output=True, text=True, env=env, timeout=10, check=False,
+            )
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("cannot be combined", result.stderr)
+            self.assertFalse((root / "argv.txt").exists())
+
+    def test_early_argument_error_is_captured_and_reported(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            mmproj = root / "mmproj.gguf"
+            mmproj.touch()
+            env = self._environment(root, mmproj_path=mmproj)
+            error = "error: invalid argument: --unsupported-test-option"
+            env.update(FAKE_LLAMA_ERROR=error)
+            result = subprocess.run(
+                [str(MODELCTL), "vision-chat", "start"],
+                capture_output=True, text=True, env=env, timeout=10, check=False,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(error, result.stderr)
+            logs = list(Path(env["LLMOPS_STATE_HOME"]).rglob("*.log"))
+            self.assertTrue(any(error in p.read_text(encoding="utf-8") for p in logs))
+            argv = (root / "argv.txt").read_text(encoding="utf-8").splitlines()
+            self.assertNotIn("--log-file", argv)
 
     def test_start_passes_configured_mmproj_as_one_argument_pair(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
