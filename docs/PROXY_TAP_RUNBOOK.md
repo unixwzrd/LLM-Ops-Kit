@@ -1,5 +1,8 @@
 # Model Proxy Runbook
 
+**Created**: 2026-07-15
+**Updated**: 2026-10-27
+
 Back: [Documentation index](./INDEX.md)
 
 The model proxy records request and response metadata, token usage, timings, raw framed traffic, and optional rendered prompts while forwarding OpenAI-compatible request bodies unchanged.
@@ -20,6 +23,14 @@ llmops component stop model-proxy
 ```
 
 The proxy profile defines listen address, upstream address, Python interpreter, chat template, and log rotation. The typed component driver invokes the installed implementation; no separately installed wrapper is required.
+
+## Metadata-Only Logging
+
+Set `logging.mode` to `metadata` in the canonical `services/model-proxy.json`, then restart only the proxy during an idle window. The equivalent internal option is `--log-mode metadata`; `MODEL_PROXY_LOG_MODE=metadata` is also supported. The compatibility default is `full`.
+
+Metadata mode retains only allowlisted timestamps, per-request correlation IDs, process IDs, HTTP method/known route, status, duration, byte counts, message/image counts, numeric token usage/timings, and disconnect/error-presence flags. It excludes request/response bodies, arbitrary headers and URLs, query strings, previews, tool names, rendered prompts, reasoning and error bodies. All framed raw/rendered logs are disabled even if their paths or reasoning options remain configured. Requests and streamed responses are forwarded unchanged. The proxy does not cache responses.
+
+Existing diagnostic files remain unchanged and may contain historical content. This mode prevents new proxy content logging; it does not sanitize old files or change logging in Headroom, Hermes, model servers or external providers. Keep those stores under the intended account/retention policy. Validate with synthetic content sent through the actual listener and inspect only new records; do not print historical prompts into reports.
 
 ## Render Diagnostics
 

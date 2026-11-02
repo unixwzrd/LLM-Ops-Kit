@@ -582,7 +582,7 @@ start_model() {
       RUNTIME_FLAGS+=(--cache-type-v "$CACHE_TYPE_V")
     fi
   elif [[ "$MODEL_TYPE" == "tts" ]]; then
-    tts_cmd=( "$TTS_PYTHON_BIN" -m "$TTS_SERVER_MODULE" --host "$HOST" --port "$PORT" )
+    tts_cmd=( "$TTS_PYTHON_BIN" -u -m "$TTS_SERVER_MODULE" --host "$HOST" --port "$PORT" )
     if [[ -n "${TTS_API_KEY:-}" ]]; then
       tts_cmd+=( --api-key "$TTS_API_KEY" )
     fi
@@ -592,9 +592,9 @@ start_model() {
       tts_cmd+=( "${extra[@]}" )
     fi
     if [[ -n "${TTS_RUNTIME_PATH:-}" ]]; then
-      nohup env PATH="$TTS_RUNTIME_PATH:$PATH" "${tts_cmd[@]}" > "$LOG_FILE" 2>&1 &
+      nohup env PATH="$TTS_RUNTIME_PATH:$PATH" "${tts_cmd[@]}" >> "$LOG_FILE" 2>&1 &
     else
-      nohup "${tts_cmd[@]}" > "$LOG_FILE" 2>&1 &
+      nohup "${tts_cmd[@]}" >> "$LOG_FILE" 2>&1 &
     fi
     pid="$!"
   fi
@@ -620,8 +620,9 @@ start_model() {
     llama_cmd+=(--log-timestamps)
     (( ${#MODE_FLAGS[@]} > 0 )) && llama_cmd+=("${MODE_FLAGS[@]}")
     (( ${#EXTRA_ARGS[@]} > 0 )) && llama_cmd+=("${EXTRA_ARGS[@]}")
-    # Capture parser/dyld failures as well as runtime logs, with one log writer.
-    nohup "${llama_cmd[@]}" >"$LOG_FILE" 2>&1 &
+    # The restart archive already truncates intentionally. Append thereafter:
+    # MARKTIME and copy/truncate rotation must not leave this writer behind EOF.
+    nohup "${llama_cmd[@]}" >>"$LOG_FILE" 2>&1 &
     pid="$!"
   fi
 

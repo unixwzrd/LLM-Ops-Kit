@@ -94,6 +94,17 @@ class ProfileTests(unittest.TestCase):
 
         self.assertEqual(values["MODEL_PROXY_SHOW_REASONING"], "1")
 
+    def test_model_proxy_metadata_logging_mode_is_schema_bound(self) -> None:
+        document = {"logging": {"mode": "metadata", "show_reasoning": True},
+                    "runtime": {"listen_port": 48379, "upstream_host": "fixture-model.invalid", "upstream_port": 48380}}
+        values = service_values("model-proxy", document)
+        self.assertEqual(values["MODEL_PROXY_LOG_MODE"], document["logging"]["mode"])
+        self.assertEqual(values["MODEL_PROXY_LISTEN_PORT"], str(document["runtime"]["listen_port"]))
+
+    def test_model_proxy_full_logging_mode_remains_explicit(self) -> None:
+        document = {"logging": {"mode": "full"}}
+        self.assertEqual(service_values("model-proxy", document)["MODEL_PROXY_LOG_MODE"], document["logging"]["mode"])
+
     def test_runtime_environment_references_are_resolved_explicitly(self) -> None:
         self.assertEqual(resolve_references({"API_KEY": "env:MODEL_API_KEY"}, {"MODEL_API_KEY": "value"}), {"API_KEY": "value"})
         with self.assertRaisesRegex(ProfileError, "unresolved environment reference"):

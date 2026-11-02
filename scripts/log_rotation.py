@@ -18,12 +18,14 @@ class RotatingLogWriter:
         keep: int = 5,
         fsync: bool = True,
         time_fn: callable | None = None,
+        reopen_standard_streams: bool = False,
     ) -> None:
         self.path = Path(path).expanduser().resolve()
         self.rotate_seconds = max(0, int(rotate_seconds))
         self.keep = max(0, int(keep))
         self.fsync = bool(fsync)
         self._time_fn = time_fn or time.time
+        self.reopen_standard_streams = bool(reopen_standard_streams)
         self._lock = threading.Lock()
         self._next_rotation_at = self._compute_next_rotation_at()
 
@@ -35,7 +37,34 @@ class RotatingLogWriter:
     def _rotated_path(self, index: int) -> Path:
         return self.path.with_name(f"{self.path.name}.{index}.log")
 
+    def _matching_standard_streams(self) -> dict[int, bool]:
+        """Find only standard descriptors already redirected to this log inode."""
+        if not self.reopen_standard_streams or not self.path.exists():
+            return {}
+        target = self.path.stat()
+        matching = {}
+        for descriptor in (1, 2):
+            try:
+                current = os.fstat(descriptor)
+                if (current.st_dev, current.st_ino) == (target.st_dev, target.st_ino):
+                    matching[descriptor] = os.get_inheritable(descriptor)
+            except OSError:
+                continue
+        return matching
+
+    def _reopen_standard_streams(self, descriptors: dict[int, bool]) -> None:
+        """Keep opted-in stdout/stderr on the active file after rename rotation."""
+        if not descriptors:
+            return
+        descriptor = os.open(self.path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o666)
+        try:
+            for destination, inheritable in descriptors.items():
+                os.dup2(descriptor, destination, inheritable=inheritable)
+        finally:
+            os.close(descriptor)
+
     def _rotate_locked(self) -> None:
+        descriptors = self._matching_standard_streams()
         if self.keep > 0:
             oldest = self._rotated_path(self.keep - 1)
             if oldest.exists():
@@ -48,6 +77,7 @@ class RotatingLogWriter:
                 self.path.rename(self._rotated_path(0))
         elif self.path.exists():
             self.path.unlink()
+        self._reopen_standard_streams(descriptors)
         self._next_rotation_at = self._compute_next_rotation_at()
 
     def _maybe_rotate_locked(self) -> None:

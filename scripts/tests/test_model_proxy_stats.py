@@ -2,8 +2,12 @@
 from __future__ import annotations
 
 import unittest
+import base64
+import contextlib
 from pathlib import Path
+import io
 import json
+import os
 import socket
 import struct
 import threading
@@ -12,6 +16,8 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import sys
 import tempfile
 from types import SimpleNamespace
+from unittest.mock import patch
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 SCRIPTS_DIR = Path(__file__).resolve().parents[1]
@@ -1206,6 +1212,302 @@ class ProxyTapPassthroughTests(unittest.TestCase):
             self.assertNotIn("<truncated>", ndjson_text)
             self.assertNotIn("<truncated>", raw_log)
             self.assertNotIn("<truncated>", rendered_log)
+
+
+class ProxyTapMetadataTests(unittest.TestCase):
+    """Privacy checks use only synthetic payloads and ephemeral loopback servers."""
+
+    @contextlib.contextmanager
+    def _server(self, handler_class, server_class=HTTPServer):
+        server = server_class(("127.0.0.1", 0), handler_class)
+        thread = threading.Thread(target=lambda: server.serve_forever(poll_interval=0.01), daemon=True)
+        thread.start()
+        try:
+            yield server
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(2)
+
+    def _handler(self, root: Path, upstream_url: str, renderer=None, mode: str = "metadata"):
+        handler = ProxyTapPassthroughTests._make_proxy_handler(self, root, upstream_url, renderer)
+        handler.log_mode = mode
+        handler.show_source_reasoning = True
+        return handler
+
+    def _secrets(self) -> list[str]:
+        suffix = os.urandom(8).hex()
+        return [f"PRIVATE_FIXTURE_{index}_{suffix}" for index in range(14)]
+
+    def _assert_private_logs(self, root: Path, sentinels: list[str]) -> list[dict]:
+        output = "\n".join(path.read_text(encoding="utf-8") for path in root.glob("proxy*"))
+        for sentinel in sentinels:
+            self.assertNotIn(sentinel, output)
+        self.assertFalse((root / "proxy.raw.log").exists())
+        self.assertFalse((root / "proxy.rendered.log").exists())
+        records = [json.loads(line) for line in (root / "proxy.ndjson").read_text(encoding="utf-8").splitlines()]
+        for record in records:
+            for forbidden in ("request_text", "response_text", "response_json", "request_headers", "response_headers",
+                              "upstream_url", "rendered_prompt", "source_reasoning"):
+                self.assertNotIn(forbidden, record)
+            if "path" in record:
+                self.assertNotIn("?", record["path"])
+                self.assertIn(record["path"], model_proxy_tap.CHAT_COMPLETION_PATHS | {"/v1/models", "/models", "/v1/embeddings"})
+        return records
+
+    def test_metadata_final_writer_drops_unknown_and_nested_content_fields(self) -> None:
+        sentinels = self._secrets()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            handler_class = self._handler(root, "http://fixture.invalid")
+            handler = object.__new__(handler_class)
+            record = {"event": "request_end", "request_id": "fixture-internal-request", "pid": 123,
+                      "ts": "2001-02-03T04:05:06+00:00", "method": "POST", "response_status": 200,
+                      "duration_ms": 17, "client_disconnected": False,
+                      "path": "/v1/chat/completions?private=" + sentinels[0],
+                      "upstream_url": "http://fixture.invalid/private?token=" + sentinels[1],
+                      "request_headers": {"X-Fixture-Secret": sentinels[2]},
+                      "response_headers": {"X-Fixture-Secret": sentinels[3]},
+                      "request_text": sentinels[4], "response_text": sentinels[5],
+                      "response_json": {"reasoning_content": sentinels[6]}, "future_diagnostic": sentinels[7],
+                      "error": sentinels[8],
+                      "request_summary": {"messages_total": 3, "image_parts": 1,
+                                          "role_counts": {"user": 1, sentinels[9]: 2},
+                                          "tool_call_counts": {sentinels[10]: 1},
+                                          "last_user_preview": sentinels[11], "outline": [{"preview": sentinels[12]}]},
+                      "response_stats": {"usage": {"prompt_tokens": 3, "total_tokens": 4, "completion_tokens": sentinels[13]},
+                                         "timings": {"predicted_ms": 12.5, "predicted_n": sentinels[0]},
+                                         "finish_reasons": ["stop", sentinels[1]], "unknown": sentinels[2]}}
+            original = json.loads(json.dumps(record))
+            handler._write_log(record)
+            records = self._assert_private_logs(root, sentinels)
+            self.assertEqual(record, original)
+            self.assertEqual(len(records), 1)
+            self.assertEqual(records[0]["response_status"], record["response_status"])
+            self.assertEqual(records[0]["duration_ms"], record["duration_ms"])
+            self.assertEqual(records[0]["request_summary"], {"messages_total": 3, "image_parts": 1})
+            self.assertEqual(records[0]["response_stats"], {"usage": {"prompt_tokens": 3, "total_tokens": 4},
+                                                           "timings": {"predicted_ms": 12.5}})
+            self.assertTrue(records[0]["error_present"])
+            self.assertFalse(records[0]["client_disconnected"])
+            self.assertEqual(records[0]["log_mode"], "metadata")
+
+    def test_metadata_framed_writer_never_creates_content_log(self) -> None:
+        sentinel = self._secrets()[0]
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            handler = object.__new__(self._handler(root, "http://fixture.invalid"))
+            path = root / "proxy.raw.log"
+            handler._write_framed_log(path, "2001-02-03T04:05:06+00:00", "fixture-request", "RAW_REQUEST", sentinel)
+            self.assertFalse(path.exists())
+
+    def test_full_mode_final_and_framed_writers_keep_existing_content_behavior(self) -> None:
+        sentinel = self._secrets()[0]
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            handler = object.__new__(self._handler(root, "http://fixture.invalid", mode="full"))
+            record = {"event": "request_end", "request_text": sentinel, "response_json": {"content": sentinel}}
+            handler._write_log(record)
+            handler._write_framed_log(root / "proxy.raw.log", "2001-02-03T04:05:06+00:00", "fixture-request", "RAW_REQUEST", sentinel)
+            self.assertEqual(json.loads((root / "proxy.ndjson").read_text(encoding="utf-8")), record)
+            self.assertIn(sentinel, (root / "proxy.raw.log").read_text(encoding="utf-8"))
+
+    def test_metadata_mode_preserves_http_request_and_response_without_content_logs(self) -> None:
+        sentinels = self._secrets()
+        image = base64.b64encode(sentinels[3].encode()).decode()
+        sentinels.append(image)
+        captured: list[tuple[bytes, str, str | None, str | None]] = []
+        upstream_response = json.dumps({"id": sentinels[4], "choices": [{"message": {"role": "assistant",
+                                                "content": sentinels[5], "reasoning_content": sentinels[6],
+                                                "tool_calls": [{"function": {"name": sentinels[7], "arguments": sentinels[8]}}]},
+                                                "finish_reason": "stop"}],
+                                         "usage": {"prompt_tokens": 11, "completion_tokens": 7, "total_tokens": 18},
+                                         "timings": {"predicted_ms": 12.5}}, separators=(",", ":")).encode()
+
+        class Upstream(BaseHTTPRequestHandler):
+            def log_message(self, *_args) -> None:
+                return
+
+            def do_POST(self) -> None:
+                body = self.rfile.read(int(self.headers["Content-Length"]))
+                captured.append((body, self.path, self.headers.get("X-Fixture-Private"), self.headers.get("Authorization")))
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("X-Fixture-Private", sentinels[9])
+                self.send_header("Content-Length", str(len(upstream_response)))
+                self.end_headers()
+                self.wfile.write(upstream_response)
+
+        class Renderer:
+            calls = 0
+
+            def render(self, **_context):
+                type(self).calls += 1
+                return sentinels[10]
+
+        request_body = json.dumps({"model": "fixture-model", "messages": [
+            {"role": "user", "content": [{"type": "text", "text": sentinels[0]},
+                                            {"type": "image_url", "image_url": {"url": "data:image/png;base64," + image}}]},
+            {"role": "assistant", "reasoning_content": sentinels[1], "content": "fixture historical reply",
+             "tool_calls": [{"function": {"name": "fixture_tool", "arguments": sentinels[2]}}]}]}, separators=(",", ":")).encode()
+        path = "/v1/chat/completions?private=" + sentinels[11]
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with self._server(Upstream) as upstream:
+                handler = self._handler(root, f"http://127.0.0.1:{upstream.server_port}", Renderer())
+                with self._server(handler) as proxy:
+                    request = Request(f"http://127.0.0.1:{proxy.server_port}" + path, data=request_body,
+                                      headers={"Content-Type": "application/json", "X-Fixture-Private": sentinels[12],
+                                               "Authorization": "Bearer " + sentinels[13]}, method="POST")
+                    with urlopen(request, timeout=5) as response:
+                        self.assertEqual(response.status, 200)
+                        self.assertEqual(response.read(), upstream_response)
+                        self.assertEqual(response.headers["X-Fixture-Private"], sentinels[9])
+            self.assertEqual(captured, [(request_body, path, sentinels[12], "Bearer " + sentinels[13])])
+            self.assertEqual(Renderer.calls, 0)
+            records = self._assert_private_logs(root, sentinels)
+            self.assertEqual([row["event"] for row in records], ["request_start", "request_end"])
+            self.assertEqual(records[-1]["response_status"], 200)
+
+    def test_metadata_mode_preserves_incremental_streaming_without_content_logs(self) -> None:
+        sentinels = self._secrets()
+        first = b"data: " + json.dumps({"choices": [{"delta": {"content": sentinels[0], "reasoning_content": sentinels[1],
+                     "tool_calls": [{"index": 0, "function": {"name": sentinels[2], "arguments": sentinels[3]}}]}}]}).encode() + b"\n\n"
+        final = b"data: [DONE]\n\n"
+        first_sent, release = threading.Event(), threading.Event()
+        received: list[bytes] = []
+
+        class Upstream(BaseHTTPRequestHandler):
+            def log_message(self, *_args) -> None:
+                return
+
+            def do_POST(self) -> None:
+                received.append(self.rfile.read(int(self.headers["Content-Length"])))
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.end_headers()
+                self.wfile.write(first)
+                self.wfile.flush()
+                first_sent.set()
+                release.wait(3)
+                self.wfile.write(final)
+                self.wfile.flush()
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            request_body = json.dumps({"messages": [{"role": "user", "content": sentinels[4]}], "stream": True}).encode()
+            with self._server(Upstream) as upstream:
+                handler = self._handler(root, f"http://127.0.0.1:{upstream.server_port}")
+                with self._server(handler) as proxy:
+                    result: dict[str, bytes | Exception] = {}
+                    first_received = threading.Event()
+
+                    def request_client() -> None:
+                        try:
+                            request = Request(f"http://127.0.0.1:{proxy.server_port}/v1/chat/completions", data=request_body,
+                                              headers={"Content-Type": "application/json"}, method="POST")
+                            with urlopen(request, timeout=5) as response:
+                                result["first"] = response.readline()
+                                first_received.set()
+                                result["rest"] = response.read()
+                        except Exception as exc:
+                            result["error"] = exc
+                            first_received.set()
+
+                    client = threading.Thread(target=request_client, daemon=True)
+                    client.start()
+                    try:
+                        self.assertTrue(first_sent.wait(2))
+                        self.assertTrue(first_received.wait(1), "metadata mode buffered SSE until EOF")
+                        self.assertEqual(result.get("first"), first.splitlines(keepends=True)[0])
+                    finally:
+                        release.set()
+                        client.join(5)
+                    self.assertFalse(client.is_alive())
+                    self.assertNotIn("error", result)
+                    self.assertEqual(result["first"] + result["rest"], first + final)
+            self.assertEqual(received, [request_body])
+            self._assert_private_logs(root, sentinels)
+
+    def test_metadata_mode_error_logs_only_presence_and_preserves_error_body(self) -> None:
+        sentinel = self._secrets()[0]
+
+        class FailedOpener:
+            def open(self, *_args, **_kwargs):
+                raise URLError(sentinel)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            handler = self._handler(root, "http://fixture.invalid")
+            handler.upstream_opener = FailedOpener()
+            with self._server(handler) as proxy:
+                request = Request(f"http://127.0.0.1:{proxy.server_port}/v1/chat/completions", data=b'{"messages":[{"role":"user","content":"fixture"}]}',
+                                  headers={"Content-Type": "application/json"}, method="POST")
+                with self.assertRaises(HTTPError) as failed:
+                    urlopen(request, timeout=5)
+                self.assertEqual(failed.exception.code, 502)
+                self.assertEqual(failed.exception.read(), str(URLError(sentinel)).encode())
+            records = self._assert_private_logs(root, [sentinel])
+            self.assertEqual(records[-1]["response_status"], 502)
+
+    def test_malformed_content_length_suppresses_metadata_stderr_but_preserves_full_diagnostics(self) -> None:
+        sentinel = self._secrets()[0]
+        for mode in ("metadata", "full"):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                handler = self._handler(root, "http://fixture.invalid", mode=mode)
+                output = io.StringIO()
+                with contextlib.redirect_stderr(output), self._server(handler, model_proxy_tap.ThreadingHTTPServer) as proxy:
+                    with socket.create_connection(("127.0.0.1", proxy.server_port), timeout=2) as client:
+                        raw = ("POST /v1/chat/completions HTTP/1.1\r\n"
+                               "Host: fixture.invalid\r\n"
+                               "Content-Length: " + sentinel + "\r\n"
+                               "Connection: close\r\n\r\n").encode("ascii")
+                        client.sendall(raw)
+                        client.shutdown(socket.SHUT_WR)
+                        self.assertEqual(client.recv(4096), b"")
+                stderr = output.getvalue()
+                if mode == "metadata":
+                    self.assertIn("details suppressed in metadata mode", stderr)
+                    self.assertNotIn(sentinel, stderr)
+                    self.assertNotIn("Traceback", stderr)
+                    self.assertNotIn("invalid literal", stderr)
+                else:
+                    self.assertIn(sentinel, stderr)
+                    self.assertIn("Traceback", stderr)
+                self.assertFalse((root / "proxy.raw.log").exists())
+
+    def test_log_mode_cli_and_environment_are_explicit_with_full_default(self) -> None:
+        with patch.dict(os.environ, {}, clear=True), patch.object(sys, "argv", ["model_proxy_tap"]):
+            self.assertEqual(model_proxy_tap.parse_args().log_mode, "full")
+        with patch.dict(os.environ, {"MODEL_PROXY_LOG_MODE": "metadata"}, clear=True), patch.object(sys, "argv", ["model_proxy_tap"]):
+            self.assertEqual(model_proxy_tap.parse_args().log_mode, "metadata")
+        with patch.dict(os.environ, {"MODEL_PROXY_LOG_MODE": "metadata"}, clear=True), \
+                patch.object(sys, "argv", ["model_proxy_tap", "--log-mode", "full"]):
+            self.assertEqual(model_proxy_tap.parse_args().log_mode, "full")
+
+    def test_invalid_log_mode_is_not_silently_accepted(self) -> None:
+        with patch.object(sys, "argv", ["model_proxy_tap", "--log-mode", "fixture-unsupported"]), \
+                contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            model_proxy_tap.parse_args()
+
+    def test_metadata_render_only_mode_never_writes_prompt_reasoning_or_raw_frames(self) -> None:
+        sentinels = self._secrets()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            payload = root / "payload.json"
+            payload.write_text(json.dumps({"messages": [{"role": "assistant", "content": sentinels[0], "reasoning_content": sentinels[1]},
+                                                       {"role": "user", "content": sentinels[2]}]}), encoding="utf-8")
+            template = root / "template.jinja"
+            template.write_text("{{ messages[-1].content }}", encoding="utf-8")
+            args = SimpleNamespace(log_mode="metadata", log=str(root / "proxy.ndjson"),
+                                   rendered_prompt_log=str(root / "proxy.rendered.log"), raw_log=str(root / "proxy.raw.log"),
+                                   raw_request_log=None, raw_response_log=None, chat_template=str(template), chat_template_max_chars=0,
+                                   log_rotate_seconds=0, log_rotate_keep=0, log_fsync=False, render_input=str(payload),
+                                   show_source_reasoning=True)
+            with patch.object(model_proxy_tap.ProxyTapHandler, "log_mode", "full"), contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(model_proxy_tap.render_input_payloads(args), 0)
+            self._assert_private_logs(root, sentinels)
 
 
 if __name__ == "__main__":

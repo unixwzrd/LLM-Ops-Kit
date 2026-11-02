@@ -6,11 +6,15 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import os
 import socket
+import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
+from unittest.mock import patch
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -142,6 +146,90 @@ def _run_server(server: ThreadingHTTPServer):
 
 
 class TTSBridgeServerTests(unittest.TestCase):
+    def test_launcher_uses_unbuffered_python_and_append_safe_standard_streams(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "config" / "services").mkdir(parents=True)
+            fake = root / "fake-python"
+            fake.write_text(
+                "#!/usr/bin/env bash\n"
+                "printf '%s\\n' \"$@\" > \"$FIXTURE_ARGS\"\n"
+                'printf "bridge-before\\n"\n'
+                'while [[ ! -f "$FIXTURE_SIGNAL" ]]; do sleep 0.05; done\n'
+                'printf "bridge-after-stdout\\n"\n'
+                'printf "bridge-after-stderr\\n" >&2\n'
+                "trap 'exit 0' TERM INT\n"
+                "while :; do sleep 1; done\n",
+                encoding="utf-8",
+            )
+            fake.chmod(0o755)
+            host = socket.gethostbyname("localhost")
+            profile = {"schema_version": 2, "name": "tts-bridge", "template_id": "tts-bridge",
+                       "runtime": {"host": host, "port": _free_port(), "python_bin": str(fake),
+                                   "upstream_base": f"http://{host}:{_free_port()}/v1"},
+                       "paths": {"model": str(root), "config_dir": str(root)}}
+            (root / "config" / "services" / "tts-bridge.json").write_text(json.dumps(profile), encoding="utf-8")
+            env = {"HOME": str(root), "PATH": os.environ.get("PATH", os.defpath), "TMPDIR": str(root),
+                   "LLMOPS_ROOT": str(SCRIPTS_DIR.parent), "LLMOPS_CONFIG_HOME": str(root / "config"),
+                   "LLMOPS_STATE_HOME": str(root / "state"), "LLMOPS_DATA_HOME": str(root / "data"),
+                   "LLMOPS_CACHE_HOME": str(root / "cache"), "LLMOPS_PYTHON_BIN": sys.executable,
+                   "LLMOPS_LOG_DIR": str(root / "state" / "logs"),
+                   "LLMOPS_RUN_DIR": str(root / "state" / "run"),
+                   "TTS_BRIDGE_HOST": host, "TTS_BRIDGE_PORT": str(profile["runtime"]["port"]),
+                   "TTS_BRIDGE_UPSTREAM_BASE": profile["runtime"]["upstream_base"],
+                   "TTS_BRIDGE_PYTHON_BIN": str(fake), "TTS_BRIDGE_MODEL": str(root),
+                   "TTS_BRIDGE_CONFIG_DIR": str(root), "TTS_BRIDGE_SAMPLES_DIR": str(root),
+                   "TTS_BRIDGE_REF_AUDIO": "", "TTS_BRIDGE_REF_TEXT": "",
+                   "LLMOPS_LOG_MARKTIME_ENABLED": "0", "FIXTURE_ARGS": str(root / "args"),
+                   "FIXTURE_SIGNAL": str(root / "go")}
+            launcher = SCRIPTS_DIR / "tts-bridge"
+            try:
+                started = subprocess.run([str(launcher), "start"], env=env, text=True,
+                                         capture_output=True, timeout=15)
+                self.assertEqual(started.returncode, 0, started.stdout + started.stderr)
+                deadline = time.monotonic() + 5
+                while not (root / "args").exists() and time.monotonic() < deadline:
+                    time.sleep(0.05)
+                self.assertTrue((root / "args").exists(), started.stdout + started.stderr)
+                self.assertEqual((root / "args").read_text(encoding="utf-8").splitlines()[0], "-u")
+                log = root / "state" / "logs" / "tts-bridge.log"
+                self.assertIn("bridge-before\n", log.read_text(encoding="utf-8"))
+                marker = "MARKTIME " + ("independent-marker " * 128) + "\n"
+                with log.open("a", encoding="utf-8") as stream:
+                    stream.write(marker)
+                (root / "go").touch()
+                deadline = time.monotonic() + 6
+                while time.monotonic() < deadline:
+                    current = log.read_text(encoding="utf-8")
+                    if "bridge-after-stderr" in current:
+                        break
+                    time.sleep(0.05)
+                self.assertIn(marker, current, "bridge overwrote the independent marker")
+                self.assertTrue(current.endswith("bridge-after-stdout\nbridge-after-stderr\n"))
+            finally:
+                subprocess.run([str(launcher), "stop"], env=env, text=True,
+                               capture_output=True, timeout=15)
+
+    def test_main_enables_reopening_its_standard_streams_on_rotation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            samples = root / "samples"
+            samples.mkdir()
+            args = _bridge_args(root, samples, log_path=str(root / "bridge.log"),
+                                log_rotate_seconds=1, log_rotate_keep=2)
+            previous = MODULE.LOGGER
+            try:
+                with patch.object(MODULE, "parse_args", return_value=args), \
+                     patch.object(MODULE, "RotatingLogWriter") as writer, \
+                     patch.object(MODULE, "build_bridge_config", return_value={}), \
+                     patch.object(MODULE, "ThreadingHTTPServer"), \
+                     patch.object(MODULE, "_log"):
+                    self.assertEqual(MODULE.main(), 0)
+                self.assertTrue(writer.call_args.kwargs["reopen_standard_streams"])
+                self.assertEqual(writer.call_args.args[0], Path(args.log_path))
+            finally:
+                MODULE.LOGGER = previous
+
     def test_apply_pronounce_map_prefers_longest_match(self) -> None:
         text, replacements = MODULE._apply_pronounce_map(
             "Use <= and / here",

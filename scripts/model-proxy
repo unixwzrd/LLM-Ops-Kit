@@ -51,6 +51,7 @@ Default env-backed values:
   MODEL_PROXY_LOG_ROTATE_SECONDS=<optional; defaults to 86400>
   MODEL_PROXY_LOG_ROTATE_KEEP=<optional; defaults to 5>
   MODEL_PROXY_CHAT_TEMPLATE=<optional default chat template path>
+  MODEL_PROXY_LOG_MODE=<full diagnostics or metadata only; defaults to full>
 
 Examples:
   model-proxy restart --upstream http://<configured-upstream-host>:<configured-upstream-port>
@@ -288,7 +289,7 @@ start_proxy() {
       ;;
   esac
 
-  nohup "${proxy_cmd[@]}" "${extra_args[@]}" > "$LOG_OUT" 2> "$LOG_ERR" &
+  nohup "${proxy_cmd[@]}" "${extra_args[@]}" >> "$LOG_OUT" 2>> "$LOG_ERR" &
   pid="$!"
   sleep 0.4
   if ! is_pid_running "$pid"; then

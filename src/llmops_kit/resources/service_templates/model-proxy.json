@@ -25,6 +25,7 @@
       }},
       "template": {"type": "object", "properties": {"path": {"type": "string", "x-llmops-ui": {"group": "Prompt", "order": 10, "widget": "path"}}}},
       "logging": {"type": "object", "properties": {
+        "mode": {"type": "string", "enum": ["full", "metadata"], "default": "full", "description": "Metadata excludes bodies, headers, previews, rendered prompts and reasoning from all new proxy logs", "x-llmops-ui": {"group": "Logging", "order": 1, "widget": "select"}},
         "rotate_seconds": {"type": "integer", "minimum": 60, "default": 86400, "x-llmops-ui": {"group": "Logging", "order": 10, "widget": "duration", "unit": "seconds", "advanced": true}},
         "rotate_keep": {"type": "integer", "minimum": 1, "default": 5, "x-llmops-ui": {"group": "Logging", "order": 20, "widget": "number", "advanced": true}},
         "show_reasoning": {"type": "boolean", "default": false, "description": "Log source assistant reasoning in diagnostic-only rendered exchanges", "x-llmops-ui": {"group": "Logging", "order": 30, "widget": "checkbox"}}

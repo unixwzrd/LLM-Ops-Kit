@@ -255,7 +255,7 @@ start_bridge() {
 
   local -a cmd
   cmd=(
-    "$PY_BIN" "$SCRIPT_DIR/tts_bridge_server.py"
+    "$PY_BIN" -u "$SCRIPT_DIR/tts_bridge_server.py"
     --listen-host "$LISTEN_HOST"
     --listen-port "$LISTEN_PORT"
     --upstream-base "$UPSTREAM_BASE"
@@ -281,7 +281,7 @@ start_bridge() {
 
   nohup "${cmd[@]}" \
     < /dev/null \
-    > "$log_file" 2>&1 &
+    >> "$log_file" 2>&1 &
 
   bridge_pid="$!"
   write_pid "$pid_name" "$bridge_pid"

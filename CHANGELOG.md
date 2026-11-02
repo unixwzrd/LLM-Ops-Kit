@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.9.0b55 - 2026-11-02
+
+- Keep service output tail-able: open model, TTS bridge and proxy diagnostic streams in append mode so independent MARKTIME writes and copy/truncate maintenance cannot leave a producer writing behind EOF. Run Python TTS/bridge output unbuffered. On bridge rename rotation, reopen only stdout/stderr descriptors already pointing at that log onto the new active file in append mode; retain unrelated streams and existing proxy metadata-only policy. Existing running processes require a controlled reload to adopt the changed descriptors; no model or engine dependency upgrade is involved.
+
+- Add configurable model-proxy `logging.mode: metadata` / `--log-mode metadata`. Persist only allowlisted counters, timestamps, status, sizes, numeric usage/timings and disconnect/error-presence flags; suppress headers, previews, raw bodies, rendered prompts and reasoning logs without changing upstream request/stream bytes. Full diagnostic mode remains the compatibility default. Existing diagnostic files are not deleted or retroactively sanitized.
+
 - List disabled configured components in `llmops status` by default, retaining `--all` as a compatible explicit alias and adding `--enabled-only` for filtered listings. Preserve the same visibility across local and mixed-version peer observations without changing lifecycle selection or enabling services.
 
 - Detect the installed llama.cpp loading interface and translate existing memory-map, memory-lock and direct-I/O settings to `--load-mode` when available, retaining legacy switches for older builds. Reject an unrepresentable direct-I/O plus memory-lock combination rather than silently changing its meaning. Capture server stdout/stderr in the model log so argument-parser and loader failures are included in startup diagnostics.

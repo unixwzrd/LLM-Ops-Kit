@@ -1,7 +1,7 @@
 # Troubleshooting
 
 **Created**: 2026-07-16
-**Updated**: 2026-07-20
+**Updated**: 2026-11-02
 
 Back: [Documentation index](./INDEX.md)
 
@@ -28,3 +28,11 @@ If SSH update or reconciliation fails, verify noninteractive access using the in
 If a component start fails, the executor removes only dependencies started by that invocation. Check component logs and readiness targets before retrying.
 
 If configuration hash validation reports a changed file, do not merge remote changes automatically. Review the target, correct authoritative configuration when appropriate, and rerun reconciliation. Toolkit-version drift is corrected with a planned `llmops update` operation.
+
+## Following Service Logs
+
+Ordinary `tail -F <log-file>` and `llmops component logs <component> --follow` should show new service output. Periodic MARKTIME lines are appended by a separate timer; they are not proof that application output is being appended correctly.
+
+Older launchers opened service output without append mode. A marker could extend the file beyond the producer's current offset, causing later application output to overwrite earlier bytes rather than extend EOF. Restarting `tail` cannot correct the producer's open descriptor. The corrected launchers archive intentionally at startup, then open output in append mode. Python TTS/bridge output is unbuffered. The bridge's rotating logger also reopens only standard descriptors already attached to its previous log inode onto the new active file; unrelated streams are left alone.
+
+Adoption requires the corrected runtime and a controlled reload of the affected services during an idle window. Keep existing logs and use the component's configured host/user/path; do not delete logs or restart the whole stack merely to diagnose a silent tail. This correction does not change model weights, engine dependencies, verbosity or the proxy's metadata-only privacy policy. Existing copy/truncate maintenance still has its usual concurrent-write window; this is not a guarantee of lossless multi-process rotation.

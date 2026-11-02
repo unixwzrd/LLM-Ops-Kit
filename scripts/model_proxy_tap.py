@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Small reverse proxy tap for OpenAI-compatible APIs.
 
-Logs request/response metadata and JSON bodies to NDJSON while proxying traffic.
+Logs full diagnostics or explicitly selected metadata-only records while proxying traffic.
 
 This module is an internal driver. Operators configure and invoke it through
 the ``llmops`` component interface or the managed ``model-proxy`` service.
@@ -17,7 +17,9 @@ import copy
 import json
 import os
 import signal
+import socket
 import socketserver
+import sys
 import time
 from collections import Counter
 from datetime import datetime, timezone
@@ -418,6 +420,9 @@ def normalize_payload_for_template(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def render_input_payloads(args: argparse.Namespace) -> int:
+    ProxyTapHandler.log_mode = getattr(args, 'log_mode', 'full')
+    if ProxyTapHandler.log_mode not in ('full', 'metadata'):
+        raise ValueError('log mode must be full or metadata')
     default_log_dir = os.path.expanduser("~/.local/state/llm-ops/logs")
     log_path = Path(os.path.expanduser(args.log))
     rendered_prompt_log_path = (
@@ -682,9 +687,49 @@ def extract_response_stats(payload: Any) -> dict[str, Any] | None:
     return stats or None
 
 
+def metadata_record(record: dict[str, Any]) -> dict[str, Any]:
+    """Allowlist content-free operational fields at the final persistence seam.
+
+    Do not copy arbitrary nested dictionaries, headers, URLs, previews, errors
+    or future fields through this boundary. Wire payloads are unchanged.
+    """
+    result = {key: record[key] for key in ('event', 'ts', 'request_id') if key in record}
+    for key in ('pid', 'duration_ms', 'response_status', 'request_bytes', 'response_bytes'):
+        if isinstance(record.get(key), (int, float)):
+            result[key] = record[key]
+    method = record.get('method')
+    if method in ('GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'):
+        result['method'] = method
+    path = record.get('path', '').split('?', 1)[0]
+    if path in CHAT_COMPLETION_PATHS or path in ('/v1/models', '/models', '/v1/embeddings'):
+        result['path'] = path
+    summary = record.get('request_summary') or {}
+    result['request_summary'] = {key: summary[key] for key in ('messages_total', 'image_parts')
+                                 if isinstance(summary.get(key), int)}
+    stats = record.get('response_stats') or {}
+    safe_stats: dict[str, Any] = {}
+    for group, keys in (
+        ('usage', ('prompt_tokens', 'completion_tokens', 'total_tokens', 'cached_prompt_tokens')),
+        ('timings', ('prompt_n', 'predicted_n', 'cache_n', 'prompt_ms', 'predicted_ms', 'prompt_per_second', 'predicted_per_second')),
+    ):
+        values = stats.get(group) or {}
+        selected = {key: values[key] for key in keys if isinstance(values.get(key), (int, float))}
+        if selected:
+            safe_stats[group] = selected
+    if safe_stats:
+        result['response_stats'] = safe_stats
+    if 'client_disconnected' in record:
+        result['client_disconnected'] = bool(record['client_disconnected'])
+    if 'error' in record:
+        result['error_present'] = bool(record['error'])
+    result['log_mode'] = 'metadata'
+    return result
+
+
 class ProxyTapHandler(BaseHTTPRequestHandler):
     upstream_base: str = ""
     log_path: Path
+    log_mode: str = 'full'
     timeout_sec: float = 120.0
     log_fsync: bool = True
     stream_chunk_size: int = 65536
@@ -714,6 +759,8 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
         return self.rfile.read(length)
 
     def _write_log(self, record: dict[str, Any]) -> None:
+        if self.log_mode == 'metadata':
+            record = metadata_record(record)
         writer = self._writer_for(self.log_path)
         writer.write(json.dumps(record, ensure_ascii=False) + "\n")
 
@@ -726,7 +773,7 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
         body: str | None,
         ts_end: str | None = None,
     ) -> None:
-        if path is None:
+        if path is None or self.log_mode == 'metadata':
             return
         text = body or ""
         end_ts = ts_end or ts_start
@@ -773,7 +820,7 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
             self.path,
             req_json,
         )
-        if render_eligible:
+        if render_eligible and self.log_mode != 'metadata':
             rendered_prompt, rendered_prompt_error = render_prompt_from_payload(
                 req_json,
                 chat_template_renderer=self.chat_template_renderer,
@@ -804,6 +851,7 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
                 "request_headers": redact_headers({k: v for k, v in self.headers.items()}),
                 "request_summary": req_summary,
                 "request_text": request_text_log,
+                "request_bytes": len(request_body),
             }
         )
 
@@ -975,7 +1023,7 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
             resp_text,
             ts_end=response_end_ts,
         )
-        if self.chat_template_path and render_eligible:
+        if self.chat_template_path and render_eligible and self.log_mode != 'metadata':
             diagnostic_response = format_model_response_for_diagnostics(
                 resp_text,
                 resp_json,
@@ -1009,6 +1057,8 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
                 "response_stats": response_stats,
                 "response_text": resp_text,
                 "response_json": resp_json,
+                "request_bytes": len(request_body),
+                "response_bytes": len(resp_capture),
                 "error": error_text,
                 "client_disconnected": client_disconnected,
             }
@@ -1036,6 +1086,13 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
 class ThreadingHTTPServer(socketserver.ThreadingMixIn, HTTPServer):
     daemon_threads = True
     allow_reuse_address = True
+
+    def handle_error(self, request: socket.socket, client_address: tuple[str, int]) -> None:
+        """Do not persist request-derived exception text in metadata stderr logs."""
+        if getattr(self.RequestHandlerClass, 'log_mode', 'full') == 'metadata':
+            print('model-proxy request failed; details suppressed in metadata mode', file=sys.stderr)
+            return
+        super().handle_error(request, client_address)
 
 
 def normalize_upstream(raw: str) -> tuple[str, int]:
@@ -1072,6 +1129,8 @@ def parse_args() -> argparse.Namespace:
         help="Render one JSON payload or a list of payloads from a file without starting the proxy. Use '-' to read from stdin.",
     )
     p.add_argument("--log", default=f"{default_log_dir}/model-proxy.ndjson", help="NDJSON log file path")
+    p.add_argument("--log-mode", choices=('full', 'metadata'), default=os.environ.get('MODEL_PROXY_LOG_MODE', 'full'),
+                   help="full diagnostics or metadata only (no bodies, headers, previews, rendered/reasoning logs)")
     p.add_argument("--timeout", type=float, default=900.0)
     p.add_argument("--stream-chunk-size", type=int, default=65536)
     p.add_argument("--chat-template", help="Optional Jinja chat template path to render/log final prompt text.")
@@ -1109,6 +1168,9 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     default_log_dir = os.path.expanduser("~/.local/state/llm-ops/logs")
     args = parse_args()
+    if args.log_mode not in ('full', 'metadata'):
+        raise SystemExit('MODEL_PROXY_LOG_MODE must be full or metadata')
+    ProxyTapHandler.log_mode = args.log_mode
     if args.render_input:
         return render_input_payloads(args)
     if not args.upstream:
@@ -1152,6 +1214,11 @@ def main() -> int:
     ProxyTapHandler.rendered_prompt_log_path = Path(os.path.expanduser(args.rendered_prompt_log)) if args.rendered_prompt_log else None
     ProxyTapHandler.raw_response_log_path = raw_response_log_path
     ProxyTapHandler.show_source_reasoning = bool(args.show_source_reasoning)
+    if args.log_mode == 'metadata':
+        ProxyTapHandler.raw_request_log_path = None
+        ProxyTapHandler.raw_response_log_path = None
+        ProxyTapHandler.rendered_prompt_log_path = None
+        ProxyTapHandler.show_source_reasoning = False
 
     if args.chat_template:
         (
@@ -1163,7 +1230,7 @@ def main() -> int:
     server = ThreadingHTTPServer((args.listen_host, listen_port), ProxyTapHandler)
     print(
         f"model-proxy-tap listening on http://{args.listen_host}:{listen_port} "
-        f"-> {upstream_base} (threading, log: {ProxyTapHandler.log_path}, raw_log={ProxyTapHandler.raw_request_log_path}, rendered_log={ProxyTapHandler.rendered_prompt_log_path}, raw_response_log={ProxyTapHandler.raw_response_log_path}, log_fsync={ProxyTapHandler.log_fsync}, log_rotate_seconds={ProxyTapHandler.log_rotate_seconds}, log_rotate_keep={ProxyTapHandler.log_rotate_keep}, stream_chunk_size={ProxyTapHandler.stream_chunk_size}, chat_template={ProxyTapHandler.chat_template_path})",
+        f"(threading, log_mode={ProxyTapHandler.log_mode}, log: {ProxyTapHandler.log_path}, raw_log={ProxyTapHandler.raw_request_log_path}, rendered_log={ProxyTapHandler.rendered_prompt_log_path}, raw_response_log={ProxyTapHandler.raw_response_log_path}, log_fsync={ProxyTapHandler.log_fsync}, log_rotate_seconds={ProxyTapHandler.log_rotate_seconds}, log_rotate_keep={ProxyTapHandler.log_rotate_keep}, stream_chunk_size={ProxyTapHandler.stream_chunk_size}, chat_template={ProxyTapHandler.chat_template_path})",
         flush=True,
     )
 

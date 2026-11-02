@@ -1083,6 +1083,7 @@ def main() -> int:
         rotate_seconds=max(0, int(args.log_rotate_seconds)),
         keep=max(0, int(args.log_rotate_keep)),
         fsync=True,
+        reopen_standard_streams=True,
     )
     try:
         config = build_bridge_config(args)
