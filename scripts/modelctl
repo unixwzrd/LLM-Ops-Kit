@@ -582,7 +582,7 @@ start_model() {
       RUNTIME_FLAGS+=(--cache-type-v "$CACHE_TYPE_V")
     fi
   elif [[ "$MODEL_TYPE" == "tts" ]]; then
-    tts_cmd=( "$TTS_PYTHON_BIN" -u -m "$TTS_SERVER_MODULE" --host "$HOST" --port "$PORT" )
+    tts_cmd=( "$TTS_PYTHON_BIN" -u -P -m "$TTS_SERVER_MODULE" --host "$HOST" --port "$PORT" )
     if [[ -n "${TTS_API_KEY:-}" ]]; then
       tts_cmd+=( --api-key "$TTS_API_KEY" )
     fi

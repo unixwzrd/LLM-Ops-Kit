@@ -9,6 +9,8 @@ import io
 import json
 import os
 import socket
+import signal
+import subprocess
 import struct
 import threading
 import time
@@ -28,6 +30,38 @@ import model_proxy_tap
 
 
 class ModelProxyStatsTests(unittest.TestCase):
+    def test_shutdown_signals_exit_and_release_listener(self) -> None:
+        """Shutdown must not wait on serve_forever from its signal thread."""
+        for signum in (signal.SIGTERM, signal.SIGINT):
+            with self.subTest(signal=signum), tempfile.TemporaryDirectory() as directory:
+                with socket.socket() as reserve:
+                    reserve.bind(('127.0.0.1', 0))
+                    port = reserve.getsockname()[1]
+                process = subprocess.Popen([
+                    sys.executable, str(SCRIPTS_DIR / 'model_proxy_tap.py'),
+                    '--listen-host', '127.0.0.1', '--listen-port', str(port),
+                    '--upstream', 'http://127.0.0.1:1', '--log-mode', 'metadata',
+                    '--log', str(Path(directory) / 'events.ndjson'),
+                ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                try:
+                    deadline = time.monotonic() + 8
+                    while time.monotonic() < deadline:
+                        with socket.socket() as probe:
+                            if probe.connect_ex(('127.0.0.1', port)) == 0:
+                                break
+                        self.assertIsNone(process.poll(), 'proxy exited before listening')
+                        time.sleep(.05)
+                    else:
+                        self.fail('proxy did not begin listening')
+                    process.send_signal(signum)
+                    self.assertEqual(process.wait(timeout=4), 0)
+                    with socket.socket() as probe:
+                        self.assertNotEqual(probe.connect_ex(('127.0.0.1', port)), 0)
+                finally:
+                    if process.poll() is None:
+                        process.kill()
+                        process.wait(timeout=4)
+
     def test_human_log_timestamp_matches_marktime_utc_style(self) -> None:
         self.assertEqual(
             model_proxy_tap.format_human_utc_timestamp("2026-07-30T13:06:47.209312+00:00"),

@@ -1181,6 +1181,18 @@ class TopologyTests(ControlFixture):
                 self.assertIsNotNone(result)
                 self.assertEqual(result.stdout, "01:02 command")
                 self.assertIn("ps -p 42 -o etime= -o command=", run.call_args.args[0][-1])
+                self.assertEqual(run.call_args.kwargs["timeout"], component.timeouts.status)
+
+    def test_runtime_probe_timeout_returns_bounded_diagnostic(self) -> None:
+        component = self.topology.resolve_component("proxy")
+        with mock.patch("llmops_kit.llmops_drivers.subprocess.run",
+                        side_effect=subprocess.TimeoutExpired("ssh", component.timeouts.status)):
+            result = ComponentRunner(self.topology).runtime_command(
+                component, CommandResult(component.qualified_id, "status", "status", 0, "pid=42", ""),
+            )
+        self.assertEqual(result.returncode, 124)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("runtime probe timed out", result.stderr)
 
     def test_model_start_runtime_precedes_current_wrapper_runtime(self) -> None:
         component = self.topology.resolve_component("chat")
@@ -1328,7 +1340,8 @@ class TopologyTests(ControlFixture):
             return_value=CommandResult(component.qualified_id, "health", "curl", 7, "", "refused")
         )
         runner.status = mock.Mock(
-            return_value=CommandResult(component.qualified_id, "status", "modelctl status", 1, "", "")
+            return_value=CommandResult(component.qualified_id, "status", "modelctl status", 1,
+                                       f"{component.profile}: status=stopped\n  running=false", "")
         )
         with self.assertRaisesRegex(DriverError, "exited before readiness"):
             runner.wait_healthy(component)

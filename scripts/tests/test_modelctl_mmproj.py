@@ -207,7 +207,9 @@ class ModelctlMmprojTests(unittest.TestCase):
                                                  capture_output=True, text=True, env=env, timeout=15)
                         self.assertEqual(started.returncode, 0, started.stdout + started.stderr)
                         if model_type == "tts":
-                            self.assertEqual((root / "argv.txt").read_text().splitlines()[0], "-u")
+                            tts_argv = (root / "argv.txt").read_text().splitlines()
+                            self.assertEqual(tts_argv[0], "-u")
+                            self.assertIn("-P", tts_argv[:tts_argv.index("-m")])
                         prefix = "tts-server-" if model_type == "tts" else "llama-server-"
                         log_path = Path(env["LLMOPS_STATE_HOME"]) / "logs" / (prefix + profile["name"] + ".log")
                         self.assertIn("producer-before", log_path.read_text(encoding="utf-8"))

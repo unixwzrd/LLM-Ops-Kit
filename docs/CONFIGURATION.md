@@ -1,7 +1,7 @@
 # Configuration
 
 **Created**: 2026-07-16
-**Updated**: 2026-07-21
+**Updated**: 2026-11-03
 
 Back: [Documentation index](./INDEX.md)
 
@@ -45,6 +45,25 @@ llmops config display --organization "Example Organization" --site "Local AI Lab
 ```
 
 Textual refresh and theme preferences live separately in `ui.json`. That host-local file is not included in desired-state hashes or reconciled snapshots.
+
+## Shared Infrastructure And Agent Stacks
+
+Each component belongs to exactly one stack. Use qualified `depends_on` references such as `shared:chat` to connect an agent stack to services owned by a different stack. Dependency validation and cycle detection span the complete topology.
+
+`llmops stack start <agent>` includes transitive shared prerequisites and waits for readiness, including prerequisites already running. `stop <agent>` stops only that stack; `restart <agent>` stops only that stack and then ensures prerequisites are ready without restarting them. Shared prerequisites newly started for an agent are retained if that agent fails to start.
+
+Stopping or restarting a shared stack is refused while running consumers outside the selected plan depend on it. Unknown consumer state is not evidence that the consumer is stopped. Verify access first; use `--force` only when deliberately accepting the disruption. Account-aware execution still requires the invoking operator to have authorized SSH access to each selected execution user; stack membership grants no credentials or privileges.
+
+For an explicit full-system operation, use:
+
+```bash
+llmops stack plan start --all
+llmops stack start --all
+llmops stack status --all
+llmops stack stop --all
+```
+
+The full plan selects every enabled managed component once, starts dependencies first, and stops consumers first. Inspect it before applying: unlike an agent-only operation, it intentionally manages shared infrastructure and every configured agent stack. Status continues to include disabled entries; lifecycle operations do not enable them.
 
 ## Product Releases
 
@@ -290,6 +309,29 @@ llmops config reconcile --all-hosts --apply --yes
 ```
 
 Each deployed revision contains `resolved.json` with per-file hashes. Manual changes that invalidate those hashes are conflicts and block replacement. Accepted revisions live under `~/.local/llm-ops/config-revisions/`, and `current-config` selects the active revision atomically.
+
+## Optional Service Operator
+
+An operator-controlled SSH dispatcher can provide cluster-wide status and lifecycle access without granting requester accounts an interactive operator shell. Set `control.service_operator` in the authority's `config.json`, then reconcile normally:
+
+```json
+{
+  "control": {
+    "service_operator": {
+      "host": "operator-host.example",
+      "user": "operator",
+      "port": 22,
+      "identity_file": "~/.ssh/id_ed25519_cluster_control",
+      "known_hosts_file": "~/.ssh/cluster_control_known_hosts",
+      "executable": "/Users/operator/.local/bin/llmops"
+    }
+  }
+}
+```
+
+Only catalog-backed CLI `status`, `plan`, stack list/plan/start/stop/restart/status, and component plan/start/stop/restart/status commands take this route. Configuration, logs, updates and explicit `--local`, `--config-home` or `--inventory` operations retain existing behavior. JSON and human output are passed through directly. No dispatcher, key or permission is installed automatically. TUI in-process polling is not routed by this CLI feature.
+
+The operator must independently provision a forced-command dispatcher with an exact action/component allowlist, pinned host keys, dedicated requester identities, forwarding disabled, sanitized results and operator-owned sealed configuration. Never execute requester-writable profiles with an operator's broader credentials. A trusted dispatcher sets `LLMOPS_OPERATOR_DISPATCHED=1` internally to avoid recursive dispatch; callers cannot use that environment variable to bypass the server's forced-command policy. Deployments without this optional configuration are unchanged.
 
 ## Secrets
 

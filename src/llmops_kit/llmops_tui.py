@@ -1913,7 +1913,7 @@ def build_application(config_home: Optional[str], inventory: Optional[str]) -> A
                         force=force,
                     )
                 else:
-                    operations = llmops_cli.stack_plan(target, action)
+                    operations = llmops_cli.stack_plan(target, action, topology=self.topology)
                     command = f"llmops stack {action} {target.name}"
                     executor = Executor(self.topology)
                     cascade = False

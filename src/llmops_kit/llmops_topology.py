@@ -305,15 +305,22 @@ def load_stacks(paths: LlmOpsPaths) -> dict[str, Stack]:
     return stacks
 
 
-def topological_order(stack: Stack, *, subset: Optional[Iterable[str]] = None) -> list[Component]:
+def _graph_components(graph: Stack | Topology) -> list[Component]:
+    """Return components in a local stack or the complete shared graph."""
+
+    return graph.all_components() if isinstance(graph, Topology) else list(graph.components.values())
+
+
+def topological_order(stack: Stack | Topology, *, subset: Optional[Iterable[str]] = None) -> list[Component]:
     """Return dependency-first component order and reject cycles."""
 
+    components = _graph_components(stack)
     selected = (
-        {component.qualified_id for component in stack.components.values()}
+        {component.qualified_id for component in components}
         if subset is None
         else set(subset)
     )
-    by_qualified = {component.qualified_id: component for component in stack.components.values()}
+    by_qualified = {component.qualified_id: component for component in components}
     order: list[Component] = []
     visiting: set[str] = set()
     visited: set[str] = set()
@@ -325,7 +332,7 @@ def topological_order(stack: Stack, *, subset: Optional[Iterable[str]] = None) -
             raise TopologyError(f"dependency cycle detected at {reference}")
         component = by_qualified.get(reference)
         if component is None:
-            raise TopologyError(f"{stack.name}: dependency not found: {reference}")
+            raise TopologyError(f"dependency not found: {reference}")
         visiting.add(reference)
         for dependency in component.depends_on:
             if dependency not in by_qualified:
@@ -340,17 +347,19 @@ def topological_order(stack: Stack, *, subset: Optional[Iterable[str]] = None) -
     return order
 
 
-def dependency_closure(stack: Stack, component: Component) -> set[str]:
+def dependency_closure(stack: Stack | Topology, component: Component) -> set[str]:
     """Return the target plus all transitive upstream dependencies."""
 
-    by_qualified = {item.qualified_id: item for item in stack.components.values()}
+    by_qualified = {item.qualified_id: item for item in _graph_components(stack)}
     selected: set[str] = set()
 
     def add(reference: str) -> None:
         if reference in selected:
             return
         selected.add(reference)
-        item = by_qualified[reference]
+        item = by_qualified.get(reference)
+        if item is None:
+            raise TopologyError(f"dependency not found: {reference}")
         for dependency in item.depends_on:
             add(dependency)
 
@@ -358,14 +367,14 @@ def dependency_closure(stack: Stack, component: Component) -> set[str]:
     return selected
 
 
-def dependent_closure(stack: Stack, component: Component) -> set[str]:
+def dependent_closure(stack: Stack | Topology, component: Component) -> set[str]:
     """Return the target plus all transitive downstream dependents."""
 
     selected = {component.qualified_id}
     changed = True
     while changed:
         changed = False
-        for item in stack.components.values():
+        for item in _graph_components(stack):
             if item.qualified_id in selected:
                 continue
             if any(dependency in selected for dependency in item.depends_on):
@@ -498,11 +507,11 @@ def validate_topology(topology: Topology) -> list[str]:
         topology.config.data.get("runtime", {}).get("allow_command_driver", False)
     )
     bound: dict[tuple[str, str, int], str] = {}
+    try:
+        topological_order(topology)
+    except TopologyError as exc:
+        errors.append(str(exc))
     for stack in topology.stacks.values():
-        try:
-            topological_order(stack)
-        except TopologyError as exc:
-            errors.append(str(exc))
         for component in stack.components.values():
             if component.host not in topology.hosts:
                 errors.append(f"{component.qualified_id}: inventory host not found: {component.host}")
