@@ -24,13 +24,13 @@ The installer owns its UV-managed Python runtime. It does not require Git, syste
 
 ## Install
 
-The current published beta is **[0.9.0b55](https://github.com/unixwzrd/LLM-Ops-Kit/releases/tag/0.9.0b55)**. It fixes live service-log following, adds configurable metadata-only proxy logging, and includes the newer llama.cpp loading and status improvements. Download and verify that beta's installer explicitly; GitHub's `/releases/latest` redirect excludes prereleases and can select an older release:
+The current published beta is **[0.9.0b56](https://github.com/unixwzrd/LLM-Ops-Kit/releases/tag/0.9.0b56)**. It adds restricted operator routing, dependency-aware cross-stack operations, safe working-directory handling, reliable proxy shutdown, and accurate live-runtime detection. The earlier logging, privacy and llama.cpp compatibility improvements remain included. Download and verify that beta's installer explicitly; GitHub's `/releases/latest` redirect excludes prereleases and can select an older release:
 
 ```bash
-curl -fsSLO https://github.com/unixwzrd/LLM-Ops-Kit/releases/download/0.9.0b55/install-llmops
-curl -fsSLO https://github.com/unixwzrd/LLM-Ops-Kit/releases/download/0.9.0b55/install-llmops.sha256
+curl -fsSLO https://github.com/unixwzrd/LLM-Ops-Kit/releases/download/0.9.0b56/install-llmops
+curl -fsSLO https://github.com/unixwzrd/LLM-Ops-Kit/releases/download/0.9.0b56/install-llmops.sha256
 shasum -a 256 -c install-llmops.sha256
-bash install-llmops --repository unixwzrd/LLM-Ops-Kit --version 0.9.0b55
+bash install-llmops --repository unixwzrd/LLM-Ops-Kit --version 0.9.0b56
 ```
 
 Then create and validate a local configuration:

@@ -1166,6 +1166,59 @@ class TopologyTests(ControlFixture):
         observation = ComponentObservation("running", "healthy", "observed", lifecycle, lifecycle, runtime)
         self.assertEqual(llmops_cli._observed_runtime(observation), "0.9.0b6")
 
+    def test_observed_runtime_ignores_old_template_in_osascript_launch_command(self) -> None:
+        component = self.topology.resolve_component("proxy")
+        lifecycle = CommandResult(
+            component.qualified_id,
+            "status",
+            (
+                "/usr/bin/osascript -e 'do shell script \""
+                "/home/operator/.local/llm-ops/releases/current-private-runtime/app/bin/python "
+                "/home/operator/.local/llm-ops/releases/current-private-runtime/scripts/model_proxy_tap.py "
+                "--chat-template /home/operator/.local/llm-ops/releases/retained-template-runtime/"
+                "scripts/templates/Qwen.jinja\"'"
+            ),
+            0,
+            "model-proxy: running pid=42",
+            "",
+        )
+        runtime = CommandResult(
+            component.qualified_id,
+            "runtime",
+            "ssh host ps -p 42 -o etime= -o command=",
+            0,
+            (
+                "00:31 /home/operator/.local/llm-ops/releases/current-private-runtime/app/bin/python "
+                "/home/operator/.local/llm-ops/releases/current-private-runtime/scripts/model_proxy_tap.py "
+                "--chat-template "
+                "/home/operator/.local/llm-ops/releases/retained-template-runtime/"
+                "scripts/templates/Qwen.jinja"
+            ),
+            "",
+        )
+        observation = ComponentObservation("running", "healthy", "observed", lifecycle, lifecycle, runtime)
+        self.assertEqual(llmops_cli._observed_runtime(observation), "current-private-runtime")
+
+    def test_observed_runtime_prefers_old_live_executable_over_current_query_path(self) -> None:
+        component = self.topology.resolve_component("proxy")
+        lifecycle = CommandResult(component.qualified_id, "status", "status", 0, "proxy: running pid=42", "")
+        runtime = CommandResult(
+            component.qualified_id,
+            "runtime",
+            "/home/operator/.local/llm-ops/current/app/bin/python -m llmops_kit runtime-probe",
+            0,
+            (
+                "00:31 /home/operator/.local/llm-ops/releases/older-active-runtime/app/bin/python "
+                "/home/operator/.local/llm-ops/releases/older-active-runtime/scripts/model_proxy_tap.py "
+                "--chat-template "
+                "/home/operator/.local/llm-ops/releases/current-private-runtime/"
+                "scripts/templates/Qwen.jinja"
+            ),
+            "",
+        )
+        observation = ComponentObservation("running", "healthy", "observed", lifecycle, lifecycle, runtime)
+        self.assertEqual(llmops_cli._observed_runtime(observation), "older-active-runtime")
+
     def test_runtime_command_reads_elapsed_time_for_supported_pid_formats(self) -> None:
         component = self.topology.resolve_component("proxy")
         runner = ComponentRunner(self.topology)

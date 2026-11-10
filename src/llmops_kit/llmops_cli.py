@@ -1359,6 +1359,16 @@ def _observed_runtime(observation: Any) -> str:
     )
     if started:
         return started[-1]
+    if observation.runtime_result is not None:
+        # The process command is stronger evidence than the command used to
+        # query it or asset paths in its arguments (for example a chat template).
+        primary = re.search(
+            r"(?:^|/)(?:releases|versions)/([^/\s'\"=]+)/"
+            r"(?:(?:app/bin|bin)/[^/\s'\"=]+|scripts/(?!templates/)[^/\s'\"=]+)",
+            observation.runtime_result.stdout,
+        )
+        if primary:
+            return primary.group(1)
     matches = re.findall(r"(?:^|/)(?:releases|versions)/([^/\s'\"]+)", text)
     return matches[-1] if matches else ""
 

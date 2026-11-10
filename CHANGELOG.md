@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.9.0b56 - 2026-11-10
+
+- Reconcile the qualified operator-routing, cross-stack lifecycle, safe-working-directory and shutdown fixes onto `main`. Keep local `AGENTS.md` instructions ignored and out of the tracked source.
+- Identify the live executable's immutable runtime before retained template assets or the command used to query it, preventing false stale-runtime reports while retaining detection of genuinely older processes.
+
 - Stop the model proxy without a signal-handler deadlock: request `HTTPServer.shutdown()` from a separate thread so SIGTERM/SIGINT can return the serving loop normally and release its listener. Add real-process shutdown/listener regression checks.
 - Add optional `control.service_operator` routing for cluster status, plans and lifecycle commands through an operator-supplied restricted SSH dispatcher. Pin the dispatcher host identity, use a dedicated requester key, disable forwarding, and preserve raw JSON/human progress output. Configuration, installation, logs and explicit local/configuration overrides do not use this route. Bound runtime PID probes by the component's status timeout so an unavailable peer cannot hang aggregate status indefinitely.
 - Run profile-resolution helpers and the Python TTS module with safe-path mode (`-P`) so an unrelated cloud/network working directory is not scanned for imports. Treat failed shell profile resolution as unknown lifecycle unless the driver emitted a valid running/stopped result; a Python import timeout is not a stopped model. Preserve source `PYTHONPATH` support and relative profile-path resolution.

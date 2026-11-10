@@ -1,7 +1,7 @@
 # Configuration
 
 **Created**: 2026-07-16
-**Updated**: 2026-11-03
+**Updated**: 2026-11-10
 
 Back: [Documentation index](./INDEX.md)
 
@@ -323,7 +323,7 @@ An operator-controlled SSH dispatcher can provide cluster-wide status and lifecy
       "port": 22,
       "identity_file": "~/.ssh/id_ed25519_cluster_control",
       "known_hosts_file": "~/.ssh/cluster_control_known_hosts",
-      "executable": "/Users/operator/.local/bin/llmops"
+      "executable": "/opt/operator/bin/llmops"
     }
   }
 }

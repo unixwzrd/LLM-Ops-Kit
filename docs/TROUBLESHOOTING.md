@@ -1,7 +1,7 @@
 # Troubleshooting
 
 **Created**: 2026-07-16
-**Updated**: 2026-11-03
+**Updated**: 2026-11-10
 
 Back: [Documentation index](./INDEX.md)
 
