@@ -6,6 +6,7 @@
 
 - Reconcile the qualified operator-routing, cross-stack lifecycle, safe-working-directory and shutdown fixes onto `main`. Keep local `AGENTS.md` instructions ignored and out of the tracked source.
 - Identify the live executable's immutable runtime before retained template assets or the command used to query it, preventing false stale-runtime reports while retaining detection of genuinely older processes.
+- Move CI to the supported `macos-15` runner after GitHub retired `macos-14`; retain the complete locked release-precheck suite.
 
 - Stop the model proxy without a signal-handler deadlock: request `HTTPServer.shutdown()` from a separate thread so SIGTERM/SIGINT can return the serving loop normally and release its listener. Add real-process shutdown/listener regression checks.
 - Add optional `control.service_operator` routing for cluster status, plans and lifecycle commands through an operator-supplied restricted SSH dispatcher. Pin the dispatcher host identity, use a dedicated requester key, disable forwarding, and preserve raw JSON/human progress output. Configuration, installation, logs and explicit local/configuration overrides do not use this route. Bound runtime PID probes by the component's status timeout so an unavailable peer cannot hang aggregate status indefinitely.
