@@ -648,7 +648,16 @@ class ComponentRunner:
         host = self._host(component)
         script = f"ps -p {int(match.group(1))} -o etime= -o command="
         command = ["/bin/sh", "-c", script] if host.transport == "local" else host.ssh_base() + [script]
-        completed = subprocess.run(command, capture_output=True, text=True, check=False)
+        try:
+            completed = subprocess.run(
+                command, capture_output=True, text=True, check=False,
+                timeout=component.timeouts.status,
+            )
+        except subprocess.TimeoutExpired:
+            return CommandResult(
+                component.qualified_id, "runtime", shlex.join(command), 124, "",
+                f"runtime probe timed out after {component.timeouts.status} seconds",
+            )
         return CommandResult(
             component.qualified_id,
             "runtime",
@@ -662,9 +671,15 @@ class ComponentRunner:
     def lifecycle_from_result(component: Component, result: CommandResult) -> str:
         """Interpret a driver status command as lifecycle, not readiness."""
 
-        if result.returncode == 255:
-            return "unknown"
         output = f"{result.stdout}\n{result.stderr}".casefold()
+        if re.search(r"(?:^|\s)(?:running=unknown|status=pid_mismatch)(?:\s|$)", output):
+            return "unknown"
+        if result.returncode not in {0, 1}:
+            # launchctl's documented missing-job diagnostic is a stopped job,
+            # not an SSH/timeout/helper/preflight failure.
+            if component.driver in {"launchd", "ssh-tunnel"} and result.returncode == 113 and "could not find service" in output:
+                return "stopped"
+            return "unknown"
         if component.driver in {"process", "command"}:
             pid_status = re.search(
                 r"(?:^|\n)[^\n]*:\s+running\s+pid\s*=\s*(\d*)(?:\s|$)",
@@ -673,16 +688,23 @@ class ComponentRunner:
             if pid_status is not None:
                 return "running" if pid_status.group(1) else "stopped"
         if component.driver in {"model-proxy", "tts-bridge", "modelctl"}:
-            if re.search(r"(^|\n)[^\n]*:\s+running(?:\s|$)", output):
+            status_output = result.stdout.casefold()
+            if re.search(r"(^|\n)[^\n]*:\s+(?:status=)?running(?:\s|$)", status_output):
                 return "running"
-            if re.search(r"(^|\n)[^\n]*:\s+(?:not running|stopped)(?:\s|$)", output):
+            if re.search(r"(^|\n)[^\n]*:\s+(?:status=)?(?:not running|stopped|stale)(?:\s|$)", status_output):
                 return "stopped"
+            if not result.ok:
+                # A failed profile loader is not an observation of the service.
+                return "unknown"
         return "running" if result.ok else "stopped"
 
     def is_running(self, component: Component) -> bool:
         """Return lifecycle state without treating failed readiness as stopped."""
 
-        return self.lifecycle_from_result(component, self.status(component)) == "running"
+        lifecycle = self.lifecycle_from_result(component, self.status(component))
+        if lifecycle == "unknown":
+            raise DriverError(f"{component.qualified_id}: lifecycle is unknown; verify execution-user access before changing services")
+        return lifecycle == "running"
 
     def wait_stopped(self, component: Component) -> CommandResult:
         """Verify that a completed stop action left the component stopped."""

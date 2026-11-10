@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Stop the model proxy without a signal-handler deadlock: request `HTTPServer.shutdown()` from a separate thread so SIGTERM/SIGINT can return the serving loop normally and release its listener. Add real-process shutdown/listener regression checks.
+- Add optional `control.service_operator` routing for cluster status, plans and lifecycle commands through an operator-supplied restricted SSH dispatcher. Pin the dispatcher host identity, use a dedicated requester key, disable forwarding, and preserve raw JSON/human progress output. Configuration, installation, logs and explicit local/configuration overrides do not use this route. Bound runtime PID probes by the component's status timeout so an unavailable peer cannot hang aggregate status indefinitely.
+- Run profile-resolution helpers and the Python TTS module with safe-path mode (`-P`) so an unrelated cloud/network working directory is not scanned for imports. Treat failed shell profile resolution as unknown lifecycle unless the driver emitted a valid running/stopped result; a Python import timeout is not a stopped model. Preserve source `PYTHONPATH` support and relative profile-path resolution.
+- Plan dependencies across stack boundaries. Starting an agent stack ensures its shared prerequisites are ready; stopping/restarting it selects only its own components. Add explicit `stack plan/start/stop/restart/status --all` operations with one globally ordered, deduplicated plan. Guard shared stop/restart against active or unobservable consumers outside the plan, with an explicit `--force` override. Preserve newly started shared prerequisites if an agent-specific startup fails.
+- Report transport, timeout, missing-command and helper execution failures as unknown lifecycle instead of stopped; refuse lifecycle changes based on unknown observations. Use the same cross-stack planner for CLI and TUI operations.
+
 ## 0.9.0b55 - 2026-11-02
 
 - Keep service output tail-able: open model, TTS bridge and proxy diagnostic streams in append mode so independent MARKTIME writes and copy/truncate maintenance cannot leave a producer writing behind EOF. Run Python TTS/bridge output unbuffered. On bridge rename rotation, reopen only stdout/stderr descriptors already pointing at that log onto the new active file in append mode; retain unrelated streams and existing proxy metadata-only policy. Existing running processes require a controlled reload to adopt the changed descriptors; no model or engine dependency upgrade is involved.

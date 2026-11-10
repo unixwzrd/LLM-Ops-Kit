@@ -51,6 +51,7 @@ class Operation:
 
     component: Component
     action: str
+    rollback_on_failure: bool = True
 
     def as_dict(self) -> dict[str, str]:
         """Return a stable JSON-compatible operation."""
@@ -92,10 +93,14 @@ def component_plan(
 
     if not component.enabled:
         raise TopologyError(f"{component.qualified_id}: component is disabled")
-    stack = topology.stacks[component.stack]
+    stack = topology
     if action == "start":
         selected = {component.qualified_id} if no_deps else dependency_closure(stack, component)
-        return [Operation(item, "start") for item in topological_order(stack, subset=selected) if item.enabled]
+        ordered = topological_order(stack, subset=selected)
+        for item in ordered:
+            if not item.enabled:
+                raise TopologyError(f"{item.qualified_id}: required component is disabled")
+        return [Operation(item, "start", rollback_on_failure=item.stack == component.stack) for item in ordered]
     if action == "stop":
         selected = dependent_closure(stack, component) if cascade else {component.qualified_id}
         return [
@@ -119,19 +124,29 @@ def component_plan(
     raise TopologyError(f"unsupported component action: {action}")
 
 
-def stack_plan(stack: Stack, action: str) -> list[Operation]:
-    """Build an ordered plan for a complete stack action."""
+def stack_plan(stack: Stack, action: str, *, topology: Optional[Topology] = None) -> list[Operation]:
+    """Start prerequisites globally; stop/restart only the selected stack."""
 
-    ordered = [item for item in topological_order(stack) if item.enabled]
+    graph = topology or stack
+    owned = {item.qualified_id for item in stack.components.values() if item.enabled}
+    ordered = [item for item in topological_order(graph, subset=owned) if item.enabled]
     lifecycle_components = [item for item in ordered if item.ownership == "managed"]
+    selected = set(owned)
+    if action in {"start", "restart"}:
+        for item in ordered:
+            selected.update(dependency_closure(graph, item))
+    starts = []
+    for item in topological_order(graph, subset=selected):
+        if not item.enabled and item.qualified_id not in owned:
+            raise TopologyError(f"{item.qualified_id}: required component is disabled")
+        if item.enabled and item.ownership == "managed":
+            starts.append(Operation(item, "start", rollback_on_failure=item.qualified_id in owned))
     if action == "start":
-        return [Operation(item, "start") for item in lifecycle_components]
+        return starts
     if action == "stop":
         return [Operation(item, "stop") for item in reversed(lifecycle_components)]
     if action == "restart":
-        return [Operation(item, "stop") for item in reversed(lifecycle_components)] + [
-            Operation(item, "start") for item in lifecycle_components
-        ]
+        return [Operation(item, "stop") for item in reversed(lifecycle_components)] + starts
     if action == "status":
         return [Operation(item, "status") for item in ordered]
     raise TopologyError(f"unsupported stack action: {action}")
@@ -227,7 +242,7 @@ class Executor:
     def active_dependents(self, component: Component) -> list[Component]:
         """Return running downstream dependents, excluding the target."""
 
-        stack = self.topology.stacks[component.stack]
+        stack = self.topology
         selected = dependent_closure(stack, component) - {component.qualified_id}
         ordered = topological_order(stack, subset=selected)
         return [item for item in ordered if self.runner.is_running(item)]
@@ -265,20 +280,23 @@ class Executor:
     ) -> list[CommandResult]:
         """Safely prepare and execute a component lifecycle mutation."""
 
-        prepared = self.prepare_component(
-            component,
-            action,
-            cascade=cascade,
-            no_deps=no_deps,
-        )
+        if force and action == "stop" and not cascade:
+            prepared = MutationPlan(tuple(component_plan(self.topology, component, action)))
+        else:
+            prepared = self.prepare_component(
+                component,
+                action,
+                cascade=cascade,
+                no_deps=no_deps,
+            )
         if prepared.requires_force and not force:
             names = ", ".join(item.qualified_id for item in prepared.active_dependents)
             raise ExecutionError(
                 f"{component.qualified_id}: active dependents: {names}; use --force or --cascade"
             )
-        return self.execute(list(prepared.operations))
+        return self.execute(list(prepared.operations), force=force)
 
-    def execute(self, operations: list[Operation]) -> list[CommandResult]:
+    def execute(self, operations: list[Operation], *, force: bool = False) -> list[CommandResult]:
         """Start dependency-ready components without unrelated readiness barriers."""
 
         results: list[CommandResult] = []
@@ -290,6 +308,28 @@ class Executor:
         lock_path = self.topology.paths.run_dir / "orchestrator.lock"
         state_store = LifecycleStateStore(self.topology.paths.lifecycle_state_file)
         with operation_lock(lock_path):
+            if not force:
+                disruptive = {op.component.qualified_id for op in operations if op.action in {"stop", "restart"}}
+                observed: dict[str, str] = {}
+                for operation in operations:
+                    if operation.action not in {"stop", "restart"}:
+                        continue
+                    # Cross-stack consumers are not owned by this operation.
+                    downstream = dependent_closure(self.topology, operation.component) - disruptive
+                    outside = []
+                    for reference in sorted(downstream):
+                        item = self.topology.resolve_component(reference)
+                        if not item.enabled or item.stack == operation.component.stack:
+                            continue
+                        if reference not in observed:
+                            observed[reference] = ComponentRunner.lifecycle_from_result(item, self.runner.status(item))
+                        if observed[reference] == "unknown":
+                            raise ExecutionError(f"{operation.component.qualified_id}: dependent state unknown: {reference}; verify access before stopping shared services, or use --force")
+                        if observed[reference] == "running":
+                            outside.append(item)
+                    if outside:
+                        names = ", ".join(item.qualified_id for item in outside)
+                        raise ExecutionError(f"{operation.component.qualified_id}: active dependents outside this plan: {names}; stop their stacks first or use --force")
             try:
                 desired = state_store.load()
                 batches: list[list[Operation]] = []
@@ -304,7 +344,7 @@ class Executor:
                         component = operation.component
                         if result is not None:
                             results.append(result)
-                        if newly_started:
+                        if newly_started and operation.rollback_on_failure:
                             started.append(component)
                         if failure is not None:
                             if operation.action == "stop" and best_effort_stop:
@@ -399,6 +439,7 @@ class Executor:
         try:
             if action == "start":
                 if self.runner.is_running(component):
+                    self.runner.wait_healthy(component)
                     return operation, None, False, None
                 result = self.runner.run(component, "start")
                 if not result.ok:

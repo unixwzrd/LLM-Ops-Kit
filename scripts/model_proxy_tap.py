@@ -20,6 +20,7 @@ import signal
 import socket
 import socketserver
 import sys
+import threading
 import time
 from collections import Counter
 from datetime import datetime, timezone
@@ -1236,7 +1237,8 @@ def main() -> int:
 
     def _shutdown(_signum: int, _frame: Any) -> None:
         try:
-            server.shutdown()
+            # shutdown() waits for serve_forever(), which runs on this signal thread.
+            threading.Thread(target=server.shutdown, daemon=True).start()
         except Exception:
             pass
 

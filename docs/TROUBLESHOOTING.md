@@ -1,7 +1,7 @@
 # Troubleshooting
 
 **Created**: 2026-07-16
-**Updated**: 2026-11-02
+**Updated**: 2026-11-03
 
 Back: [Documentation index](./INDEX.md)
 
@@ -25,9 +25,17 @@ If a model, proxy, or TTS profile is not found, verify the profile exists in the
 
 If SSH update or reconciliation fails, verify noninteractive access using the inventory user, host, port, key, and optional proxy jump. The failing host remains explicit, and a partial multi-host runtime update rolls back hosts changed by that invocation.
 
-If a component start fails, the executor removes only dependencies started by that invocation. Check component logs and readiness targets before retrying.
+If a component start fails, the executor rolls back newly started components owned by that operation. Cross-stack shared prerequisites started for an agent are retained. Check component logs and readiness targets before retrying.
 
 If configuration hash validation reports a changed file, do not merge remote changes automatically. Review the target, correct authoritative configuration when appropriate, and rerun reconciliation. Toolkit-version drift is corrected with a planned `llmops update` operation.
+
+## Python Import Failure From A Cloud Working Directory
+
+If status reports stopped models but verbose output contains `Could not import runpy module` or a Python import traceback naming the terminal's cloud/network working directory, the probe failed before observing the model. Do not restart the model based on that result. Change to a local directory, such as `cd /tmp`, and repeat the same status query to separate the storage issue from service state.
+
+The corrected profile helper uses Python's `-P` safe-path option: `-m` no longer implicitly adds the caller's current directory to module search. The TTS module launcher uses it too. Explicit source `PYTHONPATH` entries and relative profile-file arguments remain supported. Failed shell profile resolution is reported as unknown, not as stopped; ordinary driver-emitted stopped/stale states remain distinct. See [Python's safe-path documentation](https://docs.python.org/3/using/cmdline.html#cmdoption-P).
+
+Updating the toolkit fixes subsequent CLI probes without restarting working model servers. This does not repair iCloud synchronization, hydrate files, or establish that the unavailable folder's contents are lost.
 
 ## Following Service Logs
 

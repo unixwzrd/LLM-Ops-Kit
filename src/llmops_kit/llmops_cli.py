@@ -66,7 +66,7 @@ try:
     from .llmops_probe import probe_topology
     from .llmops_products import ProductInventory, ProductInventoryError
     from .llmops_profiles import model_values, service_values
-    from .llmops_topology import Topology, TopologyError, load_profile, load_stacks, profile_path, validate_topology
+    from .llmops_topology import Stack, Topology, TopologyError, load_profile, load_stacks, profile_path, validate_topology
     from .llmops_topology_view import project_topology, render_dot, render_mermaid, render_table
     from .llmops_templates import TemplateError, flatten_schema, load_template_registry, parse_schema_value, schema_node, set_dotted
 except ImportError:  # Direct source execution.
@@ -106,7 +106,7 @@ except ImportError:  # Direct source execution.
     from llmops_probe import probe_topology
     from llmops_products import ProductInventory, ProductInventoryError
     from llmops_profiles import model_values, service_values
-    from llmops_topology import Topology, TopologyError, load_profile, load_stacks, profile_path, validate_topology
+    from llmops_topology import Stack, Topology, TopologyError, load_profile, load_stacks, profile_path, validate_topology
     from llmops_topology_view import project_topology, render_dot, render_mermaid, render_table
     from llmops_templates import TemplateError, flatten_schema, load_template_registry, parse_schema_value, schema_node, set_dotted
 
@@ -1002,11 +1002,9 @@ def cmd_plan(args: argparse.Namespace) -> int:
         stack = CURRENT_TOPOLOGY.stacks.get(args.stack)
         if stack is None:
             raise TopologyError(f"stack not found: {args.stack}")
-        operations = stack_plan(stack, args.action)
+        operations = stack_plan(stack, args.action, topology=CURRENT_TOPOLOGY)
     else:
-        operations = []
-        for name in sorted(CURRENT_TOPOLOGY.stacks):
-            operations.extend(stack_plan(CURRENT_TOPOLOGY.stacks[name], args.action))
+        operations = stack_plan(_all_stacks(), args.action, topology=CURRENT_TOPOLOGY)
     emit(operation_payload(operations), json_output=args.json)
     return 0
 
@@ -1649,6 +1647,67 @@ def _is_authority_operation(args: argparse.Namespace) -> bool:
     }
 
 
+def _route_operator_operation(
+    args: argparse.Namespace, operation: list[str], *, config_home: Path
+) -> Optional[int]:
+    """Dispatch eligible cluster operations through the configured operator gate."""
+
+    eligible = args.command in {"status", "plan"} or (
+        args.command == "stack" and getattr(args, "stack_command", "") in
+        {"list", "plan", "start", "stop", "restart", "status"}
+    ) or (
+        args.command == "component" and getattr(args, "component_command", "") in
+        {"plan", "start", "stop", "restart", "status"}
+    )
+    if not eligible or os.environ.get("LLMOPS_OPERATOR_DISPATCHED") == "1":
+        return None
+    if any(token in {"--local", "--config-home", "--inventory"} or
+           token.startswith(("--config-home=", "--inventory=")) for token in operation):
+        return None
+    if not (config_home / "catalog.json").is_file():
+        return None
+    record = load_config(config_home / "config.json").data.get("control", {}).get("service_operator")
+    if record is None:
+        return None
+    if not isinstance(record, dict):
+        raise ConfigError("control.service_operator must be an object")
+    host, user = record.get("host"), record.get("user")
+    if not isinstance(host, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.:-]*", host):
+        raise ConfigError("invalid service_operator host")
+    if not isinstance(user, str) or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.-]*", user):
+        raise ConfigError("invalid service_operator user")
+    port = record.get("port", 22)
+    if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
+        raise ConfigError("invalid service_operator port")
+    paths = {}
+    for field in ("identity_file", "known_hosts_file", "executable"):
+        value = record.get(field)
+        if not isinstance(value, str) or not value or any(c in value for c in "\x00\r\n"):
+            raise ConfigError(f"invalid service_operator {field}")
+        try:
+            expanded = Path(value).expanduser()
+        except RuntimeError as exc:
+            raise ConfigError(f"invalid service_operator {field}: {exc}") from exc
+        if not expanded.is_absolute():
+            raise ConfigError(f"service_operator {field} must be absolute")
+        paths[field] = str(expanded)
+    known_hosts = paths["known_hosts_file"].replace("\\", "\\\\").replace('"', '\\"')
+    command = [
+        "ssh", "-F", "/dev/null", "-p", str(port), "-i", paths["identity_file"],
+        "-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes",
+        "-o", "StrictHostKeyChecking=yes", "-o", f'UserKnownHostsFile="{known_hosts}"',
+        "-o", "GlobalKnownHostsFile=/dev/null", "-o", "ForwardAgent=no",
+        "-o", "ForwardX11=no", "-o", "ClearAllForwardings=yes",
+        "-o", "ConnectTimeout=10", "-o", "ServerAliveInterval=15",
+        "-o", "ServerAliveCountMax=3", "-T", f"{user}@{host}",
+        shlex.join([paths["executable"], *operation]),
+    ]
+    try:
+        return subprocess.run(command, check=False).returncode
+    except OSError as exc:
+        raise TopologyError(f"operator SSH failed: {exc}") from exc
+
+
 def _route_authority_operation(
     args: argparse.Namespace,
     operation: list[str],
@@ -2175,7 +2234,21 @@ def cmd_stack_list(args: argparse.Namespace) -> int:
     return 0
 
 
+def _all_stacks() -> Stack:
+    """Select each component once for an explicit full-system operation."""
+
+    return Stack(
+        name="--all",
+        path=CURRENT_TOPOLOGY.paths.stacks_dir,
+        components={item.qualified_id: item for item in CURRENT_TOPOLOGY.all_components()},
+    )
+
+
 def stack_operations(args: argparse.Namespace) -> list[Any]:
+    if getattr(args, "all_stacks", False):
+        if args.stack:
+            raise TopologyError("choose a stack name or --all, not both")
+        return stack_plan(_all_stacks(), args.action, topology=CURRENT_TOPOLOGY)
     stack_name = args.stack
     if stack_name is None:
         if len(CURRENT_TOPOLOGY.stacks) != 1:
@@ -2185,7 +2258,7 @@ def stack_operations(args: argparse.Namespace) -> list[Any]:
     stack = CURRENT_TOPOLOGY.stacks.get(stack_name)
     if stack is None:
         raise TopologyError(f"stack not found: {stack_name}")
-    return stack_plan(stack, args.action)
+    return stack_plan(stack, args.action, topology=CURRENT_TOPOLOGY)
 
 
 def cmd_stack_plan(args: argparse.Namespace) -> int:
@@ -2196,7 +2269,9 @@ def cmd_stack_plan(args: argparse.Namespace) -> int:
 def cmd_stack_run(args: argparse.Namespace) -> int:
     if args.action == "status":
         stack_name = args.stack
-        if stack_name is None:
+        if stack_name and getattr(args, "all_stacks", False):
+            raise TopologyError("choose a stack name or --all, not both")
+        if stack_name is None and not getattr(args, "all_stacks", False):
             if len(CURRENT_TOPOLOGY.stacks) != 1:
                 choices = ", ".join(sorted(CURRENT_TOPOLOGY.stacks)) or "none configured"
                 raise TopologyError(f"stack name is required; available stacks: {choices}")
@@ -2214,7 +2289,7 @@ def cmd_stack_run(args: argparse.Namespace) -> int:
         emit(payload, json_output=args.json)
         return _status_exit_code(payload)
     progress = None
-    if not args.json:
+    if not args.json or getattr(args, "progress", False):
         def progress(event: str, operation: Any) -> None:
             print(
                 f"{event}: {operation.component.qualified_id}",
@@ -2224,7 +2299,7 @@ def cmd_stack_run(args: argparse.Namespace) -> int:
 
     executor = Executor(CURRENT_TOPOLOGY, progress=progress)
     operations = stack_operations(args)
-    results = executor.execute(operations)
+    results = executor.execute(operations, force=getattr(args, "force", False))
     emit([result.as_dict() for result in results], json_output=args.json)
     return 0 if all(result.ok for result in results) else 1
 
@@ -2583,15 +2658,20 @@ def build_parser() -> argparse.ArgumentParser:
     stack_list.set_defaults(func=cmd_stack_list)
     stack_plan_parser = stack_sub.add_parser("plan")
     stack_plan_parser.add_argument("action", choices=("start", "stop", "restart"))
-    stack_plan_parser.add_argument("stack")
+    stack_plan_parser.add_argument("stack", nargs="?")
+    stack_plan_parser.add_argument("--all", dest="all_stacks", action="store_true", help="select every stack once")
     stack_plan_parser.set_defaults(func=cmd_stack_plan)
     for action in ("start", "stop", "restart"):
         action_parser = stack_sub.add_parser(action)
         action_parser.set_defaults(action=action, func=cmd_stack_run)
-        action_parser.add_argument("stack")
+        action_parser.add_argument("stack", nargs="?")
+        action_parser.add_argument("--all", dest="all_stacks", action="store_true", help="operate the full system, including shared infrastructure")
+        if action in {"stop", "restart"}:
+            action_parser.add_argument("--force", action="store_true", help="allow disruption of active consumers outside this plan")
     stack_status = stack_sub.add_parser("status")
     stack_status.set_defaults(action="status", func=cmd_stack_run)
     stack_status.add_argument("stack", nargs="?")
+    stack_status.add_argument("--all", dest="all_stacks", action="store_true")
     return parser
 
 
@@ -2611,6 +2691,9 @@ def main(argv: Optional[list[str]] = None) -> int:
                 **({"LLMOPS_CONFIG_HOME": args.config_home} if args.config_home else {}),
             }
         )
+        routed = _route_operator_operation(args, normalized_argv, config_home=paths.config_home)
+        if routed is not None:
+            return routed
         routed = _route_authority_operation(
             args,
             normalized_argv,

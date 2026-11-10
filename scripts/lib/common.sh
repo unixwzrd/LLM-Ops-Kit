@@ -127,7 +127,8 @@ source_json_profile_defaults() {
   local json_file="$3"
   local line key resolved
   [[ -f "$json_file" ]] || return 0
-  resolved="$("${LLMOPS_PYTHON_BIN:-python}" -m llmops_kit.llmops_profiles "$kind" "$name" --profile-path "$json_file" --resolve-references)" || return $?
+  # Installed helpers must not scan an unrelated caller directory (e.g. iCloud).
+  resolved="$("${LLMOPS_PYTHON_BIN:-python}" -P -m llmops_kit.llmops_profiles "$kind" "$name" --profile-path "$json_file" --resolve-references)" || return $?
   while IFS= read -r line; do
     [[ -n "$line" && "$line" == *=* ]] || continue
     key="${line%%=*}"
