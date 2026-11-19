@@ -18,7 +18,9 @@ from unittest.mock import patch
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import Iterator
 from urllib import request
+from urllib.error import HTTPError
 
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / "tts_bridge_server.py"
@@ -906,6 +908,125 @@ class TTSBridgeServerTests(unittest.TestCase):
                 aliases["neutral"]["reference_id"],
                 aliases["emotive"]["reference_id"],
             )
+
+
+class SamplingTests(unittest.TestCase):
+    @contextmanager
+    def sampling_config(self) -> Iterator[tuple[dict[str, object], str, Path]]:
+        """Build owner-independent configuration with explicit test overrides."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            samples = root / "samples"
+            samples.mkdir()
+            alias = root.name
+            document = {
+                "defaults": {"sampling": {"temperature": 0.7, "top_p": 0.95,
+                                            "top_k": 40, "repetition_penalty": 1.0}},
+                alias: {"reference_id": "ref_" + "1" * 32, "sampling": {"temperature": 0.5}},
+            }
+            (root / "voice-map.json").write_text(json.dumps(document), encoding="utf-8")
+            cfg = MODULE.build_bridge_config(_bridge_args(root, samples))
+            yield cfg, alias, root
+
+    def test_sampling_precedence_merges_individual_fields(self) -> None:
+        with self.sampling_config() as (cfg, alias, _):
+            output, _, _ = MODULE.build_upstream_payload(
+                {"input": "test", "voice": alias, "top_k": 12}, cfg
+            )
+            expected = dict(cfg["voice_map_defaults"]["sampling"])
+            expected.update(cfg["voice_map"][alias.casefold()]["sampling"])
+            expected["top_k"] = 12
+            self.assertEqual({k: output[k] for k in MODULE.SAMPLING_FIELDS}, expected)
+            self.assertEqual(output["reference_id"], "ref_" + "1" * 32)
+            self.assertNotIn("sampling", output)
+
+    def test_unmatched_voice_retains_global_sampling(self) -> None:
+        with self.sampling_config() as (cfg, _, _):
+            output, _, _ = MODULE.build_upstream_payload({"input": "test"}, cfg)
+            self.assertEqual({k: output[k] for k in MODULE.SAMPLING_FIELDS},
+                             cfg["voice_map_defaults"]["sampling"])
+            health = MODULE._build_health_payload(cfg)
+            self.assertEqual(health["defaults"]["sampling"], cfg["voice_map_defaults"]["sampling"])
+
+    def test_no_sampling_config_preserves_model_defaults(self) -> None:
+        with self.sampling_config() as (cfg, _, _):
+            cfg["voice_map_defaults"].pop("sampling")
+            output, _, _ = MODULE.build_upstream_payload({"input": "test"}, cfg)
+            self.assertFalse(set(MODULE.SAMPLING_FIELDS) & output.keys())
+
+    def test_inline_reference_preserves_sampling_and_literal_transcript(self) -> None:
+        with self.sampling_config() as (cfg, alias, _):
+            reference = {"filename": "reference.wav", "audio_base64": "private-audio",
+                         "transcript": "Do not change / this.\r\n"}
+            cfg["pronounce_map"] = {"/": " slash "}
+            output, _, _ = MODULE.build_upstream_payload(
+                {"input": "target/text", "voice": alias, "reference": reference}, cfg
+            )
+            self.assertEqual(output["reference"], reference)
+            self.assertEqual(output["input"], "target slash text")
+            self.assertNotIn("reference_id", output)
+            self.assertEqual(output["temperature"], cfg["voice_map"][alias.casefold()]["sampling"]["temperature"])
+            redacted = MODULE._redact_upstream_payload(output)
+            self.assertEqual(redacted["temperature"], output["temperature"])
+            self.assertNotIn(reference["audio_base64"], str(redacted))
+            self.assertNotIn(reference["transcript"], str(redacted))
+
+    def test_invalid_sampling_in_configuration_fails_at_startup(self) -> None:
+        invalid = [None, [], {"unknown": 1}, {"top_k": True}, {"top_k": 1.5},
+                   {"top_p": 1.01}, {"temperature": -1}, {"temperature": "0.7"},
+                   {"repetition_penalty": 0}, {"top_p": float("nan")},
+                   {"temperature": float("inf")}, {"top_k": 10 ** 1000}]
+        with self.sampling_config() as (_, alias, root):
+            for value in invalid:
+                for key in ("defaults", alias):
+                    with self.subTest(value=value, key=key):
+                        (root / "voice-map.json").write_text(
+                            json.dumps({key: {"sampling": value}}), encoding="utf-8"
+                        )
+                        with self.assertRaises(MODULE.BridgeConfigError):
+                            MODULE.build_bridge_config(_bridge_args(root, root / "samples"))
+
+    def test_invalid_request_sampling_returns_422(self) -> None:
+        invalid = [{"top_k": False}, {"top_k": -1}, {"top_k": 2.0}, {"top_p": -0.1},
+                   {"top_p": 1.01}, {"temperature": -1}, {"temperature": "0.7"},
+                   {"temperature": None}, {"repetition_penalty": 0},
+                   {"temperature": float("nan")}, {"temperature": float("inf")}]
+        with self.sampling_config() as (cfg, _, _):
+            for fields in invalid:
+                with self.subTest(fields=fields), self.assertRaises(MODULE.BridgeRequestError) as ctx:
+                    MODULE.build_upstream_payload({"input": "test", **fields}, cfg)
+                self.assertEqual(ctx.exception.status, 422)
+
+    def test_sampling_boundaries_and_numeric_request_overrides(self) -> None:
+        with self.sampling_config() as (cfg, _, _):
+            values = {"temperature": 0, "top_p": 0, "top_k": 0, "repetition_penalty": 0.5}
+            output, _, _ = MODULE.build_upstream_payload({"input": "test", **values}, cfg)
+            self.assertEqual({k: output[k] for k in values}, values)
+
+    def test_http_forwards_sampling_and_rejects_invalid_before_upstream(self) -> None:
+        with self.sampling_config() as (cfg, alias, _):
+            _FakeUpstreamHandler.received = []
+            upstream = ThreadingHTTPServer((cfg["listen_host"], 0), _FakeUpstreamHandler)
+            cfg["upstream_base"] = f"http://{cfg['listen_host']}:{upstream.server_port}/v1"
+            bridge = ThreadingHTTPServer((cfg["listen_host"], 0), MODULE.BridgeHandler)
+            bridge.bridge_config = cfg
+            endpoint = f"http://{cfg['listen_host']}:{bridge.server_port}/v1/audio/speech"
+            with _run_server(upstream), _run_server(bridge):
+                payload = {"input": "test", "voice": alias, "top_p": 0.8}
+                req = request.Request(endpoint, data=json.dumps(payload).encode(),
+                                      headers={"Content-Type": "application/json"})
+                with request.urlopen(req, timeout=cfg["timeout_seconds"]) as response:
+                    self.assertEqual(response.read(), _FakeUpstreamHandler.audio_bytes)
+                self.assertEqual(_FakeUpstreamHandler.received[-1]["top_p"], payload["top_p"])
+                self.assertEqual(_FakeUpstreamHandler.received[-1]["temperature"],
+                                 cfg["voice_map"][alias.casefold()]["sampling"]["temperature"])
+                req = request.Request(endpoint, data=json.dumps({"input": "test", "top_k": -2}).encode(),
+                                      headers={"Content-Type": "application/json"})
+                with self.assertRaises(HTTPError) as ctx:
+                    request.urlopen(req, timeout=cfg["timeout_seconds"])
+                self.assertEqual(ctx.exception.code, 422)
+                ctx.exception.close()
+                self.assertEqual(len(_FakeUpstreamHandler.received), 1)
 
 
 if __name__ == "__main__":

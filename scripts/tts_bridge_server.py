@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import sys
 import time
@@ -29,6 +30,7 @@ DEFAULT_PRONOUNCE_CONFIG = "pronounce.json"
 DEFAULT_VOICE_MAP_CONFIG = "voice-map.json"
 DEFAULT_SAMPLES_DIR = "~/LLM_Repository/TTS/Samples"
 DEFAULT_LOG_PATH = "~/.local/state/llm-ops/logs/tts-bridge.log"
+SAMPLING_FIELDS = ("temperature", "top_p", "top_k", "repetition_penalty")
 
 
 class BridgeConfigError(RuntimeError):
@@ -264,6 +266,46 @@ def _copy_optional_style_fields(
         target["intensity"] = float(intensity)
 
 
+def _validate_sampling(value: Any) -> dict[str, int | float]:
+    """Validate explicit sampling options without inventing model defaults."""
+    if not isinstance(value, dict):
+        raise ValueError("sampling must be a JSON object")
+    if any(field not in SAMPLING_FIELDS for field in value):
+        raise ValueError("sampling contains an unsupported field")
+    for field, number in value.items():
+        if isinstance(number, bool) or not isinstance(number, (int, float)):
+            raise ValueError(f"sampling field '{field}' must be numeric")
+        try:
+            finite = math.isfinite(number)
+        except OverflowError:
+            finite = False
+        if not finite:
+            raise ValueError(f"sampling field '{field}' must be finite")
+        if field == "top_k":
+            if not isinstance(number, int) or number < 0:
+                raise ValueError("sampling field 'top_k' must be a nonnegative integer")
+        elif field == "top_p":
+            if not 0 <= number <= 1:
+                raise ValueError("sampling field 'top_p' must be between 0 and 1")
+        elif field == "temperature":
+            if number < 0:
+                raise ValueError("sampling field 'temperature' must be nonnegative")
+        elif number <= 0:
+            raise ValueError("sampling field 'repetition_penalty' must be positive")
+    return dict(value)
+
+
+def _copy_optional_sampling(
+    target: dict[str, Any], source: dict[str, Any], alias_name: str, path: Path
+) -> None:
+    """Read validated sampling overrides from a voice-map entry."""
+    if "sampling" in source:
+        try:
+            target["sampling"] = _validate_sampling(source["sampling"])
+        except ValueError as exc:
+            raise BridgeConfigError(f"voice-map '{alias_name}' in {path}: {exc}") from exc
+
+
 def _normalize_voice_alias_entry(alias_name: str, entry: dict[str, Any], path: Path) -> dict[str, Any]:
     has_sample = isinstance(entry.get("sample"), str) and bool(entry["sample"].strip())
     has_reference_id = isinstance(entry.get("reference_id"), str) and bool(
@@ -293,6 +335,7 @@ def _normalize_voice_alias_entry(alias_name: str, entry: dict[str, Any], path: P
         path=path,
     )
     _copy_optional_style_fields(normalized, entry, alias_name, path)
+    _copy_optional_sampling(normalized, entry, alias_name, path)
     if "speed" in entry:
         speed = entry["speed"]
         if not isinstance(speed, (int, float, str)):
@@ -324,6 +367,7 @@ def _normalize_voice_map_defaults(path: Path, entry: dict[str, Any]) -> dict[str
             f"voice-map defaults cannot set both 'sample' and 'reference_id' in {path}"
         )
     _copy_optional_style_fields(normalized, entry, "defaults", path)
+    _copy_optional_sampling(normalized, entry, "defaults", path)
     if "speed" in entry:
         speed = entry["speed"]
         if not isinstance(speed, (int, float, str)):
@@ -529,6 +573,7 @@ def _build_health_payload(cfg: dict[str, Any]) -> dict[str, Any]:
             "model": cfg.get("model", ""),
             "voice": cfg.get("voice", ""),
             "response_format": cfg.get("response_format", "wav"),
+            "sampling": cfg.get("voice_map_defaults", {}).get("sampling", {}),
         },
         "registry_reachable": bool(metadata.get("reachable", False)),
         "alias_count": len(cfg["voice_map"]),
@@ -900,6 +945,17 @@ def build_upstream_payload(
         {} if explicit_reference_mode else resolved_voice_mapping,
         cfg.get("upstream_capabilities", {}),
     )
+
+    # Merge per field so a voice override does not discard unrelated defaults.
+    # Explicit clone references bypass alias conditioning, not sampling policy.
+    sampling = dict(cfg.get("voice_map_defaults", {}).get("sampling", {}))
+    if voice_mapping is not None:
+        sampling.update(voice_mapping.get("sampling", {}))
+    sampling.update({field: incoming[field] for field in SAMPLING_FIELDS if field in incoming})
+    try:
+        output.update(_validate_sampling(sampling))
+    except ValueError as exc:
+        raise BridgeRequestError(422, "sampling_validation", str(exc)) from exc
 
     return output, output["response_format"], downgraded_from
 
