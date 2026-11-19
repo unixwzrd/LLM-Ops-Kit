@@ -24,12 +24,12 @@ The installer owns its UV-managed Python runtime. It does not require Git, syste
 
 ## Install
 
-The current published beta is **[0.9.0b56](https://github.com/unixwzrd/LLM-Ops-Kit/releases/tag/0.9.0b56)**. It adds restricted operator routing, dependency-aware cross-stack operations, safe working-directory handling, reliable proxy shutdown, and accurate live-runtime detection. The earlier logging, privacy and llama.cpp compatibility improvements remain included. Download and verify that beta's installer explicitly; GitHub's `/releases/latest` redirect excludes prereleases and can select an older release:
+The current published beta is **[0.9.0b56](https://github.com/unixwzrd/LLM-Ops-Kit/releases/tag/0.9.0b56)**. It adds restricted operator routing, dependency-aware cross-stack operations, safe working-directory handling, reliable proxy shutdown, and accurate live-runtime detection. The earlier logging, privacy and llama.cpp compatibility improvements remain included. From a new scratch directory, download and verify that beta's installer explicitly; GitHub's `/releases/latest` redirect excludes prereleases and can select an older release:
 
 ```bash
-curl -fsSLO https://github.com/unixwzrd/LLM-Ops-Kit/releases/download/0.9.0b56/install-llmops
-curl -fsSLO https://github.com/unixwzrd/LLM-Ops-Kit/releases/download/0.9.0b56/install-llmops.sha256
-shasum -a 256 -c install-llmops.sha256
+curl -fsSLO https://github.com/unixwzrd/LLM-Ops-Kit/releases/download/0.9.0b56/install-llmops &&
+curl -fsSLO https://github.com/unixwzrd/LLM-Ops-Kit/releases/download/0.9.0b56/install-llmops.sha256 &&
+shasum -a 256 -c install-llmops.sha256 &&
 bash install-llmops --repository unixwzrd/LLM-Ops-Kit --version 0.9.0b56
 ```
 
@@ -44,6 +44,14 @@ Then create and validate a local configuration:
 The release badge at the top of this page shows the current published version. `llmops --version` reports the installed toolkit version. To install a specific release, add `--version <tag>` to the installer command.
 
 The verified release archive contains the application wheel, locked offline dependency wheelhouse, runtime resources, manifest, and checksums. The installer creates an immutable release under `~/.local/llm-ops/releases/`, maintains `current` and `previous`, and exposes `~/.local/bin/llmops`. Use `--minimal` for a CLI-only installation.
+
+## For Agents
+
+Point your agent at this README and the [agent operator guide](docs/AGENT_OPERATIONS.md). It covers verified installation, configuration previews, status and lifecycle operations through the same `llmops` interface, regardless of which agent is operating it.
+
+For a reusable integration, load the portable [LLM Ops skill](skills/llmops/SKILL.md) in Hermes, OpenClaw, or another Agent Skills-compatible host. Start with a read-only inventory. Installing the skill grants no permissions; service changes use your existing controller, and a restart of the requesting agent must be handed off to a controller that stays up while it restarts.
+
+> Read the agent operator guide and use the LLM Ops skill. Tell me which host and account your shell runs on, what LLM Ops Kit can observe there, and what you would need to install or configure. Do not install, configure, or restart anything yet.
 
 ## Operate
 

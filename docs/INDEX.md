@@ -1,6 +1,7 @@
 # Documentation Index
 
 - [Quickstart](./QUICKSTART.md)
+- [Agent operator guide](./AGENT_OPERATIONS.md)
 - [Configuration](./CONFIGURATION.md)
 - [Migration](./MIGRATION.md)
 - [Architecture](./ARCHITECTURE.md)

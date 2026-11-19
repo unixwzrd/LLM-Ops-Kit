@@ -31,6 +31,19 @@ def tracked_files() -> list[Path]:
 
 
 class ReleaseHygieneTests(unittest.TestCase):
+    def test_tracked_files_do_not_match_repository_ignore_rules(self) -> None:
+        """Catch force-added artifacts; ignore private user/global excludes."""
+        checkout = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"], cwd=ROOT, capture_output=True, text=True, check=False,
+        )
+        if checkout.returncode != 0 or Path(checkout.stdout.strip()).resolve() != ROOT:
+            self.skipTest("requires the project's Git checkout")
+        ignored = subprocess.run(
+            ["git", "ls-files", "--cached", "--ignored", "--exclude-per-directory=.gitignore"],
+            cwd=ROOT, capture_output=True, text=True, check=True,
+        )
+        self.assertEqual(ignored.stdout.splitlines(), [])
+
     def test_public_markdown_links_resolve(self) -> None:
         missing: list[str] = []
         for path in tracked_files():

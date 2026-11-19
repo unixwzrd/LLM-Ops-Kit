@@ -4,35 +4,48 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: macos-15
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
 
       - name: Set up UV
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
-          version: "0.11.19"
+          version: "0.13.9"
           enable-cache: true
 
       - name: Install shellcheck
         shell: bash
         run: |
+          shellcheck_version=v0.11.0
           case "$(uname -m)" in
-            arm64) shellcheck_arch=aarch64 ;;
-            x86_64) shellcheck_arch=x86_64 ;;
+            arm64)
+              shellcheck_arch=aarch64
+              shellcheck_sha=56affdd8de5527894dca6dc3d7e0a99a873b0f004d7aabc30ae407d3f48b0a79
+              ;;
+            x86_64)
+              shellcheck_arch=x86_64
+              shellcheck_sha=3c89db4edcab7cf1c27bff178882e0f6f27f7afdf54e859fa041fca10febe4c6
+              ;;
             *) echo "unsupported CI architecture: $(uname -m)" >&2; exit 2 ;;
           esac
-          curl -fsSL --retry 3 "https://github.com/koalaman/shellcheck/releases/download/stable/shellcheck-stable.darwin.${shellcheck_arch}.tar.xz" -o "$RUNNER_TEMP/shellcheck.tar.xz"
+          curl -fsSL --retry 3 "https://github.com/koalaman/shellcheck/releases/download/${shellcheck_version}/shellcheck-${shellcheck_version}.darwin.${shellcheck_arch}.tar.xz" -o "$RUNNER_TEMP/shellcheck.tar.xz"
+          printf '%s  %s\n' "$shellcheck_sha" "$RUNNER_TEMP/shellcheck.tar.xz" | shasum -a 256 -c
           tar -xJf "$RUNNER_TEMP/shellcheck.tar.xz" -C "$RUNNER_TEMP"
-          echo "$RUNNER_TEMP/shellcheck-stable" >> "$GITHUB_PATH"
+          echo "$RUNNER_TEMP/shellcheck-$shellcheck_version" >> "$GITHUB_PATH"
 
       - name: Install locked development environment
         run: uv sync --locked --extra tui
