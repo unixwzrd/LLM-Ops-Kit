@@ -1,7 +1,13 @@
 {
   "defaults": {
     "sample_dir": ".",
-    "sample": "speaker-reference-a.wav"
+    "sample": "speaker-reference-a.wav",
+    "sampling": {
+      "temperature": 0.7,
+      "top_p": 0.95,
+      "top_k": 40,
+      "repetition_penalty": 1.0
+    }
   },
   "Sol": {
     "sample": "speaker-reference-a.wav",

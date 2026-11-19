@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.9.0b57 - 2026-11-19
+
+- Document agent-assisted installation, setup, and operation and include a portable `llmops` skill. Make config and lifecycle review explicit before applying changes.
+- Improve release hygiene: exclude local caches and build artifacts from version control, and pin CI setup dependencies. Refresh the locked Python dependencies.
+- Add validated TTS voice-map sampling defaults and per-voice overrides. Explicit request parameters take precedence per field; omitted values still use the upstream model's defaults. No model or voice assets change.
+
 ## 0.9.0b56 - 2026-11-10
 
 - Reconcile the qualified operator-routing, cross-stack lifecycle, safe-working-directory and shutdown fixes onto `main`. Keep local `AGENTS.md` instructions ignored and out of the tracked source.

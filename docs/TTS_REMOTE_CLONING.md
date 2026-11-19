@@ -1,7 +1,7 @@
 # Remote Voice Cloning and TTS Evaluation
 
 **Created**: 2026-08-21
-**Updated**: 2026-08-21
+**Updated**: 2026-11-19
 
 The production TTS architecture co-locates the patched MLX-Audio engine and the LLM-Ops bridge on `xanax-model`. The engine owns immutable reference audio/transcript pairs; the bridge owns operator-friendly voice aliases and input normalization. Hermes is only a client and does not need model dependencies, sample files, or a fallback bridge.
 
@@ -41,6 +41,25 @@ An alias may select a registered `reference_id`, an explicit `sample` with optio
 - A requested control unsupported by the loaded model returns HTTP 422.
 
 Pronunciation substitutions are applied only to the target `input`. They are never applied to reference transcripts, including literal inline transcripts.
+
+### Sampling configuration
+
+Set optional numeric controls under `defaults.sampling` or an individual voice alias's `sampling` in `voice-map.json`. Merge these fields into your existing file so reference and pronunciation settings stay intact.
+
+```json
+{
+  "defaults": {
+    "sampling": {"temperature": 0.7, "top_p": 0.95, "top_k": 40, "repetition_penalty": 1.0}
+  },
+  "Narrator": {
+    "sampling": {"temperature": 0.5}
+  }
+}
+```
+
+Each field uses the first value supplied by the request, the voice alias, or the voice-map defaults. If none supplies it, the bridge omits that field and the upstream model uses its own default. Explicit clone references change reference conditioning, not the selected alias's sampling policy. Restart only the bridge after editing its voice map.
+
+`temperature` must be finite and nonnegative; `top_p` must be finite and within `[0, 1]`; `top_k` must be a nonnegative integer; and `repetition_penalty` must be finite and positive. Booleans, numeric strings, nulls, unsupported sampling keys in the voice map, and out-of-range values are rejected. Invalid voice-map sampling fails startup; invalid request sampling returns HTTP 422. The health endpoint shows global sampling defaults, and redacted diagnostics show the effective numeric request settings.
 
 ## Canary and production topology
 
