@@ -66,6 +66,15 @@ class ProxyExternalTests(unittest.TestCase):
                    "--route-name", "fixture"]
         command += ["--upstream", upstream] if upstream else []
         command += list(extra)
+        # A timeout must reveal where the synthetic child stopped, not merely
+        # increase the wait. SIGUSR1 dumps Python stacks without terminating it.
+        bootstrap = ('import faulthandler,runpy,signal,sys; '
+                     'faulthandler.register(signal.SIGUSR1); '
+                     'sys.argv=sys.argv[1:]; '
+                     'sys.path.insert(0, str(__import__("pathlib").Path(sys.argv[0]).parent)); '
+                     'print("fixture entered Python", file=sys.stderr, flush=True); '
+                     'runpy.run_path(sys.argv[0], run_name="__main__")')
+        command = [sys.executable, '-c', bootstrap, *command[1:]]
         if startup_delay:
             code = 'import os,sys,time; time.sleep(float(sys.argv.pop(1))); os.execv(sys.executable, [sys.executable, *sys.argv[1:]])'
             command = [sys.executable, '-c', code, str(startup_delay), *command[1:]]
@@ -82,6 +91,8 @@ class ProxyExternalTests(unittest.TestCase):
                     except OSError:
                         time.sleep(.05)
                 else:
+                    process.send_signal(signal.SIGUSR1)
+                    time.sleep(.1)
                     self.fail("proxy did not listen within 20 seconds; stderr: " + (root / "stderr.log").read_text())
                 yield port, process
             finally:
