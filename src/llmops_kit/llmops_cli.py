@@ -2234,7 +2234,7 @@ def _status_exit_code(payload: list[dict[str, Any]]) -> int:
 
 def cmd_component_mutate(args: argparse.Namespace) -> int:
     component = CURRENT_TOPOLOGY.resolve_component(args.component)
-    executor = Executor(CURRENT_TOPOLOGY)
+    executor = Executor(CURRENT_TOPOLOGY, sync_runtime=getattr(args, "autosync_lifecycle", False))
     results = executor.execute_component(
         component,
         args.action,
@@ -2323,7 +2323,7 @@ def cmd_stack_run(args: argparse.Namespace) -> int:
                 flush=True,
             )
 
-    executor = Executor(CURRENT_TOPOLOGY, progress=progress)
+    executor = Executor(CURRENT_TOPOLOGY, progress=progress, sync_runtime=getattr(args, "autosync_lifecycle", False))
     operations = stack_operations(args)
     results = executor.execute(operations, force=getattr(args, "force", False))
     emit([result.as_dict() for result in results], json_output=args.json)
@@ -2742,6 +2742,9 @@ def main(argv: Optional[list[str]] = None) -> int:
                 if str(exc) != f"component not found: {args.component}":
                     raise
                 return cmd_remote_component(args)
+        if __package__:
+            from .llmops_autosync import sync_for_command
+            sync_for_command(args)
         return args.func(args)
     except (
         ConfigError,

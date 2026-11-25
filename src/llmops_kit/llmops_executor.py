@@ -230,10 +230,12 @@ class Executor:
         topology: Topology,
         runner: Optional[ComponentRunner] = None,
         progress: Optional[Callable[[str, Operation], None]] = None,
+        sync_runtime: bool = False,
     ) -> None:
         self.topology = topology
         self.runner = runner or ComponentRunner(topology)
         self.progress = progress
+        self.sync_runtime = sync_runtime
 
     def _report(self, event: str, operation: Operation) -> None:
         """Keep an optional progress consumer from interrupting lifecycle safety."""
@@ -460,6 +462,9 @@ class Executor:
                 if self.runner.is_running(component):
                     self.runner.wait_healthy(component)
                     return operation, None, False, None
+                if self.sync_runtime and __package__:
+                    from .llmops_autosync import sync_before_start
+                    sync_before_start(component.qualified_id)
                 result = self.runner.run(component, "start")
                 if not result.ok:
                     return operation, result, False, ExecutionError(
@@ -475,6 +480,9 @@ class Executor:
                         phase = step
                         if step != "restart":
                             self._report("stopping" if step == "stop" else "starting", operation)
+                        if step == "start" and self.sync_runtime and __package__:
+                            from .llmops_autosync import sync_before_start
+                            sync_before_start(component.qualified_id)
                         # Even an already-stopped service can have stale driver-owned state.
                         result = self.runner.run(component, step)
                         if not result.ok:
