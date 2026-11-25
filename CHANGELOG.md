@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.0b58 - 2026-11-24
+
+- Extend the model proxy to fixed HTTPS provider routes and external HTTP/SSE services while retaining request/response payloads. Add readable/body/NDJSON views and per-exchange atomic SIGHUP template reloads with last-good-template retention.
+- Package a prose-first Jinja report, display-only multiline/JSON filters, private offline previews, typed external proxy settings and a readable-exchange log channel. Redact credential/cookie headers, suppress content in metadata mode, and refuse credential-bearing URL redirects.
+- Add an optional qualified Hermes HTTPX binding that retains canonical provider URLs; document OAuth, transport and privacy boundaries.
+- Publish the optimized closed-turn tool/media-history template under the Qwen 3.8 name, retaining the older file without asserting 3.5 compatibility.
+- Scope toolkit runtime drift to its configured installation root, avoiding false stale-runtime warnings for managed products' own release IDs.
+
 ## Unreleased
 
 ## 0.9.0b57 - 2026-11-19

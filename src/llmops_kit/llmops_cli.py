@@ -1336,8 +1336,13 @@ def _condition(
     return "ok"
 
 
-def _observed_runtime(observation: Any) -> str:
-    """Return an immutable release identifier observed in the live process command."""
+def _observed_runtime(observation: Any, *, install_root: str = "llm-ops") -> str:
+    """Observe the toolkit release, never a third-party product's release ID."""
+
+    # A managed product (for example Hermes) can have its own releases/ tree.
+    # Its product revision is not comparable to the toolkit's runtime ID.
+    root = install_root.removeprefix("~/").strip("/")
+    release_pattern = r"(?:^|/)" + re.escape(root) + r"/(?:releases|versions)/([^/\s'\"]+)"
 
     values = [
         observation.lifecycle_result.command,
@@ -1353,23 +1358,21 @@ def _observed_runtime(observation: Any) -> str:
             )
         )
     text = "\n".join(str(value) for value in values if value)
-    started = re.findall(
-        r"started_runtime_root=(?:[^\n]*/)?(?:releases|versions)/([^/\s'\"]+)",
-        text,
-    )
+    started = [match.group(1) for value in re.findall(r"started_runtime_root=([^\n]+)", text)
+               if (match := re.search(release_pattern, value))]
     if started:
         return started[-1]
     if observation.runtime_result is not None:
         # The process command is stronger evidence than the command used to
         # query it or asset paths in its arguments (for example a chat template).
         primary = re.search(
-            r"(?:^|/)(?:releases|versions)/([^/\s'\"=]+)/"
+            release_pattern + r"/"
             r"(?:(?:app/bin|bin)/[^/\s'\"=]+|scripts/(?!templates/)[^/\s'\"=]+)",
             observation.runtime_result.stdout,
         )
         if primary:
             return primary.group(1)
-    matches = re.findall(r"(?:^|/)(?:releases|versions)/([^/\s'\"]+)", text)
+    matches = re.findall(release_pattern, text)
     return matches[-1] if matches else ""
 
 
@@ -1501,7 +1504,9 @@ def _inspect_status(components: list[Any], args: argparse.Namespace) -> list[dic
             component.qualified_id,
             "running" if component.enabled else "disabled",
         )
-        observed_runtime = "" if observation is None else _observed_runtime(observation)
+        observed_runtime = "" if observation is None else _observed_runtime(
+            observation, install_root=CURRENT_TOPOLOGY.hosts[component.host].install_root,
+        )
         uptime_seconds, started_at, uptime_source = _uptime_fields(observation, lifecycle)
         desired_runtime = metadata["runtime_id"]
         runtime_drift = bool(observed_runtime and observed_runtime != desired_runtime)

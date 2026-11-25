@@ -208,6 +208,7 @@ def _log_path(topology: Topology, component: Component, profile: dict[str, Any],
             "raw-request": logging.get("raw_request_log", str(topology.paths.logs_dir / "model-proxy.raw.log")),
             "rendered-prompt": logging.get("rendered_prompt_log", str(topology.paths.logs_dir / "model-proxy.rendered.log")),
             "raw-response": logging.get("raw_response_log", str(topology.paths.logs_dir / "model-proxy.raw.log")),
+            "readable-exchange": logging.get("exchange_log", str(topology.paths.logs_dir / "model-proxy.exchanges.log")),
         }
     elif component.driver == "tts-bridge":
         paths = {

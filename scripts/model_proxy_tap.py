@@ -19,6 +19,7 @@ import os
 import signal
 import socket
 import socketserver
+import subprocess
 import sys
 import threading
 import time
@@ -29,9 +30,10 @@ from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin, urlparse
-from urllib.request import ProxyHandler, Request, build_opener
+from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 from log_rotation import RotatingLogWriter
+from model_proxy_diagnostics import ReloadableTemplates, TemplateSnapshot, request_view, response_view
 
 try:
     import jinja2
@@ -65,9 +67,24 @@ def format_human_utc_timestamp(value: str) -> str:
         return value
 
 
-def decode_body(data: bytes) -> tuple[str | None, Any | None]:
+def decode_body(data: bytes, *, encoding: str = "", decoder_python: str | None = None) -> tuple[str | None, Any | None]:
+    """Decode a diagnostic copy only; compressed forwarding bytes stay untouched."""
     if not data:
         return None, None
+    if encoding and encoding.lower() != "identity":
+        try:
+            if encoding.lower() != "zstd" or not decoder_python:
+                raise ValueError("unconfigured content decoder")
+            # The tap's Python 3.12 has no zstd dependency. Use the explicitly
+            # qualified Hermes 3.14 stdlib in isolation, over pipes, never files.
+            code = ("import io,sys; from compression import zstd; "
+                    "b=zstd.ZstdFile(io.BytesIO(sys.stdin.buffer.read())).read(67108865); "
+                    "assert len(b)<=67108864, 'diagnostic body limit'; sys.stdout.buffer.write(b)")
+            result = subprocess.run([decoder_python, "-I", "-c", code], input=data,
+                                    capture_output=True, timeout=15, check=True)
+            data = result.stdout
+        except Exception as error:
+            return "[diagnostic decode failed: " + type(error).__name__ + "; wire body forwarded unchanged]", None
     try:
         text = data.decode("utf-8", errors="replace")
     except Exception:
@@ -97,7 +114,7 @@ def read_available_chunk(response: Any, size: int) -> bytes:
 def redact_headers(headers: dict[str, str]) -> dict[str, str]:
     redacted = {}
     for k, v in headers.items():
-        if k.lower() in {"authorization", "x-api-key", "api-key"}:
+        if k.lower() in {"authorization", "proxy-authorization", "x-api-key", "api-key", "x-goog-api-key", "cookie", "set-cookie"}:
             redacted[k] = "<redacted>"
         else:
             redacted[k] = v
@@ -727,6 +744,13 @@ def metadata_record(record: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+class NoUpstreamRedirects(HTTPRedirectHandler):
+    """Return redirects to the client instead of following them with credentials."""
+
+    def redirect_request(self, req: Any, fp: Any, code: int, msg: str, headers: Any, newurl: str) -> None:
+        return None
+
+
 class ProxyTapHandler(BaseHTTPRequestHandler):
     upstream_base: str = ""
     log_path: Path
@@ -745,7 +769,12 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
     log_rotate_seconds: int = 86400
     log_rotate_keep: int = 5
     _log_writers: dict[str, RotatingLogWriter] = {}
-    upstream_opener = build_opener(ProxyHandler({}))
+    upstream_opener = build_opener(ProxyHandler({}), NoUpstreamRedirects())
+    templates: ReloadableTemplates | None = None
+    exchange_log_path: Path | None = None
+    route_name: str = "default"
+    routes: dict[str, str] = {}
+    decoder_python: str | None = None
 
     protocol_version = "HTTP/1.1"
 
@@ -764,6 +793,17 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
             record = metadata_record(record)
         writer = self._writer_for(self.log_path)
         writer.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+    def _write_exchange(self, snapshot: TemplateSnapshot | None, context: dict[str, Any], *, ts: str, request_id: str) -> None:
+        """Keep report failures strictly outside request/response forwarding."""
+        if self.log_mode == 'metadata' or self.exchange_log_path is None:
+            return
+        try:
+            active = snapshot or TemplateSnapshot(chat=None, report=None, revision="startup")
+            self._write_framed_log(self.exchange_log_path, ts, request_id,
+                                   f"READABLE_EXCHANGE request_id={request_id}", active.render_report(context))
+        except Exception as exc:
+            print("model-proxy diagnostic report failed: " + type(exc).__name__, file=sys.stderr)
 
     def _write_framed_log(
         self,
@@ -807,11 +847,49 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
         started = time.time()
         request_id = f"{int(started * 1000)}-{os.getpid()}-{id(self)}"
 
+        if self.headers.get("Upgrade", "").lower() == "websocket":
+            self.send_error(501, "This diagnostic tap supports HTTP/SSE, not WebSocket upgrades")
+            return
+
+        if not self.path.startswith("/") or self.path.startswith("//"):
+            self.send_error(400, "Origin-form request target required")
+            return
+        if self.headers.get("Transfer-Encoding"):
+            self.close_connection = True
+            self.send_error(501, "Streaming/chunked request bodies are not supported; send Content-Length")
+            return
+        lengths = self.headers.get_all("Content-Length", [])
+        try:
+            valid_length = len(lengths) <= 1 and (not lengths or int(lengths[0]) >= 0)
+        except ValueError:
+            valid_length = False
+        if not valid_length:
+            self.close_connection = True
+            self.send_error(400, "One nonnegative Content-Length is required")
+            return
+        forward_path = self.path
+        selected_upstream = self.upstream_base
+        route_name = self.route_name
+        if self.routes:
+            match = next((prefix for prefix in sorted(self.routes, key=len, reverse=True)
+                          if self.path == prefix or self.path.startswith(prefix + "/") or self.path.startswith(prefix + "?")), None)
+            if match is None:
+                self.send_error(404, "No configured provider route")
+                return
+            selected_upstream = self.routes[match]
+            forward_path = self.path[len(match):] or "/"
+            route_name = self.route_name + ":" + match.strip("/")
         request_body = self._read_body()
-        req_text, req_json = decode_body(request_body)
+        req_text, req_json = decode_body(request_body, encoding=self.headers.get("Content-Encoding", ""), decoder_python=self.decoder_python)
+        template_snapshot = self.templates.snapshot() if self.templates is not None else None
+        chat_renderer = template_snapshot.chat if template_snapshot is not None else self.chat_template_renderer
+        template_revision = template_snapshot.revision if template_snapshot is not None else "startup"
+        correlation = {name: self.headers[name] for name in (
+            "X-Agent-Session-ID", "X-Agent-Turn-ID", "X-Agent-Call-ID", "X-Agent-Parent-Call-ID", "X-Agent-Attempt", "X-Client-Request-ID",
+        ) if self.headers.get(name)}
 
         req_summary = summarize_request(req_json)
-        upstream_url = urljoin(self.upstream_base.rstrip("/") + "/", self.path.lstrip("/"))
+        upstream_url = selected_upstream.rstrip("/") + "/" + forward_path.lstrip("/")
         rendered_prompt: str | None = None
         rendered_prompt_error: str | None = None
         source_reasoning: str | None = None
@@ -824,7 +902,7 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
         if render_eligible and self.log_mode != 'metadata':
             rendered_prompt, rendered_prompt_error = render_prompt_from_payload(
                 req_json,
-                chat_template_renderer=self.chat_template_renderer,
+                chat_template_renderer=chat_renderer,
                 chat_template_path=self.chat_template_path,
                 chat_template_error=self.chat_template_error,
                 chat_template_max_chars=self.chat_template_max_chars,
@@ -853,8 +931,17 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
                 "request_summary": req_summary,
                 "request_text": request_text_log,
                 "request_bytes": len(request_body),
+                "route": route_name,
+                "template_revision": template_revision,
+                "correlation": correlation,
+                "template_reload_error": self.templates.last_error if self.templates else None,
             }
         )
+
+        self._write_exchange(template_snapshot, {
+            **request_view(req_json, path=forward_path), "event": "request", "route": route_name,
+            "request_id": request_id, "correlation": correlation, "request_bytes": len(request_body),
+        }, ts=request_start_ts, request_id=request_id)
 
         self._write_framed_log(
             self.raw_request_log_path,
@@ -1016,6 +1103,17 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
         response_stats = extract_response_stats(resp_json)
 
         response_end_ts = utc_now()
+        response_context = response_view(resp_text, resp_json, transport_complete=upstream_eof and not client_disconnected)
+        if req_json is not None and request_view(req_json, path=forward_path)["protocol"] == "chat_completions":
+            response_context["response_text"] = format_model_response_for_diagnostics(
+                resp_text, resp_json, transport_complete=upstream_eof and not client_disconnected)
+            if isinstance(resp_json, dict):
+                response_context["provider_response_id"] = resp_json.get("id", "[not returned]")
+        self._write_exchange(template_snapshot, {
+            **response_context, "event": "response", "route": route_name, "request_id": request_id,
+            "correlation": correlation, "model": req_json.get("model", "[not supplied]") if isinstance(req_json, dict) else "[not supplied]",
+            "status": status,
+        }, ts=response_end_ts, request_id=request_id)
         self._write_framed_log(
             self.raw_response_log_path,
             request_start_ts,
@@ -1062,10 +1160,24 @@ class ProxyTapHandler(BaseHTTPRequestHandler):
                 "response_bytes": len(resp_capture),
                 "error": error_text,
                 "client_disconnected": client_disconnected,
+                "route": route_name,
+                "template_revision": template_revision,
+                "correlation": correlation,
             }
         )
 
     def do_GET(self) -> None:
+        if self.path == "/_model_proxy/health":
+            # Listener readiness is not provider authentication or model health.
+            # This endpoint performs no upstream request and logs no prompt.
+            body = json.dumps({"status": "ok", "scope": "listener-only",
+                               "provider_health": "not-probed", "routes": len(self.routes)}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         self._proxy()
 
     def do_POST(self) -> None:
@@ -1107,14 +1219,16 @@ def normalize_upstream(raw: str) -> tuple[str, int]:
     parsed = urlparse(value)
     if parsed.scheme not in {"http", "https"}:
         raise ValueError("upstream scheme must be http or https")
-    if not parsed.hostname or parsed.port is None:
-        raise ValueError("upstream must include host:port")
+    if not parsed.hostname:
+        raise ValueError("upstream must include a host")
+    if parsed.username is not None or parsed.password is not None:
+        raise ValueError("upstream credentials must use client headers, not URLs")
     if parsed.query or parsed.fragment:
         raise ValueError("upstream must not include query/fragment")
 
     path = parsed.path.rstrip("/")
     normalized = f"{parsed.scheme}://{parsed.netloc}{path}"
-    return normalized, int(parsed.port)
+    return normalized, int(parsed.port or (443 if parsed.scheme == "https" else 80))
 
 
 def parse_args() -> argparse.Namespace:
@@ -1123,6 +1237,11 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--listen-host", default="127.0.0.1")
     p.add_argument("--listen-port", "--port", dest="listen_port", type=int, help="Listen port (default: upstream port)")
     p.add_argument("--upstream", help="Upstream host:port or URL, e.g. <upstream-host>:<upstream-port>")
+    p.add_argument("--routes-file", help="JSON object mapping local /provider prefixes to fixed upstream URLs; alternative to --upstream")
+    p.add_argument("--route-name", default="default", help="Diagnostic instance/route label")
+    p.add_argument("--exchange-log", help="Human-readable normalized request/response log; disabled in metadata mode")
+    p.add_argument("--report-template", help="Optional diagnostic Jinja report template; SIGHUP reloads both templates for new requests")
+    p.add_argument("--decoder-python", help="Explicit Python 3.14+ executable for diagnostic-only zstd decompression")
     p.add_argument(
         "-i",
         "--render-input",
@@ -1174,15 +1293,36 @@ def main() -> int:
     ProxyTapHandler.log_mode = args.log_mode
     if args.render_input:
         return render_input_payloads(args)
-    if not args.upstream:
-        raise SystemExit("--upstream is required unless --render-input is used")
+    if bool(args.upstream) == bool(args.routes_file):
+        raise SystemExit("Select exactly one of --upstream or --routes-file")
+    routes = {}
     try:
-        upstream_base, upstream_port = normalize_upstream(args.upstream)
-    except ValueError as e:
-        raise SystemExit(f"Invalid --upstream: {e}")
+        if args.routes_file:
+            raw_routes = json.loads(Path(args.routes_file).expanduser().read_text(encoding="utf-8"))
+            if not isinstance(raw_routes, dict) or not raw_routes:
+                raise ValueError("routes must be a nonempty JSON object")
+            for prefix, target in raw_routes.items():
+                if not isinstance(prefix, str) or not prefix.startswith("/") or prefix == "/" or any(char in prefix for char in "?#%\\") or ".." in prefix or prefix.endswith("/"):
+                    raise ValueError("route prefixes must be explicit /provider paths")
+                routes[prefix], _ = normalize_upstream(target)
+            upstream_base, upstream_port = "", 443
+            if args.listen_port is None:
+                raise ValueError("--listen-port is required with --routes-file")
+        else:
+            upstream_base, upstream_port = normalize_upstream(args.upstream)
+    except (ValueError, OSError, TypeError) as e:
+        raise SystemExit("Invalid upstream routing: " + type(e).__name__)
     listen_port = int(args.listen_port) if args.listen_port is not None else upstream_port
 
     ProxyTapHandler.upstream_base = upstream_base
+    ProxyTapHandler.routes = routes
+    ProxyTapHandler.route_name = args.route_name
+    if args.decoder_python and (not Path(args.decoder_python).is_absolute() or not os.access(args.decoder_python, os.X_OK)):
+        raise SystemExit("--decoder-python requires an absolute executable path")
+    ProxyTapHandler.decoder_python = args.decoder_python
+    ProxyTapHandler.exchange_log_path = Path(args.exchange_log).expanduser() if args.exchange_log else None
+    ProxyTapHandler.templates = ReloadableTemplates(chat_path=args.chat_template, report_path=args.report_template)
+    initial_templates = ProxyTapHandler.templates.snapshot()
     ProxyTapHandler.log_path = Path(os.path.expanduser(args.log))
     ProxyTapHandler.timeout_sec = float(args.timeout)
     ProxyTapHandler.log_fsync = bool(args.log_fsync)
@@ -1227,6 +1367,8 @@ def main() -> int:
             ProxyTapHandler.chat_template_renderer,
             ProxyTapHandler.chat_template_error,
         ) = load_chat_template_renderer(args.chat_template)
+    ProxyTapHandler.chat_template_renderer = initial_templates.chat
+    ProxyTapHandler.chat_template_error = ProxyTapHandler.templates.last_error
 
     server = ThreadingHTTPServer((args.listen_host, listen_port), ProxyTapHandler)
     print(
@@ -1244,6 +1386,8 @@ def main() -> int:
 
     signal.signal(signal.SIGTERM, _shutdown)
     signal.signal(signal.SIGINT, _shutdown)
+    if hasattr(signal, "SIGHUP"):
+        signal.signal(signal.SIGHUP, ProxyTapHandler.templates.request_reload)
 
     try:
         server.serve_forever()

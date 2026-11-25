@@ -1,0 +1,20 @@
+{
+  "schema_version": 2,
+  "template_id": "model-proxy",
+  "name": "external-model-proxy",
+  "runtime": {
+    "listen_host": "127.0.0.1",
+    "listen_port": 18081,
+    "routes_file": "/private/agent-proxy/routes.json",
+    "route_name": "agent/external"
+  },
+  "logging": {
+    "mode": "full",
+    "exchange_log": "/private/agent-proxy/exchanges.log",
+    "rotate_seconds": 86400,
+    "rotate_keep": 5
+  },
+  "template": {
+    "report_path": "/private/agent-proxy/exchanges.jinja"
+  }
+}

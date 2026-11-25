@@ -1,7 +1,7 @@
 {
   "template_version": 1,
   "id": "model-proxy",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "adapter": "model-proxy",
   "profile_kind": "service",
   "component_kind": "proxy",
@@ -16,16 +16,28 @@
       "schema_version": {"type": "integer", "const": 2, "default": 2},
       "template_id": {"type": "string", "const": "model-proxy", "default": "model-proxy"},
       "name": {"type": "string", "minLength": 1, "x-llmops-ui": {"group": "Identity", "order": 10}},
-      "runtime": {"type": "object", "required": ["listen_host", "listen_port", "upstream_host", "upstream_port"], "properties": {
+      "runtime": {"type": "object", "required": ["listen_host", "listen_port"], "anyOf": [
+        {"required": ["routes_file"]},
+        {"required": ["upstream_url"]},
+        {"required": ["upstream_host", "upstream_port"]}
+      ], "not": {"required": ["routes_file", "upstream_url"]}, "properties": {
+        "upstream_url": {"type": "string", "minLength": 1, "description": "Fixed HTTP(S) upstream URL, preserving HTTPS and any base path", "x-llmops-ui": {"group": "Upstream", "order": 1}},
+        "routes_file": {"type": "string", "minLength": 1, "description": "Owner-controlled JSON prefix-to-fixed-upstream map; takes precedence over legacy host/port", "x-llmops-ui": {"group": "Upstream", "order": 2, "widget": "path"}},
+        "route_name": {"type": "string", "x-llmops-ui": {"group": "Identity", "order": 20}},
+        "decoder_python": {"type": "string", "description": "Optional absolute Python 3.14+ path for diagnostic-only zstd decoding", "x-llmops-ui": {"group": "Runtime", "order": 20, "widget": "path", "advanced": true}},
         "python_bin": {"type": "string", "x-llmops-ui": {"group": "Runtime", "order": 10, "widget": "path", "advanced": true}},
         "listen_host": {"type": "string", "default": "127.0.0.1", "x-llmops-ui": {"group": "Listener", "order": 10}},
         "listen_port": {"type": "integer", "minimum": 1, "maximum": 65535, "default": 11434, "x-llmops-ui": {"group": "Listener", "order": 20, "widget": "number", "unit": "TCP port"}},
         "upstream_host": {"type": "string", "default": "127.0.0.1", "x-llmops-ui": {"group": "Upstream", "order": 10}},
         "upstream_port": {"type": "integer", "minimum": 1, "maximum": 65535, "default": 11434, "x-llmops-ui": {"group": "Upstream", "order": 20, "widget": "number", "unit": "TCP port"}}
       }},
-      "template": {"type": "object", "properties": {"path": {"type": "string", "x-llmops-ui": {"group": "Prompt", "order": 10, "widget": "path"}}}},
+      "template": {"type": "object", "properties": {
+        "path": {"type": "string", "description": "Optional model-specific diagnostic chat renderer; does not change the upstream prompt", "x-llmops-ui": {"group": "Prompt", "order": 10, "widget": "path"}},
+        "report_path": {"type": "string", "description": "Trusted operator Jinja exchange report; SIGHUP reloads for new requests", "x-llmops-ui": {"group": "Prompt", "order": 20, "widget": "path"}}
+      }},
       "logging": {"type": "object", "properties": {
         "mode": {"type": "string", "enum": ["full", "metadata"], "default": "full", "description": "Metadata excludes bodies, headers, previews, rendered prompts and reasoning from all new proxy logs", "x-llmops-ui": {"group": "Logging", "order": 1, "widget": "select"}},
+        "exchange_log": {"type": "string", "description": "Opt-in human-readable exchange log, suppressed in metadata mode", "x-llmops-ui": {"group": "Logging", "order": 5, "widget": "path"}},
         "rotate_seconds": {"type": "integer", "minimum": 60, "default": 86400, "x-llmops-ui": {"group": "Logging", "order": 10, "widget": "duration", "unit": "seconds", "advanced": true}},
         "rotate_keep": {"type": "integer", "minimum": 1, "default": 5, "x-llmops-ui": {"group": "Logging", "order": 20, "widget": "number", "advanced": true}},
         "show_reasoning": {"type": "boolean", "default": false, "description": "Log source assistant reasoning in diagnostic-only rendered exchanges", "x-llmops-ui": {"group": "Logging", "order": 30, "widget": "checkbox"}}
@@ -35,6 +47,6 @@
   "defaults": {"schema_version": 2, "template_id": "model-proxy", "name": "model-proxy", "runtime": {"listen_host": "127.0.0.1", "listen_port": 11434, "upstream_host": "127.0.0.1", "upstream_port": 11434}, "logging": {"rotate_seconds": 86400, "rotate_keep": 5, "show_reasoning": false}},
   "bindings": {"resolver": "model-proxy"},
   "endpoints": {"provides": {"openai": {"scheme": "http", "host_path": "runtime.listen_host", "port_path": "runtime.listen_port"}}, "requires": {"upstream": {"protocol": "openai", "host_path": "runtime.upstream_host", "port_path": "runtime.upstream_port", "lifecycle_dependency": true}}},
-  "logs": {"service": {}, "raw-request": {}, "rendered-prompt": {}, "raw-response": {}},
+  "logs": {"service": {}, "raw-request": {}, "rendered-prompt": {}, "raw-response": {}, "readable-exchange": {}},
   "actions": {}
 }

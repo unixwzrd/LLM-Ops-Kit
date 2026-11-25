@@ -35,11 +35,12 @@ esac
 
 usage() {
   cat <<USAGE
-Usage: model-proxy [start|stop|restart|status|render] [options]
+Usage: model-proxy [start|stop|restart|status|render|reload-template] [options]
 
 Options:
   start/restart: all options are passed through directly to model-proxy-tap.
   stop: use --force for SIGKILL.
+  reload-template: send SIGHUP to this wrapper's running proxy; new exchanges use the reloaded diagnostic templates.
   render: pass -i/--input/--render-input <payload.json> to render prompt(s) without starting the proxy. Use '-' to read stdin.
   -h, --help: show this help.
 
@@ -134,6 +135,7 @@ clear_live_runtime() {
     "$(runtime_file model-proxy-live-listen-host)" \
     "$(runtime_file model-proxy-live-listen-port)" \
     "$(runtime_file model-proxy-live-upstream)" \
+    "$(runtime_file model-proxy-live-routes-file)" \
     "$(runtime_file model-proxy-live-log)" \
     "$(runtime_file model-proxy-live-chat-template)" \
     "$(runtime_file model-proxy-live-raw-request-log)" \
@@ -245,6 +247,30 @@ start_proxy() {
 
   local configured_upstream_host="${LLMOPS_UPSTREAM_HOST:-}"
   local configured_upstream_port="${LLMOPS_UPSTREAM_PORT:-}"
+  if ! has_upstream_arg && ! arg_value --routes-file >/dev/null 2>&1; then
+    if [[ -n "${MODEL_PROXY_ROUTES_FILE:-}" ]]; then
+      extra_args+=(--routes-file "$MODEL_PROXY_ROUTES_FILE")
+    elif [[ -n "${MODEL_PROXY_UPSTREAM_URL:-}" ]]; then
+      extra_args+=(--upstream "$MODEL_PROXY_UPSTREAM_URL")
+    fi
+  fi
+  local option variable
+  for option in route-name decoder-python exchange-log report-template listen-host listen-port; do
+    case "$option" in
+      route-name) variable="${MODEL_PROXY_ROUTE_NAME:-}" ;;
+      decoder-python) variable="${MODEL_PROXY_DECODER_PYTHON:-}" ;;
+      exchange-log) variable="${MODEL_PROXY_EXCHANGE_LOG:-}" ;;
+      report-template) variable="${MODEL_PROXY_REPORT_TEMPLATE:-}" ;;
+      listen-host) variable="${MODEL_PROXY_LISTEN_HOST:-}" ;;
+      listen-port) variable="${MODEL_PROXY_LISTEN_PORT:-}" ;;
+    esac
+    if [[ -n "$variable" ]] && ! arg_value "--$option" >/dev/null 2>&1; then
+      extra_args+=("--$option" "$variable")
+    fi
+  done
+  if arg_value --exchange-log >/dev/null 2>&1 && ! arg_value --report-template >/dev/null 2>&1; then
+    extra_args+=(--report-template "$LLMOPS_ROOT/scripts/templates/model-proxy-readable-exchange.jinja")
+  fi
 
   if pid="$(read_pid model-proxy 2>/dev/null)" && is_pid_running "$pid"; then
     echo "model-proxy: already running pid=$pid"
@@ -256,7 +282,7 @@ start_proxy() {
   prepare_log_file "$LOG_OUT"
   prepare_log_file "$LOG_ERR"
 
-  if ! has_upstream_arg && [[ -z "$configured_upstream_host" || -z "$configured_upstream_port" ]]; then
+  if ! has_upstream_arg && ! arg_value --routes-file >/dev/null 2>&1 && [[ -z "$configured_upstream_host" || -z "$configured_upstream_port" ]]; then
     print_missing_config_hint \
       "model-proxy: missing upstream configuration" \
       LLMOPS_UPSTREAM_HOST \
@@ -269,7 +295,7 @@ start_proxy() {
   resolve_python
   proxy_cmd=("$MODEL_PROXY_PYTHON_BIN" "$LLMOPS_ROOT/scripts/model_proxy_tap.py")
 
-  if ! has_upstream_arg && [[ -n "$configured_upstream_host" && -n "$configured_upstream_port" ]]; then
+  if ! has_upstream_arg && ! arg_value --routes-file >/dev/null 2>&1 && [[ -n "$configured_upstream_host" && -n "$configured_upstream_port" ]]; then
     if (( ${#extra_args[@]} > 0 )); then
       extra_args=(--upstream "http://${configured_upstream_host}:${configured_upstream_port}" "${extra_args[@]}")
     else
@@ -323,6 +349,7 @@ start_proxy() {
   write_runtime model-proxy-live-listen-host "$listen_host"
   write_runtime model-proxy-live-listen-port "${listen_port:-}"
   write_runtime model-proxy-live-upstream "${upstream:-}"
+  write_runtime model-proxy-live-routes-file "$(arg_value --routes-file 2>/dev/null || true)"
   write_runtime model-proxy-live-log "$log"
   write_runtime model-proxy-live-chat-template "${tmpl:-}"
   write_runtime model-proxy-live-raw-request-log "$raw_req"
@@ -395,7 +422,11 @@ status_proxy() {
   if [[ -n "$listen_port" ]]; then
     if command -v curl >/dev/null 2>&1; then
       local code
-      code="$(curl -sS -o /dev/null -w "%{http_code}" --max-time 2 "http://${listen_host}:${listen_port}/v1/models" 2>/tmp/model_proxy_status_err.$$ || true)"
+      local probe_path="/v1/models"
+      if [[ -n "$(read_runtime model-proxy-live-routes-file 2>/dev/null || true)" || "$upstream" == https://* ]]; then
+        probe_path="/_model_proxy/health"
+      fi
+      code="$(curl -sS -o /dev/null -w "%{http_code}" --max-time 2 "http://${listen_host}:${listen_port}${probe_path}" 2>/tmp/model_proxy_status_err.$$ || true)"
       if [[ "$code" =~ ^[0-9]{3}$ ]]; then
         if [[ "$code" -ge 200 && "$code" -lt 300 ]]; then
           health="ok"
@@ -403,6 +434,9 @@ status_proxy() {
           health="down"
         fi
         health_detail="http_status=$code"
+        if [[ "$probe_path" == "/_model_proxy/health" ]]; then
+          health_detail="$health_detail; scope=listener-only; provider-auth-and-health=not-probed"
+        fi
       else
         health="down"
         health_detail="$(cat /tmp/model_proxy_status_err.$$ 2>/dev/null || true)"
@@ -481,12 +515,29 @@ render_proxy() {
   fi
 }
 
+reload_templates() {
+  local proxy_pid command_line
+  proxy_pid="$(read_pid model-proxy 2>/dev/null || true)"
+  if [[ ! "$proxy_pid" =~ ^[1-9][0-9]*$ ]] || ! is_pid_running "$proxy_pid"; then
+    echo "model-proxy: no running wrapper-managed proxy to reload" >&2
+    return 1
+  fi
+  command_line="$(ps -p "$proxy_pid" -o command= 2>/dev/null || true)"
+  if [[ "$command_line" != *"$LLMOPS_ROOT/scripts/model_proxy_tap.py"* ]] || ! grep -q 'signal.SIGHUP' "$LLMOPS_ROOT/scripts/model_proxy_tap.py"; then
+    echo "model-proxy: refusing SIGHUP for an unverified/older process; upgrade it first" >&2
+    return 1
+  fi
+  kill -HUP "$proxy_pid"
+  echo "model-proxy: template reload requested pid=$proxy_pid; applies to new requests"
+}
+
 case "$action" in
   start) start_proxy ;;
   stop) stop_proxy ;;
   restart) stop_proxy || true; start_proxy ;;
   status) status_proxy ;;
   render) render_proxy ;;
+  reload-template) reload_templates ;;
   *)
     usage
     exit 2

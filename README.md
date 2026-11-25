@@ -53,6 +53,12 @@ For a reusable integration, load the portable [LLM Ops skill](skills/llmops/SKIL
 
 > Read the agent operator guide and use the LLM Ops skill. Tell me which host and account your shell runs on, what LLM Ops Kit can observe there, and what you would need to install or configure. Do not install, configure, or restart anything yet.
 
+## See What Your Agent Is Whispering to the Model
+
+The model proxy can inspect explicitly routed external HTTP/SSE calls as well as local models. Read actual instructions, full conversation and tool definitions, follow tool calls/results, and inspect provider-reported usage in a prose-first Jinja report. Separate body/SSE and NDJSON captures remain available. Reload diagnostic templates with SIGHUP while in-flight exchanges keep their original rendering.
+
+Use separate listeners and private logs. Credential headers are redacted, but prompt bodies can contain secrets. The proxy does not rewrite requests, promise token savings, capture WebSockets or automatically intercept unconfigured clients. Start with the [proxy runbook](docs/PROXY_TAP_RUNBOOK.md) and [Qwen 3.8 tool-history template](docs/QWEN_3_8_TEMPLATE.md); optimized-template compatibility with 3.5 is not asserted.
+
 ## Operate
 
 ```bash

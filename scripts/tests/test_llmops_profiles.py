@@ -79,6 +79,18 @@ class ProfileTests(unittest.TestCase):
         )
 
     def test_model_proxy_reasoning_diagnostic_is_schema_bound(self) -> None:
+        values = service_values("model-proxy", {
+            "runtime": {"routes_file": "/private/routes.json", "route_name": "test/external", "decoder_python": "/runtime/python"},
+            "template": {"report_path": "/private/exchanges.jinja"},
+            "logging": {"exchange_log": "/private/readable.log"},
+        })
+        self.assertEqual(values["MODEL_PROXY_ROUTES_FILE"], "/private/routes.json")
+        self.assertEqual(values["MODEL_PROXY_ROUTE_NAME"], "test/external")
+        self.assertEqual(values["MODEL_PROXY_REPORT_TEMPLATE"], "/private/exchanges.jinja")
+        self.assertEqual(values["MODEL_PROXY_EXCHANGE_LOG"], "/private/readable.log")
+        self.assertEqual(values["MODEL_PROXY_DECODER_PYTHON"], "/runtime/python")
+
+    def test_model_proxy_reasoning_diagnostic_remains_schema_bound(self) -> None:
         values = service_values(
             "model-proxy",
             {

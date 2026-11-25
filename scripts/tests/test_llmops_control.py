@@ -1001,7 +1001,7 @@ class TopologyTests(ControlFixture):
         records = resolve_log_channels(self.topology, component)
         self.assertEqual(
             [record.channel for record in records],
-            ["raw-request", "raw-response", "rendered-prompt", "service"],
+            ["raw-request", "raw-response", "readable-exchange", "rendered-prompt", "service"],
         )
         rendered = next(record for record in records if record.channel == "rendered-prompt")
         self.assertEqual(rendered.host, "agent-host")
@@ -1166,6 +1166,23 @@ class TopologyTests(ControlFixture):
         observation = ComponentObservation("running", "healthy", "observed", lifecycle, lifecycle, runtime)
         self.assertEqual(llmops_cli._observed_runtime(observation), "0.9.0b6")
 
+    def test_product_release_is_not_a_toolkit_runtime(self) -> None:
+        component = self.topology.resolve_component("proxy")
+        lifecycle = CommandResult(component.qualified_id, "status", "launchctl print", 0, "running pid=42", "")
+        runtime = CommandResult(component.qualified_id, "runtime", "ps", 0,
+            "00:31 /home/operator/.local/hermes-runtime/releases/ae2a81cc/venv/bin/python -m hermes_cli.main gateway run", "")
+        observation = ComponentObservation("running", "healthy", "observed", lifecycle, lifecycle, runtime)
+        self.assertEqual(llmops_cli._observed_runtime(observation), "")
+        self.assertEqual(llmops_cli._observed_runtime(observation, install_root="~/.local/llm-ops"), "")
+
+    def test_configured_toolkit_root_still_detects_an_older_release(self) -> None:
+        component = self.topology.resolve_component("proxy")
+        lifecycle = CommandResult(component.qualified_id, "status", "status", 0, "running pid=42", "")
+        runtime = CommandResult(component.qualified_id, "runtime", "ps", 0,
+            "00:31 /srv/operator-kit/releases/older/app/bin/python /srv/operator-kit/releases/older/scripts/tap.py", "")
+        observation = ComponentObservation("running", "healthy", "observed", lifecycle, lifecycle, runtime)
+        self.assertEqual(llmops_cli._observed_runtime(observation, install_root="/srv/operator-kit"), "older")
+
     def test_observed_runtime_ignores_old_template_in_osascript_launch_command(self) -> None:
         component = self.topology.resolve_component("proxy")
         lifecycle = CommandResult(
@@ -1284,7 +1301,7 @@ class TopologyTests(ControlFixture):
             with self.subTest(observed=observed):
                 result = CommandResult(
                     component.qualified_id, "status", "status", 0,
-                    f"started_runtime_root=/opt/llm-ops/releases/{observed}\n", "",
+                    f"started_runtime_root=/home/operator/.local/llm-ops/releases/{observed}\n", "",
                 )
                 observation = ComponentObservation("running", "healthy", "observed", result)
                 with mock.patch.object(llmops_cli, "CURRENT_TOPOLOGY", self.topology, create=True), mock.patch.object(
@@ -1422,7 +1439,7 @@ class TopologyTests(ControlFixture):
         result = CommandResult(
             proxy.qualified_id,
             "status",
-            "/tmp/releases/0.9.0b4/bin/model-proxy status",
+            "/home/operator/.local/llm-ops/releases/0.9.0b4/bin/model-proxy status",
             1,
             "model-proxy: running pid=123\nhealth=down",
             "",

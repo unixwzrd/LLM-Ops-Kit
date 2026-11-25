@@ -1,0 +1,5 @@
+{
+  "/openai": "https://api.openai.com",
+  "/openrouter": "https://openrouter.ai/api",
+  "/codex": "https://chatgpt.com/backend-api/codex"
+}

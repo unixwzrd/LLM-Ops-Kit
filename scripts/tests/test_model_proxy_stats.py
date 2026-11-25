@@ -297,8 +297,62 @@ class ModelProxyStatsTests(unittest.TestCase):
         self.assertEqual(render_error, "TemplateRenderError: No messages provided.")
 
     @unittest.skipIf(model_proxy_tap.jinja2 is None, "Jinja is not installed")
+    def test_media_history_template_omits_closed_turn_tools_only(self) -> None:
+        template_path, renderer, error = model_proxy_tap.load_chat_template_renderer(
+            str(SCRIPTS_DIR / "templates" / "Qwen-3_8-media-history-template.jinja")
+        )
+
+        def call(value: str) -> dict:
+            return {"id": value, "type": "function", "function": {
+                "name": "lookup", "arguments": json.dumps({"key": value}),
+            }}
+
+        active = [
+            {"role": "user", "content": "latest user question"},
+            {"role": "assistant", "tool_calls": [call("ACTIVE-A"), call("ACTIVE-B")]},
+            {"role": "tool", "tool_call_id": "ACTIVE-A", "content": "active first result"},
+            {"role": "tool", "tool_call_id": "ACTIVE-B", "content": "active second result"},
+            {"role": "assistant", "tool_calls": [call("ACTIVE-C")]},
+            {"role": "user", "content": "<tool_response>active wrapped result</tool_response>"},
+        ]
+        history = [
+            {"role": "user", "content": "old user question"},
+            {"role": "assistant", "tool_calls": [call("OLD-A")]},
+            {"role": "tool", "tool_call_id": "OLD-A", "content": "old result"},
+            {"role": "assistant", "content": "old progress note", "tool_calls": [call("OLD-B")]},
+            {"role": "user", "content": "<tool_response>old wrapped result</tool_response>"},
+            {"role": "assistant", "content": "old final reply"},
+        ]
+        tools = [{"type": "function", "function": {"name": "lookup", "parameters": {"type": "object"}}}]
+
+        def render(messages: list) -> str:
+            prompt, render_error = model_proxy_tap.render_prompt_from_payload(
+                {"messages": messages, "tools": tools},
+                chat_template_renderer=renderer,
+                chat_template_path=template_path,
+                chat_template_error=error,
+                chat_template_max_chars=0,
+            )
+            self.assertIsNone(render_error)
+            self.assertIsNotNone(prompt)
+            return prompt
+
+        rendered = render(history + active)
+        closed = (
+            "<|im_start|>user\nold user question<|im_end|>\n"
+            "<|im_start|>assistant\nold progress note<|im_end|>\n"
+            "<|im_start|>assistant\nold final reply<|im_end|>\n"
+        )
+        active_only = render(active)
+        prefix, boundary, suffix = active_only.partition("<|im_start|>user\nlatest user question")
+        self.assertTrue(boundary)
+        self.assertEqual(rendered, prefix + closed + boundary + suffix)
+        for value in ("ACTIVE-A", "ACTIVE-B", "ACTIVE-C", "active first result", "active second result", "active wrapped result"):
+            self.assertIn(value, rendered)
+
+    @unittest.skipIf(model_proxy_tap.jinja2 is None, "Jinja is not installed")
     def test_media_history_template_omits_all_tool_images_and_duplicates(self) -> None:
-        template_path = SCRIPTS_DIR / "templates" / "Qwen-3_5-media-history-template.jinja"
+        template_path = SCRIPTS_DIR / "templates" / "Qwen-3_8-media-history-template.jinja"
         loaded_path, renderer, load_error = model_proxy_tap.load_chat_template_renderer(
             str(template_path)
         )
@@ -391,7 +445,7 @@ class ModelProxyStatsTests(unittest.TestCase):
 
     @unittest.skipIf(model_proxy_tap.jinja2 is None, "Jinja is not installed")
     def test_media_history_template_preserves_structured_images(self) -> None:
-        template_path = SCRIPTS_DIR / "templates" / "Qwen-3_5-media-history-template.jinja"
+        template_path = SCRIPTS_DIR / "templates" / "Qwen-3_8-media-history-template.jinja"
         loaded_path, renderer, load_error = model_proxy_tap.load_chat_template_renderer(
             str(template_path)
         )
@@ -428,7 +482,7 @@ class ModelProxyStatsTests(unittest.TestCase):
 
     @unittest.skipIf(model_proxy_tap.jinja2 is None, "Jinja is not installed")
     def test_media_history_template_preserves_dedicated_vision_after_tool_history(self) -> None:
-        template_path = SCRIPTS_DIR / "templates" / "Qwen-3_5-media-history-template.jinja"
+        template_path = SCRIPTS_DIR / "templates" / "Qwen-3_8-media-history-template.jinja"
         loaded_path, renderer, load_error = model_proxy_tap.load_chat_template_renderer(
             str(template_path)
         )
@@ -497,8 +551,8 @@ class ModelProxyStatsTests(unittest.TestCase):
         self.assertEqual(rendered.count("<|vision_end|>"), 1)
 
     @unittest.skipIf(model_proxy_tap.jinja2 is None, "Jinja is not installed")
-    def test_media_history_template_keeps_only_latest_explicit_audio_and_video_results(self) -> None:
-        template_path = SCRIPTS_DIR / "templates" / "Qwen-3_5-media-history-template.jinja"
+    def test_media_history_template_keeps_only_latest_active_audio_and_video_results(self) -> None:
+        template_path = SCRIPTS_DIR / "templates" / "Qwen-3_8-media-history-template.jinja"
         loaded_path, renderer, load_error = model_proxy_tap.load_chat_template_renderer(
             str(template_path)
         )
@@ -536,7 +590,6 @@ class ModelProxyStatsTests(unittest.TestCase):
                     },
                 ]
             )
-        messages.append({"role": "user", "content": "continue"})
         rendered, render_error = model_proxy_tap.render_prompt_from_payload(
             {"messages": messages, "tools": [], "add_generation_prompt": True},
             chat_template_renderer=renderer,
@@ -557,7 +610,7 @@ class ModelProxyStatsTests(unittest.TestCase):
 
     @unittest.skipIf(model_proxy_tap.jinja2 is None, "Jinja is not installed")
     def test_media_history_template_preserves_structured_video(self) -> None:
-        template_path = SCRIPTS_DIR / "templates" / "Qwen-3_5-media-history-template.jinja"
+        template_path = SCRIPTS_DIR / "templates" / "Qwen-3_8-media-history-template.jinja"
         loaded_path, renderer, load_error = model_proxy_tap.load_chat_template_renderer(
             str(template_path)
         )
@@ -593,7 +646,7 @@ class ModelProxyStatsTests(unittest.TestCase):
 
     @unittest.skipIf(model_proxy_tap.jinja2 is None, "Jinja is not installed")
     def test_media_history_template_handles_truncated_real_request_shape(self) -> None:
-        template_path = SCRIPTS_DIR / "templates" / "Qwen-3_5-media-history-template.jinja"
+        template_path = SCRIPTS_DIR / "templates" / "Qwen-3_8-media-history-template.jinja"
         loaded_path, renderer, load_error = model_proxy_tap.load_chat_template_renderer(
             str(template_path)
         )

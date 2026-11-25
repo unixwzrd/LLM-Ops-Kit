@@ -18,6 +18,7 @@
 - [RTK integration](./RTK.md)
 - [Model profiles](./MODELCTL_GUIDE.md)
 - [Model proxy](./PROXY_TAP_RUNBOOK.md)
+- [Qwen 3.8 tool and media-history template](./QWEN_3_8_TEMPLATE.md)
 - [Remote voice cloning and TTS evaluation](./TTS_REMOTE_CLONING.md)
 - [Troubleshooting](./TROUBLESHOOTING.md)
 - [Acceptance checklist](./MANUAL_E2E_TEST_CHECKLIST.md)
