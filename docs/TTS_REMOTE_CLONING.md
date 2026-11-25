@@ -29,7 +29,11 @@ On the bridge host, use `tts-bridge status` to find the service's `config_dir`. 
 
 Restart **only the bridge** when speech is idle. The recorder saves the exact HTTP response audio bytes and a JSON receipt with UTC time, format, byte count and SHA-256. Raw PCM remains raw; `pcm_sample_rate` can document a known PCM rate in the receipt, without changing the recording. Set `include_text` to true only if you want the processed synthesis text saved alongside the audio. It never captures reference audio/text, headers or credentials. A shared bridge can see any request passing through it, including other clients; use a short, controlled test window. The optional `voice` filter matches the bridge's selected alias, not the requesting app.
 
-Check the counters under `audio_capture` in `GET /health`. Capture stops at the first reached bound (at most 100 responses or 25 MiB, including receipts); existing files count after restart and are never overwritten or removed. Turn off capture by setting `enabled` to false and restarting only the bridge. Neither the normal bridge log nor its health response includes recorded audio, text, or the destination path.
+Check the counters under `audio_capture` in `GET /health`. Limits are at most 100 responses and 25 MiB including receipts. In the default `"retention": "batch"` mode, capture stops at the first bound and never replaces saved files.
+
+For intermittent playback problems, set `"retention": "rolling"` and choose a **new, dedicated private directory**. This retains the most recent pairs: a new response replaces the oldest complete pair when the response limit is reached, or as many oldest pairs as needed for the byte limit. Each numbered subdirectory contains the exact audio and its `receipt.json`, published together. The sequence persists across restarts, and a response too large for the whole budget is skipped without deleting earlier pairs. Copy a suspect pair out of the rolling directory promptly if you want to keep it. Never point rolling mode at an existing batch or another project's directory. If a previous write was interrupted, the recorder can remove its own incomplete staging data, but refuses to remove unknown files.
+
+Turn off either mode by setting `enabled` to false and restarting only the bridge. Neither the normal bridge log nor its health response includes recorded audio, text, or the destination path.
 
 ## Reference APIs
 

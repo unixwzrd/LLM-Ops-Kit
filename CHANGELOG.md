@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.0b62 - 2026-11-25
+
+- Add opt-in rolling retention for TTS diagnostics. Keep the newest complete audio/text pairs under count and byte limits, including across restarts; the default batch mode still preserves all captures.
+
 ## 0.9.0b61 - 2026-11-25
 
 - Render component restart previews with the same stop, shutdown verification, and start fallback as execution. A missing native restart no longer makes a valid preview fail.

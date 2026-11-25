@@ -1031,6 +1031,82 @@ class SamplingTests(unittest.TestCase):
 
 
 class ResponseCaptureTests(unittest.TestCase):
+    @staticmethod
+    def rolling_capture(root: Path, **settings):
+        config = root / "audio-capture.json"
+        config.write_text(json.dumps({"enabled": True, "retention": "rolling", "include_text": True,
+                                      "directory": str(root / "capture"), **settings}), encoding="utf-8")
+        config.chmod(0o600)
+        return config, MODULE.load_capture(config)
+
+    def test_rolling_keeps_latest_ten_complete_pairs_across_restart(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            config, capture = self.rolling_capture(Path(temporary))
+            ids = [capture.save(bytes([i]), "wav", text=f"line\u200b{i}") for i in range(12)]
+            capture = MODULE.load_capture(config)
+            ids.append(capture.save(b"\x0c", "wav", text="line\u200b12"))
+            receipts = sorted(capture.directory.glob("*/receipt.json"))
+            self.assertEqual(len(receipts), 10)
+            self.assertEqual([json.loads(p.read_bytes())["capture_id"] for p in receipts], ids[-10:])
+            for i, path in enumerate(receipts, 3):
+                record = json.loads(path.read_bytes())
+                audio = path.parent / record["audio_file"]
+                self.assertEqual(audio.read_bytes(), bytes([i]))
+                self.assertEqual(record["response_sha256"], hashlib.sha256(bytes([i])).hexdigest())
+                self.assertEqual(record["input_text"], f"line\u200b{i}")
+                self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+                self.assertEqual(audio.stat().st_mode & 0o777, 0o600)
+            status = capture.status()
+            self.assertEqual(status["retention"], "rolling")
+            self.assertEqual(status["responses"], 10)
+            self.assertFalse(status["stopped"])
+
+    def test_rolling_enforces_byte_limit_and_does_not_evict_for_oversize_response(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            _, capture = self.rolling_capture(Path(temporary), max_bytes=2000)
+            capture.save(b"a" * 20, "mp3", text="a")
+            capture.save(b"b" * 20, "mp3", text="b")
+            initial = sorted(capture.directory.glob("*/receipt.json"))
+            self.assertIsNone(capture.save(b"x" * 2000, "mp3", text="x"))
+            self.assertEqual(sorted(capture.directory.glob("*/receipt.json")), initial)
+            latest = capture.save(b"c" * 1560, "mp3", text="c")
+            self.assertIsNotNone(latest)
+            receipts = [json.loads(p.read_bytes()) for p in capture.directory.glob("*/receipt.json")]
+            self.assertEqual([receipt["capture_id"] for receipt in receipts], [latest])
+            status = capture.status()
+            self.assertLessEqual(status["bytes"], 2000)
+            self.assertEqual(status["oversize_skipped"], 1)
+            self.assertFalse(status["stopped"])
+
+    def test_rolling_never_deletes_unrelated_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            config, capture = self.rolling_capture(Path(temporary), max_responses=1)
+            capture.save(b"old", "mp3", text="keep")
+            unrelated = capture.directory / "other.txt"
+            unrelated.write_text("keep this as well", encoding="utf-8")
+            unrelated.chmod(0o600)
+            self.assertIsNone(capture.save(b"new", "mp3", text="new"))
+            self.assertEqual(unrelated.read_text(encoding="utf-8"), "keep this as well")
+            self.assertEqual(len(list(capture.directory.glob("*/receipt.json"))), 1)
+            self.assertTrue(capture.status()["stopped"])
+            with self.assertRaises(ValueError):
+                MODULE.load_capture(config)
+
+    def test_rolling_recovers_only_owned_interrupted_pair_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            config, capture = self.rolling_capture(Path(temporary), max_responses=2)
+            capture_id = capture.save(b"sound", "wav", text="keep")
+            kept = next(capture.directory.glob("*/receipt.json")).parent
+            interrupted = kept.with_name(".pending-" + kept.name)
+            interrupted.mkdir(mode=0o700)
+            incomplete = interrupted / f"{capture_id}.wav"
+            incomplete.write_bytes(b"partial")
+            incomplete.chmod(0o600)
+            restored = MODULE.load_capture(config)
+            self.assertEqual(restored.status()["responses"], 1)
+            self.assertFalse(interrupted.exists())
+            self.assertTrue(kept.is_dir())
+
     def test_keeps_raw_pcm_and_budget_across_restarts(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

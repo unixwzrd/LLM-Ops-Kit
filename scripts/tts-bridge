@@ -202,7 +202,7 @@ status_bridge() {
   echo "  log_rotate_seconds=$LOG_ROTATE_SECONDS"
   echo "  log_rotate_keep=$LOG_ROTATE_KEEP"
   if [[ -n "$bridge_payload" ]] && command -v jq >/dev/null 2>&1; then
-    printf '%s' "$bridge_payload" | jq -r '(.audio_capture // {enabled:false}) | "  audio_capture=\(.enabled) responses=\(.responses // 0) bytes=\(.bytes // 0) stopped=\(.stopped // false)"'
+    printf '%s' "$bridge_payload" | jq -r '(.audio_capture // {enabled:false}) | "  audio_capture=\(.enabled) retention=\(.retention // "batch") responses=\(.responses // 0) bytes=\(.bytes // 0) stopped=\(.stopped // false)"'
   fi
   echo "  runtime_mode=$(runtime_mode)"
   echo "  runtime_root=$(runtime_asset_root)"
