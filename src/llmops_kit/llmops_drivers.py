@@ -141,6 +141,22 @@ def _require_actions(profile: dict[str, Any], component: Component) -> dict[str,
     return actions
 
 
+def restart_actions(topology: Topology, component: Component) -> tuple[str, ...]:
+    """Resolve a native restart or the profile's idempotent stop/start pair."""
+    if component.driver not in {"process", "command", "agent"}:
+        return ("restart",)
+    profile = load_profile(topology.paths, component)
+    if profile.get("template_id") == "rtk":
+        return ("restart",)
+    actions = _require_actions(profile, component)
+    if "restart" in actions:
+        return ("restart",)
+    for action in ("stop", "status", "start"):
+        if action not in actions:
+            raise DriverError(f"{component.qualified_id}: restart needs stop, status and start actions (missing {action})")
+    return ("stop", "start")
+
+
 def _launchd_command(profile: dict[str, Any], component: Component, action: str) -> str:
     label = profile.get("label")
     if not isinstance(label, str) or not label:

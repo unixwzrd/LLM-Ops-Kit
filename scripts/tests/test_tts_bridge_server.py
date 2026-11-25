@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.util
 import json
 import os
@@ -1027,6 +1028,111 @@ class SamplingTests(unittest.TestCase):
                 self.assertEqual(ctx.exception.code, 422)
                 ctx.exception.close()
                 self.assertEqual(len(_FakeUpstreamHandler.received), 1)
+
+
+class ResponseCaptureTests(unittest.TestCase):
+    def test_keeps_raw_pcm_and_budget_across_restarts(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            path = root / "capture.json"
+            output = root / "capture"
+            path.write_text(json.dumps({"enabled": True, "directory": str(output), "max_responses": 1,
+                                        "pcm_sample_rate": 24000}), encoding="utf-8")
+            path.chmod(0o600)
+            data = b"\x00\x91\xff\x7f"
+            capture = MODULE.load_capture(path)
+            capture_id = capture.save(data, "pcm", delivered=False)
+            self.assertEqual((output / (capture_id + ".pcm")).read_bytes(), data)
+            receipt = json.loads((output / (capture_id + ".json")).read_text(encoding="utf-8"))
+            self.assertEqual(receipt["response_sha256"], hashlib.sha256(data).hexdigest())
+            self.assertEqual(receipt["pcm_sample_rate"], 24000)
+            self.assertFalse(receipt["client_write_completed"])
+            self.assertEqual((output / (capture_id + ".pcm")).stat().st_mode & 0o777, 0o600)
+            capture = MODULE.load_capture(path)
+            self.assertTrue(capture.status()["stopped"])
+            self.assertIsNone(capture.save(b"new", "mp3"))
+
+    def test_opt_in_captures_exact_processed_target_not_reference_text(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            folder = root / "capture"
+            config_path = root / "audio-capture.json"
+            config_path.write_text(json.dumps({"enabled": True, "directory": str(folder),
+                                               "include_text": True}), encoding="utf-8")
+            config_path.chmod(0o600)
+            cfg = MODULE.build_bridge_config(_bridge_args(root, root))
+            cfg["pronounce_map"] = {"/": " slash "}
+            upstream = ThreadingHTTPServer((cfg["listen_host"], 0), _FakeUpstreamHandler)
+            cfg["upstream_base"] = f"http://{cfg['listen_host']}:{upstream.server_port}/v1"
+            bridge = ThreadingHTTPServer((cfg["listen_host"], 0), MODULE.BridgeHandler)
+            bridge.bridge_config = cfg
+            endpoint = f"http://{cfg['listen_host']}:{bridge.server_port}/v1/audio/speech"
+            with _run_server(upstream), _run_server(bridge):
+                payload = {"input": "Exact/target. Résumé.  ", "reference": {
+                    "audio_base64": "private-reference-audio", "transcript": "private/reference text"}}
+                req = request.Request(endpoint, data=json.dumps(payload).encode(),
+                                      headers={"Content-Type": "application/json"})
+                with request.urlopen(req, timeout=cfg["timeout_seconds"]) as response:
+                    self.assertEqual(response.read(), _FakeUpstreamHandler.audio_bytes)
+                deadline = time.monotonic() + cfg["timeout_seconds"]
+                while not list(folder.glob("*.json")) and time.monotonic() < deadline:
+                    time.sleep(0.01)
+            metadata = json.loads(next(folder.glob("*.json")).read_text(encoding="utf-8"))
+            self.assertEqual(metadata["input_text"], _FakeUpstreamHandler.received[-1]["input"])
+            self.assertEqual(metadata["input_text"], "Exact slash target. Résumé.  ")
+            self.assertEqual(_FakeUpstreamHandler.received[-1]["reference"], payload["reference"])
+            self.assertNotIn("private/reference text", json.dumps(metadata))
+            self.assertNotIn("private-reference-audio", json.dumps(metadata))
+
+    def test_capture_is_disabled_unless_private_config_opts_in(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            cfg = MODULE.build_bridge_config(_bridge_args(root, root))
+            self.assertIsNone(cfg["audio_capture"])
+            self.assertEqual(MODULE._build_health_payload(cfg)["audio_capture"], {"enabled": False})
+
+    def test_http_response_is_unchanged_and_only_audio_metadata_is_saved(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            folder = root / "capture"
+            voice = root.name
+            capture_config = {"enabled": True, "directory": str(folder), "voice": voice}
+            config_path = root / "audio-capture.json"
+            config_path.write_text(json.dumps(capture_config), encoding="utf-8")
+            config_path.chmod(0o600)
+            cfg = MODULE.build_bridge_config(_bridge_args(root, root))
+            upstream = ThreadingHTTPServer((cfg["listen_host"], 0), _FakeUpstreamHandler)
+            cfg["upstream_base"] = f"http://{cfg['listen_host']}:{upstream.server_port}/v1"
+            bridge = ThreadingHTTPServer((cfg["listen_host"], 0), MODULE.BridgeHandler)
+            bridge.bridge_config = cfg
+            endpoint = f"http://{cfg['listen_host']}:{bridge.server_port}/v1/audio/speech"
+            with _run_server(upstream), _run_server(bridge):
+                payload = {"input": "private diagnostic request text", "voice": voice,
+                           "reference": {"audio_base64": "private-reference-audio", "transcript": "private-reference-text"}}
+                req = request.Request(endpoint, data=json.dumps(payload).encode(),
+                                      headers={"Content-Type": "application/json", "Authorization": "Bearer private-key"})
+                with request.urlopen(req, timeout=cfg["timeout_seconds"]) as response:
+                    self.assertEqual(response.read(), _FakeUpstreamHandler.audio_bytes)
+                deadline = time.monotonic() + cfg["timeout_seconds"]
+                while not list(folder.glob("*.json")) and time.monotonic() < deadline:
+                    time.sleep(0.01)
+            self.assertEqual(len(list(folder.glob("*.wav"))), 1)
+            self.assertEqual(next(folder.glob("*.wav")).read_bytes(), _FakeUpstreamHandler.audio_bytes)
+            metadata = next(folder.glob("*.json")).read_text(encoding="utf-8")
+            for private in (payload["input"], "private-reference-audio", "private-reference-text", "private-key"):
+                self.assertNotIn(private, metadata)
+            health = MODULE._build_health_payload(cfg)["audio_capture"]
+            self.assertEqual(health["responses"], 1)
+            self.assertNotIn(str(folder), json.dumps(health))
+
+    def test_invalid_private_capture_configuration_fails_before_startup(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            path = root / "audio-capture.json"
+            path.write_text('{"enabled": true, "directory": "relative"}', encoding="utf-8")
+            path.chmod(0o600)
+            with self.assertRaises(MODULE.BridgeConfigError):
+                MODULE.build_bridge_config(_bridge_args(root, root))
 
 
 if __name__ == "__main__":

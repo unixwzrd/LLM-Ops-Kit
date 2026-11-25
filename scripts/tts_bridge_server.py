@@ -19,6 +19,7 @@ from typing import Any
 from urllib import error, parse, request
 
 from log_rotation import RotatingLogWriter
+from tts_audio_capture import load_capture
 
 UNSUPPORTED_FORMAT_FALLBACKS = {
     "opus": "wav",
@@ -577,6 +578,7 @@ def _build_health_payload(cfg: dict[str, Any]) -> dict[str, Any]:
         },
         "registry_reachable": bool(metadata.get("reachable", False)),
         "alias_count": len(cfg["voice_map"]),
+        "audio_capture": cfg["audio_capture"].status() if cfg.get("audio_capture") else {"enabled": False},
         "reference_count": int(metadata.get("reference_count", 0)),
         "upstream_capability_revision": capabilities.get("revision", ""),
         "compat": {
@@ -672,6 +674,13 @@ def build_bridge_config(args: argparse.Namespace) -> dict[str, Any]:
 
     pronounce_map = _load_pronounce_map(pronounce_config)
     voice_map_defaults, voice_map = _normalize_voice_map(voice_map_config)
+    capture_file = Path(getattr(args, "audio_capture_config", None) or config_dir / "audio-capture.json").expanduser()
+    try:
+        audio_capture = load_capture(capture_file)
+    except (OSError, ValueError) as exc:
+        raise BridgeConfigError(
+            f"invalid private audio capture configuration ({type(exc).__name__}); check the file mode, directory and limits"
+        ) from exc
 
     log_path = getattr(args, "log_path", _env("TTS_BRIDGE_LOG_PATH", DEFAULT_LOG_PATH))
     log_rotate_seconds = int(
@@ -706,6 +715,7 @@ def build_bridge_config(args: argparse.Namespace) -> dict[str, Any]:
         "voice_map_defaults": voice_map_defaults,
         "voice_map": voice_map,
         "upstream_metadata": {},
+        "audio_capture": audio_capture,
     }
 
     if not samples_dir.exists() or not samples_dir.is_dir():
@@ -1052,6 +1062,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
         try:
             with request.urlopen(req, timeout=cfg["timeout_seconds"]) as resp:  # noqa: S310
                 response_body = resp.read()
+                delivered = False
                 try:
                     self.send_response(resp.status)
                     self.send_header("Content-Type", _content_type_for_format(response_format))
@@ -1060,13 +1071,23 @@ class BridgeHandler(BaseHTTPRequestHandler):
                         self.send_header("X-TTS-Bridge-Requested-Format", downgraded_from)
                         self.send_header("X-TTS-Bridge-Delivered-Format", response_format)
                     self.end_headers()
+                    delivered = self._write_bytes(response_body)
                 except Exception as exc:  # noqa: BLE001
                     if self._client_gone(exc):
                         return
                     raise BridgeRequestError(
                         502, "response_writeback", f"failed to write upstream response: {exc}"
                     ) from exc
-                self._write_bytes(response_body)
+                finally:
+                    capture = cfg.get("audio_capture")
+                    if capture is not None and resp.status == 200:
+                        capture_id = capture.save(
+                            response_body, response_format,
+                            voice=_select_requested_voice(incoming, request_cfg), delivered=delivered,
+                            text=output["input"],
+                        )
+                        if capture_id:
+                            _log("audio capture saved: " + capture_id)
         except error.HTTPError as exc:
             err_body = exc.read()
             err_text = err_body.decode("utf-8", errors="replace").strip()
@@ -1128,6 +1149,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--pronounce-config", default=None)
     p.add_argument("--voice-map-config", default=None)
     p.add_argument("--samples-dir", default=None)
+    p.add_argument("--audio-capture-config", default=None,
+                   help="Private opt-in capture config (default: <config-dir>/audio-capture.json)")
     return p.parse_args(argv)
 
 

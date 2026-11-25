@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.0b60 - 2026-11-25
+
+- Restart a process component without a native restart by running its stop action even when already stopped, verifying shutdown, then starting and checking readiness under one operation lock. Failed or unverified stops suppress starting, including with `--force`.
+- Add disabled-by-default TTS bridge response capture for reproducible desktop-versus-bridge audio diagnostics. Store exact audio bytes and hashes in an operator-selected private directory with hard count and disk bounds.
+
 ## 0.9.0b59 - 2026-11-24
 
 - Remove reverse-DNS lookup from model-proxy listener binding so an unavailable local resolver cannot stall startup. Keep upstream URL identity, TLS verification, authentication and forwarding unchanged.

@@ -13,6 +13,24 @@ The LLM-Ops TTS bridge provides named aliases, pronunciation and special-charact
 
 This system guarantees that a registered reference audio file and transcript are stored and addressed as one immutable pair. It does not claim to prove that the transcript semantically matches the recording; known-pair review remains the acceptance authority.
 
+## Capture audio for a listening comparison
+
+On the bridge host, use `tts-bridge status` to find the service's `config_dir`. Capture is off unless the bridge's execution user places an owner-only (mode `0600`) `audio-capture.json` there. The standalone Python bridge also accepts `--audio-capture-config PATH`. Set `directory` to an absolute private local path (mode `0700`), outside shared or synced storage. For example:
+
+```json
+{
+  "enabled": true,
+  "directory": "/path/to/private/tts-capture",
+  "max_responses": 10,
+  "max_bytes": 26214400,
+  "include_text": false
+}
+```
+
+Restart **only the bridge** when speech is idle. The recorder saves the exact HTTP response audio bytes and a JSON receipt with UTC time, format, byte count and SHA-256. Raw PCM remains raw; `pcm_sample_rate` can document a known PCM rate in the receipt, without changing the recording. Set `include_text` to true only if you want the processed synthesis text saved alongside the audio. It never captures reference audio/text, headers or credentials. A shared bridge can see any request passing through it, including other clients; use a short, controlled test window. The optional `voice` filter matches the bridge's selected alias, not the requesting app.
+
+Check the counters under `audio_capture` in `GET /health`. Capture stops at the first reached bound (at most 100 responses or 25 MiB, including receipts); existing files count after restart and are never overwritten or removed. Turn off capture by setting `enabled` to false and restarting only the bridge. Neither the normal bridge log nor its health response includes recorded audio, text, or the destination path.
+
 ## Reference APIs
 
 Registry creation, metadata renaming, and deletion require `MLX_AUDIO_REFERENCE_ADMIN_TOKEN`. The token is supplied as a bearer token or `X-MLX-Audio-Admin-Token` and must not be placed in command history or committed configuration. Renaming changes only the public label; the immutable audio/transcript pair, hashes, and `reference_id` remain unchanged.

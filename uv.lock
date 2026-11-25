@@ -61,7 +61,7 @@ wheels = [
 
 [[package]]
 name = "llm-ops-kit"
-version = "0.9.0b59"
+version = "0.9.0b60"
 source = { editable = "." }
 dependencies = [
     { name = "jinja2" },

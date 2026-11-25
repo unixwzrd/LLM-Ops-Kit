@@ -7,13 +7,13 @@ import fcntl
 import logging
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from itertools import groupby
 from pathlib import Path
 from typing import Any, Callable, Iterator, Optional
 
 try:
-    from llmops_drivers import CommandResult, ComponentRunner, DriverError
+    from llmops_drivers import CommandResult, ComponentRunner, DriverError, build_component_command, restart_actions
     from llmops_lifecycle_state import LifecycleStateError, LifecycleStateStore
     from llmops_topology import (
         Component,
@@ -25,7 +25,7 @@ try:
         topological_order,
     )
 except ModuleNotFoundError:  # pragma: no cover
-    from .llmops_drivers import CommandResult, ComponentRunner, DriverError
+    from .llmops_drivers import CommandResult, ComponentRunner, DriverError, build_component_command, restart_actions
     from .llmops_lifecycle_state import LifecycleStateError, LifecycleStateStore
     from .llmops_topology import (
         Component,
@@ -40,6 +40,15 @@ except ModuleNotFoundError:  # pragma: no cover
 
 class ExecutionError(RuntimeError):
     """Raised when a planned lifecycle operation fails."""
+
+
+class RestartError(ExecutionError):
+    """Carry the failed phase without requiring callers to expose driver output."""
+
+    def __init__(self, component_id: str, phase: str, detail: str) -> None:
+        self.component_id = component_id
+        self.restart_phase = phase
+        super().__init__(f"{component_id}: restart failed during {phase}: {detail}")
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -308,6 +317,16 @@ class Executor:
         lock_path = self.topology.paths.run_dir / "orchestrator.lock"
         state_store = LifecycleStateStore(self.topology.paths.lifecycle_state_file)
         with operation_lock(lock_path):
+            # Preflight before a cascade can stop any of the target's dependents.
+            for operation in operations:
+                if operation.action == "restart":
+                    try:
+                        steps = restart_actions(self.topology, operation.component)
+                        if steps == ("stop", "start"):
+                            for step in ("stop", "status", "start"):
+                                build_component_command(self.topology, operation.component, step)
+                    except (DriverError, TopologyError) as exc:
+                        raise RestartError(operation.component.qualified_id, "configuration", str(exc)) from exc
             if not force:
                 disruptive = {op.component.qualified_id for op in operations if op.action in {"stop", "restart"}}
                 observed: dict[str, str] = {}
@@ -450,13 +469,24 @@ class Executor:
                 self.runner.wait_healthy(component)
                 return operation, result, True, None
             if action == "restart":
-                result = self.runner.run(component, "restart")
-                if not result.ok:
-                    return operation, result, False, ExecutionError(
-                        f"{component.qualified_id}: restart failed: {result.stderr or result.stdout}"
-                    )
-                self.runner.wait_healthy(component)
-                return operation, result, False, None
+                phase = "configuration"
+                try:
+                    for step in restart_actions(self.topology, component):
+                        phase = step
+                        if step != "restart":
+                            self._report("stopping" if step == "stop" else "starting", operation)
+                        # Even an already-stopped service can have stale driver-owned state.
+                        result = self.runner.run(component, step)
+                        if not result.ok:
+                            raise DriverError(result.stderr or result.stdout or f"exit status {result.returncode}")
+                        if step == "stop":
+                            phase = "stop verification"
+                            self.runner.wait_stopped(component)
+                    phase = "readiness"
+                    self.runner.wait_healthy(component)
+                except Exception as exc:
+                    return operation, result, False, RestartError(component.qualified_id, phase, str(exc))
+                return operation, replace(result, action="restart"), False, None
             if action == "stop":
                 if not self.runner.is_running(component):
                     return operation, None, False, None

@@ -29,7 +29,7 @@ from llmops_kit.llmops_cli import _validate_host_operation as validate_host_oper
 from llmops_kit.llmops_cli import stack_operations
 from llmops_kit.llmops_config import load_config
 from llmops_kit.llmops_drivers import CommandResult, ComponentObservation, ComponentRunner, DriverError, LogChannelRecord, _launchd_command, build_component_command, resolve_log_channels
-from llmops_kit.llmops_executor import Executor, ExecutionError, Operation, component_plan, operation_batches, operation_lock, stack_plan
+from llmops_kit.llmops_executor import Executor, ExecutionError, Operation, RestartError, component_plan, operation_batches, operation_lock, stack_plan
 from llmops_kit.llmops_inventory import InventoryError, load_inventory
 from llmops_kit.llmops_lifecycle_state import LifecycleStateStore
 from llmops_kit.llmops_paths import resolve_paths
@@ -2092,6 +2092,58 @@ class PlannerTests(ControlFixture):
 
 
 class ExecutorTests(ControlFixture):
+    def process_restart_target(self, actions=("start", "stop", "status")):
+        target = replace(self.topology.resolve_component("agent"), driver="process", profile="restart-test")
+        self.write_json(self.paths.services_dir / "restart-test.json", {
+            "schema_version": 2, "template_id": "standalone", "name": "restart-test",
+            "actions": {action: ["/usr/bin/true"] for action in actions},
+        })
+        return target
+
+    def test_process_restart_runs_cleanup_and_verifies_even_when_already_stopped(self) -> None:
+        target = self.process_restart_target()
+
+        class TraceRunner(FakeRunner):
+            def wait_stopped(self, component):
+                self.calls.append((component.qualified_id, "verify stopped"))
+                return super().wait_stopped(component)
+
+            def wait_healthy(self, component):
+                self.calls.append((component.qualified_id, "verify ready"))
+                return super().wait_healthy(component)
+
+        for running in (False, True):
+            for force in (False, True):
+                with self.subTest(running=running, force=force):
+                    runner = TraceRunner(running={target.qualified_id} if running else set())
+                    records = Executor(self.topology, runner=runner).execute_component(target, "restart", force=force)
+                    self.assertEqual(runner.calls, [(target.qualified_id, action) for action in
+                                                   ("stop", "verify stopped", "start", "verify ready")])
+                    self.assertEqual(records[0].action, "restart")
+
+    def test_process_restart_fails_closed_even_with_force(self) -> None:
+        target = self.process_restart_target()
+        for field, phase in (("fail_stop", "stop"), ("stubborn_stop", "stop verification")):
+            with self.subTest(phase=phase):
+                runner = FakeRunner(running={target.qualified_id}, **{field: target.qualified_id})
+                with self.assertRaises(RestartError) as failure:
+                    Executor(self.topology, runner=runner).execute_component(target, "restart", force=True)
+                self.assertEqual(failure.exception.restart_phase, phase)
+                self.assertEqual(runner.calls, [(target.qualified_id, "stop")])
+
+    def test_process_restart_requires_complete_fallback_before_any_mutation(self) -> None:
+        target = self.process_restart_target(("stop", "status"))
+        runner = FakeRunner()
+        with self.assertRaisesRegex(RestartError, "missing start"):
+            Executor(self.topology, runner=runner).execute_component(target, "restart", force=True)
+        self.assertEqual(runner.calls, [])
+
+    def test_process_restart_uses_native_action_when_available(self) -> None:
+        target = self.process_restart_target(("restart",))
+        runner = FakeRunner()
+        Executor(self.topology, runner=runner).execute_component(target, "restart")
+        self.assertEqual(runner.calls, [(target.qualified_id, "restart")])
+
     @staticmethod
     def execute_in_thread(executor, operations):
         results = []
