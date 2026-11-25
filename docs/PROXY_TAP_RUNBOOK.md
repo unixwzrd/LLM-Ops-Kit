@@ -87,6 +87,8 @@ The [optimized Qwen 3.8 template](QWEN_3_8_TEMPLATE.md) omits closed-turn tool c
 
 The reserved `GET /_model_proxy/health` endpoint checks listener readiness without any upstream request or prompt log. Its response explicitly says `scope: listener-only` and `provider_health: not-probed`. Managed external-route status uses this endpoint rather than manufacturing unauthenticated provider requests. It is not an authentication or provider-health check.
 
+Listener startup does not perform reverse DNS for the bound address. This does not bypass DNS resolution or TLS verification for configured upstream providers.
+
 Verify an actual authenticated routed request with its intended model, route, tools/history and response. An unauthenticated discovery HTTP 401 is expected reachability evidence, not expired OAuth and not authenticated-generation acceptance. Never replay private production traffic simply to test logging.
 
 HTTP/SSE is supported; WebSocket upgrades are not. Non-HTTPX/custom transports, separately launched sessions and other provider origins require separate routing/qualification. Existing correlation headers are retained, but the proxy does not invent complete session/turn instrumentation or claim access to hidden provider prompts. No current capture result establishes protected multi-user authorization.

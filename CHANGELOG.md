@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.0b59 - 2026-11-24
+
+- Remove reverse-DNS lookup from model-proxy listener binding so an unavailable local resolver cannot stall startup. Keep upstream URL identity, TLS verification, authentication and forwarding unchanged.
+- Make synthetic listener tests wait for readiness and include blocked-startup stack diagnostics; cover startup with reverse DNS explicitly unavailable.
+
 ## 0.9.0b58 - 2026-11-24
 
 - Extend the model proxy to fixed HTTPS provider routes and external HTTP/SSE services while retaining request/response payloads. Add readable/body/NDJSON views and per-exchange atomic SIGHUP template reloads with last-good-template retention.

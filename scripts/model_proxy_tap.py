@@ -1200,6 +1200,11 @@ class ThreadingHTTPServer(socketserver.ThreadingMixIn, HTTPServer):
     daemon_threads = True
     allow_reuse_address = True
 
+    def server_bind(self) -> None:
+        """Bind without reverse DNS; provider identity comes from fixed routes."""
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
+
     def handle_error(self, request: socket.socket, client_address: tuple[str, int]) -> None:
         """Do not persist request-derived exception text in metadata stderr logs."""
         if getattr(self.RequestHandlerClass, 'log_mode', 'full') == 'metadata':

@@ -18,14 +18,21 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest.mock import patch
 
 SCRIPTS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS))
 from model_proxy_diagnostics import ReloadableTemplates, request_view, response_view
-from model_proxy_tap import normalize_upstream, redact_headers
+from model_proxy_tap import normalize_upstream, redact_headers, ProxyTapHandler, ThreadingHTTPServer as ProxyServer
 
 
 class ProxyExternalTests(unittest.TestCase):
+    def test_listener_bind_does_not_require_reverse_dns(self):
+        with patch('socket.getfqdn', side_effect=AssertionError('unexpected reverse DNS')):
+            with ProxyServer(('127.0.0.1', 0), ProxyTapHandler) as server:
+                self.assertEqual(server.server_name, '127.0.0.1')
+                self.assertGreater(server.server_port, 0)
+
     @contextmanager
     def upstream(self, response=b'{"id":"resp_fixture","object":"response","status":"completed","output":[]}', *, status=200, context=None, block=None):
         records = []
