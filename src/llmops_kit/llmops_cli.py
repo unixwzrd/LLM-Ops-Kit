@@ -54,8 +54,8 @@ try:
         validate_connections,
     )
     from .llmops_config_sync import ReconcileError, apply_snapshot, reconcile_plan, snapshot_hash
-    from .llmops_drivers import ComponentRunner, DriverError, build_component_command
-    from .llmops_executor import ExecutionError, Executor, component_plan, stack_plan
+    from .llmops_drivers import ComponentRunner, DriverError, build_component_command, restart_actions
+    from .llmops_executor import ExecutionError, Executor, RestartError, component_plan, stack_plan
     from .llmops_inventory import InventoryError, load_inventory
     from .llmops_lifecycle_state import LifecycleStateError, LifecycleStateStore
     from .llmops_maintenance import MaintenanceError, maintain_releases, render_text
@@ -94,8 +94,8 @@ except ImportError:  # Direct source execution.
         validate_connections,
     )
     from llmops_config_sync import ReconcileError, apply_snapshot, reconcile_plan, snapshot_hash
-    from llmops_drivers import ComponentRunner, DriverError, build_component_command
-    from llmops_executor import ExecutionError, Executor, component_plan, stack_plan
+    from llmops_drivers import ComponentRunner, DriverError, build_component_command, restart_actions
+    from llmops_executor import ExecutionError, Executor, RestartError, component_plan, stack_plan
     from llmops_inventory import InventoryError, load_inventory
     from llmops_lifecycle_state import LifecycleStateError, LifecycleStateStore
     from llmops_maintenance import MaintenanceError, maintain_releases, render_text
@@ -294,6 +294,17 @@ def operation_payload(operations: list[Any]) -> list[dict[str, str]]:
     rendered: list[dict[str, str]] = []
     for operation in operations:
         item = operation.as_dict()
+        if operation.action == "restart":
+            try:
+                if restart_actions(CURRENT_TOPOLOGY, operation.component) == ("stop", "start"):
+                    for action, label in (("stop", "stop"), ("status", "verify-stopped"), ("start", "start")):
+                        rendered.append({
+                            **item, "action": label,
+                            "command": build_component_command(CURRENT_TOPOLOGY, operation.component, action),
+                        })
+                    continue
+            except (DriverError, TopologyError) as exc:
+                raise RestartError(operation.component.qualified_id, "configuration", str(exc)) from exc
         item["command"] = build_component_command(
             CURRENT_TOPOLOGY, operation.component, operation.action
         )

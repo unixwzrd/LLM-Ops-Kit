@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.0b61 - 2026-11-25
+
+- Render component restart previews with the same stop, shutdown verification, and start fallback as execution. A missing native restart no longer makes a valid preview fail.
+
 ## 0.9.0b60 - 2026-11-25
 
 - Restart a process component without a native restart by running its stop action even when already stopped, verifying shutdown, then starting and checking readiness under one operation lock. Failed or unverified stops suppress starting, including with `--force`.

@@ -2138,6 +2138,14 @@ class ExecutorTests(ControlFixture):
             Executor(self.topology, runner=runner).execute_component(target, "restart", force=True)
         self.assertEqual(runner.calls, [])
 
+    def test_process_restart_preview_uses_same_fallback_without_executing_it(self) -> None:
+        target = self.process_restart_target()
+        with mock.patch.object(llmops_cli, "CURRENT_TOPOLOGY", self.topology, create=True):
+            rows = llmops_cli.operation_payload([Operation(target, "restart")])
+        self.assertEqual([row["action"] for row in rows], ["stop", "verify-stopped", "start"])
+        self.assertTrue(all(row["component"] == target.qualified_id for row in rows))
+        self.assertTrue(all("/usr/bin/true" in row["command"] for row in rows))
+
     def test_process_restart_uses_native_action_when_available(self) -> None:
         target = self.process_restart_target(("restart",))
         runner = FakeRunner()
