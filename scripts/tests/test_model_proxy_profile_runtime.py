@@ -68,6 +68,25 @@ class ProfileRuntimeTests(unittest.TestCase):
                 try:
                     started = command('start')
                     self.assertEqual(started.returncode, 0, started.stdout + started.stderr)
+                    # Starting the detached wrapper is not listener readiness.
+                    # Exercise the actual endpoint before sending the fixture.
+                    deadline = time.monotonic() + 20
+                    while time.monotonic() < deadline:
+                        connection = http.client.HTTPConnection('127.0.0.1', port, timeout=1)
+                        try:
+                            connection.request('GET', '/_model_proxy/health')
+                            response = connection.getresponse()
+                            ready = response.status == 200
+                            response.read()
+                            if ready:
+                                break
+                        except OSError:
+                            pass
+                        finally:
+                            connection.close()
+                        time.sleep(.05)
+                    else:
+                        self.fail('managed fixture listener did not become ready within 20 seconds')
                     call()
                     status = command('status')
                     self.assertEqual(status.returncode, 0, status.stdout + status.stderr)

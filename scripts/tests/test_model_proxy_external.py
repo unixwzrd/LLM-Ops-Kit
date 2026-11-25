@@ -56,7 +56,7 @@ class ProxyExternalTests(unittest.TestCase):
             worker.join(2)
 
     @contextmanager
-    def proxy(self, root, upstream, *extra, env=None):
+    def proxy(self, root, upstream, *extra, env=None, startup_delay=0):
         with socket.socket() as probe:
             probe.bind(("127.0.0.1", 0))
             port = probe.getsockname()[1]
@@ -66,19 +66,23 @@ class ProxyExternalTests(unittest.TestCase):
                    "--route-name", "fixture"]
         command += ["--upstream", upstream] if upstream else []
         command += list(extra)
+        if startup_delay:
+            code = 'import os,sys,time; time.sleep(float(sys.argv.pop(1))); os.execv(sys.executable, [sys.executable, *sys.argv[1:]])'
+            command = [sys.executable, '-c', code, str(startup_delay), *command[1:]]
         with (root / "stderr.log").open("wb") as errors:
             process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=errors, env=env)
             try:
-                for _ in range(100):
+                deadline = time.monotonic() + 20
+                while time.monotonic() < deadline:
                     if process.poll() is not None:
                         self.fail((root / "stderr.log").read_text())
                     try:
                         with socket.create_connection(("127.0.0.1", port), timeout=.1):
                             break
                     except OSError:
-                        time.sleep(.025)
+                        time.sleep(.05)
                 else:
-                    self.fail("proxy did not listen")
+                    self.fail("proxy did not listen within 20 seconds; stderr: " + (root / "stderr.log").read_text())
                 yield port, process
             finally:
                 process.terminate()
@@ -93,6 +97,18 @@ class ProxyExternalTests(unittest.TestCase):
             return response.status, response.read()
         finally:
             connection.close()
+
+    def test_fixture_waits_for_delayed_listener_startup(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            with self.proxy(Path(temporary), 'http://127.0.0.1:1', startup_delay=3) as (port, _):
+                connection = http.client.HTTPConnection('127.0.0.1', port, timeout=3)
+                try:
+                    connection.request('GET', '/_model_proxy/health')
+                    response = connection.getresponse()
+                    self.assertEqual(response.status, 200)
+                    response.read()
+                finally:
+                    connection.close()
 
     def wait_log(self, path, marker):
         for _ in range(100):
@@ -158,7 +174,7 @@ class ProxyExternalTests(unittest.TestCase):
                 self.assertEqual(self.call(port, b"{}", "/unknown/v1/responses")[0], 404)
             self.assertEqual([r[0] for r in records], ["/v1/responses", "/api/v1/chat/completions"])
 
-    def test_redirect_is_returned_not_retried(self):
+    def test_health_is_local_without_upstream_request(self):
         with tempfile.TemporaryDirectory() as temporary, self.upstream() as (upstream, records):
             with self.proxy(Path(temporary), f"http://127.0.0.1:{upstream}") as (port, _):
                 connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
@@ -177,7 +193,7 @@ class ProxyExternalTests(unittest.TestCase):
                 self.assertEqual(self.call(port, b"{}"), (302, b"redirect"))
             self.assertEqual(len(records), 1)
 
-    def test_metadata_mode_never_writes_readable_content(self):
+    def test_chunked_request_is_explicitly_rejected(self):
         with tempfile.TemporaryDirectory() as temporary, self.upstream() as (upstream, records):
             with self.proxy(Path(temporary), f"http://127.0.0.1:{upstream}") as (port, _):
                 connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
