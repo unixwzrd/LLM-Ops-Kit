@@ -7,8 +7,12 @@ import os
 import stat
 import subprocess
 import sys
+import threading
 from pathlib import Path
 from typing import Any
+
+
+_START_LOCK = threading.Lock()
 
 
 def _install_root() -> Path | None:
@@ -74,4 +78,7 @@ def sync_for_command(args: Any) -> None:
 def sync_before_start(component_id: str) -> None:
     """Give the authority a chance to prepare a selected stopped proxy job."""
     if component_id.endswith((":model-proxy", ":external-model-proxy")):
-        _run("before-start", component_id)
+        # Parallel starts must not launch another member of a proxy pair while
+        # the first member's reviewed binding transaction is in progress.
+        with _START_LOCK:
+            _run("before-start", component_id)

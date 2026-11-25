@@ -30,6 +30,8 @@ An older peer can use its existing `llmops update` implementation to invoke the 
 
 When the reconciled `products.json` entry for `llm-ops-kit` sets `auto_update: true` and supplies `release_repository`, every installed invocation compares its selected immutable runtime with that entry's `latest_version`. A mismatch uses the checksum-verified updater and re-executes the original command from the newly selected release. Both the target version and artifact repository are manifest policy rather than application constants. `update` and `rollback` commands bypass this pre-dispatch hook to prevent recursion. An unavailable update emits a warning and continues with the current runtime; managed components are never restarted by toolkit self-update.
 
+An operator may also enroll a cluster synchronization helper on its authority installation. The optional `auto-sync.json` and `auto-sync.py` in the installation root are owner-private; the enrollment pins the helper SHA-256. Ordinary managed status and lifecycle commands invoke that helper from the authority, including requests accepted by an explicitly integrated restricted dispatcher. Plans, isolated configuration overrides, explicit updates and rollbacks, and unenrolled installations do not invoke it. A site helper must carry its own release and peer approval; requester-supplied arguments cannot select an artifact or an arbitrary command. Runtime installation does not restart services. If a service needs rebinding, do it only at a verified stopped boundary. Disable the owner enrollment before a persistent maintenance rollback.
+
 ## Rollback And Repair
 
 ```bash
