@@ -1537,7 +1537,7 @@ class ProxyTapMetadataTests(unittest.TestCase):
             records = self._assert_private_logs(root, [sentinel])
             self.assertEqual(records[-1]["response_status"], 502)
 
-    def test_malformed_content_length_suppresses_metadata_stderr_but_preserves_full_diagnostics(self) -> None:
+    def test_malformed_content_length_is_rejected_without_echoing_header_values(self) -> None:
         sentinel = self._secrets()[0]
         for mode in ("metadata", "full"):
             with self.subTest(mode=mode), tempfile.TemporaryDirectory() as temporary:
@@ -1552,16 +1552,17 @@ class ProxyTapMetadataTests(unittest.TestCase):
                                "Connection: close\r\n\r\n").encode("ascii")
                         client.sendall(raw)
                         client.shutdown(socket.SHUT_WR)
-                        self.assertEqual(client.recv(4096), b"")
+                        chunks = []
+                        while chunk := client.recv(4096):
+                            chunks.append(chunk)
+                        response = b"".join(chunks)
+                        self.assertTrue(response.startswith(b"HTTP/1.1 400"))
+                        self.assertIn(b"One nonnegative Content-Length is required", response)
+                        self.assertNotIn(sentinel.encode(), response)
                 stderr = output.getvalue()
-                if mode == "metadata":
-                    self.assertIn("details suppressed in metadata mode", stderr)
-                    self.assertNotIn(sentinel, stderr)
-                    self.assertNotIn("Traceback", stderr)
-                    self.assertNotIn("invalid literal", stderr)
-                else:
-                    self.assertIn(sentinel, stderr)
-                    self.assertIn("Traceback", stderr)
+                self.assertNotIn(sentinel, stderr)
+                self.assertNotIn("Traceback", stderr)
+                self.assertNotIn("invalid literal", stderr)
                 self.assertFalse((root / "proxy.raw.log").exists())
 
     def test_log_mode_cli_and_environment_are_explicit_with_full_default(self) -> None:
