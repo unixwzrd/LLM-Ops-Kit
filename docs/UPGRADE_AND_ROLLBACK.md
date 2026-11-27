@@ -1,7 +1,7 @@
 # Upgrade And Rollback
 
 **Created**: 2026-07-16
-**Updated**: 2026-08-21
+**Updated**: 2026-11-26
 
 Back: [Documentation index](./INDEX.md)
 
@@ -25,6 +25,10 @@ llmops update --local-only --apply --version <version>
 Update check, plan, apply, and rollback select every host in the reconciled catalog by default. Apply preflights macOS, SSH, disk space, and installed state; stages one verified artifact everywhere; then applies sequentially. If any catalog host is unreachable, preflight stops before mutation. If a later host fails, hosts changed by the invocation are rolled back and the mixed-version condition is reported. `--local-only` is reserved for deliberate single-installation work and for the internal per-host phase of a coordinated operation.
 
 An older peer can use its existing `llmops update` implementation to invoke the new archive installer. A peer without `llmops` is bootstrapped from the staged, remotely verified archive.
+
+SSH updates and configuration reconciliation make a private, one-use transfer directory in `~/.cache/llm-ops/updates` or `~/.cache/llm-ops/config`. After verification (or failure handling) the caller removes its own transfer, not the installed release or configuration revision. If a host disconnects or an apply is still using the directory, cleanup reports the exact retained path; verify the operation finished before removing it. Explicit local `--archive` and `--checksum-file` inputs are never removed. Local configuration reconciliation uses a temporary archive without copying it to the cache.
+
+Older toolkit versions left version-named update directories and hash-named config archives in those caches. After checking that no update or reconcile is in flight, retire completed transfer copies separately from `~/.local/llm-ops/releases` and `config-revisions`. Rollback uses the installed selectors, not those caches.
 
 ## Manifest-Approved Automatic Update
 

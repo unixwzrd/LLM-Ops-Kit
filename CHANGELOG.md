@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.0b64 - 2026-11-27
+
+- Retire SSH update and configuration transfer files when an operation finishes. Each attempt uses a private stage; cleanup cannot remove a stage still in use and reports the retained path if a peer disconnects. Installed releases, configuration revisions, and operator-supplied offline archives are unaffected.
+- Apply local configuration snapshots from a temporary archive without leaving duplicate transfer files in the cache.
+- Publish the previously deployed b58–b63 history alongside this beta so fresh installations can reproduce the proxy, lifecycle, TTS, and authority-sync changes from source.
+
 ## 0.9.0b63 - 2026-11-25
 
 - Support owner-enrolled cluster runtime synchronization on ordinary status and lifecycle commands. Leave explicit config overrides and plans outside the authority's synchronization hook.

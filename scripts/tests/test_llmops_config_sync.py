@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -13,7 +14,7 @@ from pathlib import Path
 from unittest import mock
 
 from llmops_kit.llmops_config import load_config
-from llmops_kit.llmops_config_sync import reconcile_plan, remote_snapshot_status, snapshot_hash
+from llmops_kit.llmops_config_sync import ReconcileError, apply_snapshot, reconcile_plan, remote_snapshot_status, snapshot_hash
 from llmops_kit.llmops_config_sync import _remote_command
 from llmops_kit.llmops_init import initialize
 from llmops_kit.llmops_inventory import load_inventory
@@ -122,6 +123,63 @@ class ConfigSyncTests(unittest.TestCase):
                         self.assertEqual(plan[0]["action"], expected)
                     finally:
                         shutil.rmtree(next(iter(snapshots.values())).parent, ignore_errors=True)
+
+    def test_snapshot_install_does_not_accumulate_transfer_archives(self) -> None:
+        native_run = subprocess.run
+        for transport, copy_fails in (("local", False), ("ssh", False), ("ssh", True)):
+            with self.subTest(transport=transport, copy_fails=copy_fails), tempfile.TemporaryDirectory(
+                prefix="llmops config "
+            ) as temporary:
+                home = Path(temporary).resolve()
+                snapshot = home / "source snapshot"
+                snapshot.mkdir()
+                (snapshot / "config.json").write_text('{"schema_version":2}\n', encoding="utf-8")
+                digest = snapshot_hash(snapshot)[0]
+                install = home / "install"
+                previous = install / "config-revisions/old"
+                previous.mkdir(parents=True)
+                (install / "current-config").symlink_to(previous)
+                launcher = home / "bin/llmops"
+                launcher.parent.mkdir()
+                launcher.write_text(f"#!/bin/sh\nprintf 'config_hash={digest}\\n'\n", encoding="utf-8")
+                launcher.chmod(0o700)
+                host = mock.Mock(
+                    name="peer", transport=transport, port=22, destination="operator@peer",
+                    install_root=str(install), public_bin_dir=str(launcher.parent),
+                )
+                host.name = "peer"
+
+                def remote(_host: object, command: str, timeout: int = 120) -> subprocess.CompletedProcess[str]:
+                    return native_run(
+                        ["/bin/sh", "-c", command], env={**os.environ, "HOME": str(home)},
+                        text=True, capture_output=True, check=False, timeout=timeout,
+                    )
+
+                def copy(argv: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+                    self.assertEqual(argv[0], "scp")
+                    destination = argv[-1].split(":", 1)[1]
+                    shutil.copy2(argv[-2], home / destination)
+                    return subprocess.CompletedProcess(argv, 255 if copy_fails else 0, "", "disconnected" if copy_fails else "")
+
+                with (
+                    mock.patch("llmops_kit.llmops_config_sync._remote_command", side_effect=remote),
+                    mock.patch("llmops_kit.llmops_config_sync.subprocess.run", side_effect=copy) as scp,
+                ):
+                    if copy_fails:
+                        with self.assertRaisesRegex(ReconcileError, "could not transfer"):
+                            apply_snapshot(host, snapshot, digest)
+                    else:
+                        self.assertTrue(apply_snapshot(host, snapshot, digest)["ok"])
+                self.assertEqual(scp.call_count, int(transport == "ssh"))
+                self.assertEqual(list((home / ".cache/llm-ops/config").glob("*")), [])
+                if copy_fails:
+                    self.assertEqual((install / "current-config").resolve(), previous)
+                else:
+                    self.assertEqual((install / "previous-config").resolve(), previous)
+                    self.assertEqual(
+                        (install / "current-config/config.json").read_bytes(), (snapshot / "config.json").read_bytes()
+                    )
+                    self.assertFalse((install / "current-config").resolve().is_relative_to(home / ".cache"))
 
 
 if __name__ == "__main__":

@@ -5,17 +5,21 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shlex
 import subprocess
 import tarfile
 import tempfile
+from contextlib import ExitStack
 from pathlib import Path
 from typing import Any, Iterable
 
 try:
     from .llmops_topology import Topology, TopologyError, write_host_snapshot
+    from .llmops_transfer_stage import TransferStageError, transfer_stage
 except ImportError:  # Direct source execution.
     from llmops_topology import Topology, TopologyError, write_host_snapshot
+    from llmops_transfer_stage import TransferStageError, transfer_stage
 
 
 class ReconcileError(RuntimeError):
@@ -162,36 +166,46 @@ def reconcile_plan(topology: Topology, host_names: Iterable[str]) -> tuple[list[
 def apply_snapshot(host: Any, snapshot: Path, desired_hash: str) -> dict[str, Any]:
     """Copy, verify, and atomically select one configuration revision."""
 
-    with tempfile.TemporaryDirectory(prefix="llmops-config-archive-") as temporary:
+    if not re.fullmatch(r"[0-9a-f]{64}", desired_hash):
+        raise ReconcileError("invalid configuration revision hash")
+    with tempfile.TemporaryDirectory(prefix="llmops-config-archive-") as temporary, ExitStack() as stages:
         archive = Path(temporary) / f"{desired_hash}.tar.gz"
         with tarfile.open(archive, "w:gz") as bundle:
             for path in sorted(snapshot.rglob("*")):
                 if path.is_file():
                     bundle.add(path, arcname=path.relative_to(snapshot), recursive=False)
-        remote_relative = f".cache/llm-ops/config/{archive.name}"
+        stage = None
         if host.transport == "local":
-            remote_archive = Path.home() / remote_relative
-            remote_archive.parent.mkdir(parents=True, exist_ok=True)
-            remote_archive.write_bytes(archive.read_bytes())
+            archive_expression = shlex.quote(str(archive))
         else:
-            mkdir = _remote_command(host, "mkdir -p \"$HOME/.cache/llm-ops/config\"")
-            if mkdir.returncode != 0:
-                raise ReconcileError(f"could not create remote config stage for {host.name}: {mkdir.stderr.strip()}")
-            copied = subprocess.run(
-                ["scp", "-P", str(host.port), "-o", "BatchMode=yes", str(archive), f"{host.destination}:{remote_relative}"],
-                capture_output=True,
-                text=True,
-                check=False,
-            )
+            try:
+                stage = stages.enter_context(
+                    transfer_stage(
+                        "config",
+                        run=lambda command, timeout: _remote_command(host, command, timeout),
+                        host=host.name,
+                        timeout=120,
+                    )
+                )
+                copied = subprocess.run(
+                    ["scp", "-P", str(host.port), "-o", "BatchMode=yes", str(archive), f"{host.destination}:{stage.relative}/"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=120,
+                )
+            except (OSError, subprocess.TimeoutExpired, TransferStageError) as exc:
+                raise ReconcileError(f"could not stage config snapshot on {host.name}: {exc}") from exc
             if copied.returncode != 0:
                 raise ReconcileError(f"could not transfer config snapshot to {host.name}: {copied.stderr.strip()}")
+            archive_expression = stage.file_expression(archive.name)
         root = host.install_root
         root_expr = '"$HOME"/' + shlex.quote(root[2:]) if root.startswith("~/") else shlex.quote(root)
         script = "; ".join(
             [
                 "set -eu",
                 f"root={root_expr}",
-                f"archive=\"$HOME/{remote_relative}\"",
+                f"archive={archive_expression}",
                 f"revision=\"$root/config-revisions/{desired_hash}\"",
                 'if test ! -e "$revision"; then mkdir -p "$revision"; tar -xzf "$archive" -C "$revision"; fi',
                 f"observed=$(LLMOPS_AUTO_UPDATE_ACTIVE=1 LLMOPS_CONFIG_HOME=\"$revision\" {_remote_llmops(host)} config hash | awk -F= '$1 == \"config_hash\" {{print $2}}')",
@@ -202,7 +216,7 @@ def apply_snapshot(host: Any, snapshot: Path, desired_hash: str) -> dict[str, An
                 f"printf '%s\\n' {shlex.quote(desired_hash)} > \"$root/config-revisions/.last-sync\"",
             ]
         )
-        completed = _remote_command(host, script)
+        completed = _remote_command(host, stage.use_command(script) if stage is not None else script)
         if completed.returncode != 0:
             raise ReconcileError(f"configuration apply failed for {host.name}: {completed.stderr.strip() or completed.stdout.strip()}")
     return {"host": host.name, "ok": True, "config_hash": desired_hash}

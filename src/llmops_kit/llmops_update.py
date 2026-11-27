@@ -16,8 +16,14 @@ import tarfile
 import tempfile
 import urllib.error
 import urllib.request
+from contextlib import ExitStack
 from pathlib import Path
 from typing import Optional
+
+try:
+    from .llmops_transfer_stage import TransferStage, TransferStageError, transfer_stage
+except ImportError:  # Direct source execution.
+    from llmops_transfer_stage import TransferStage, TransferStageError, transfer_stage
 
 
 class UpdateError(RuntimeError):
@@ -317,14 +323,10 @@ def _remote_stage(
     host: dict[str, object],
     archive: Path,
     checksum_file: Path,
-    version: str,
+    stage: TransferStage,
     timeout: int,
 ) -> tuple[str, str]:
-    relative = f".cache/llm-ops/updates/{version}"
-    completed = _run_remote(host, f"mkdir -p {shlex.quote(relative)}", timeout)
-    if completed.returncode != 0:
-        raise UpdateError(f"could not create update stage on {name}: {completed.stderr.strip()}")
-    destination = f"{host['user']}@{host['host']}:{relative}/"
+    destination = f"{_ssh_base(host)[-1]}:{stage.relative}/"
     scp = ["scp", "-P", str(host.get("port", 22)), "-o", "BatchMode=yes", str(archive), str(checksum_file), destination]
     try:
         copied = subprocess.run(scp, capture_output=True, text=True, check=False, timeout=timeout)
@@ -332,7 +334,7 @@ def _remote_stage(
         raise UpdateError(f"update transfer failed for {name}: {exc}") from exc
     if copied.returncode != 0:
         raise UpdateError(f"update transfer failed for {name}: {copied.stderr.strip()}")
-    return f"$HOME/{relative}/{archive.name}", f"$HOME/{relative}/{checksum_file.name}"
+    return stage.file_expression(archive.name), stage.file_expression(checksum_file.name)
 
 
 def _remote_apply(
@@ -342,6 +344,8 @@ def _remote_apply(
     checksum: str,
     version: str,
     timeout: int,
+    *,
+    stage: TransferStage,
 ) -> dict[str, object]:
     llmops = _remote_public_command(host)
     install_root = _remote_path(host.get("install_root", "~/.local/llm-ops"))
@@ -356,17 +360,17 @@ def _remote_apply(
         f"elif test \"$previous\" = \"$target\" && test -x \"$root/releases/$target/app/bin/llmops\"; then "
         f"{llmops} update --rollback --local-only {install_args}; "
         f"elif test -x {llmops}; then "
-        f"{llmops} update --apply --local-only --archive \"{archive}\" --checksum-file \"{checksum}\" {install_args}; "
+        f"{llmops} update --apply --local-only --archive {archive} --checksum-file {checksum} {install_args}; "
         "else "
-        f"stage=$(dirname \"{archive}\"); cd \"$stage\"; "
-        f"shasum -a 256 -c \"{checksum}\"; rm -rf extracted; mkdir extracted; "
-        f"tar -xJf \"{archive}\" -C extracted; "
+        'cd "$transfer"; '
+        f"shasum -a 256 -c {checksum}; mkdir extracted; "
+        f"tar -xJf {archive} -C extracted; "
         "installer=$(find extracted -path '*/scripts/install-runtime.sh' -type f -print -quit); "
         "test -n \"$installer\"; "
         f"bash \"$installer\" --source \"$(dirname \"$(dirname \"$installer\")\")\" --release-id {shlex.quote(version)} {install_args}; "
         "fi"
     )
-    completed = _run_remote(host, script, timeout)
+    completed = _run_remote(host, stage.use_command(script), timeout)
     if completed.returncode != 0:
         raise UpdateError(f"remote update failed for {name}: {completed.stderr.strip() or completed.stdout.strip()}")
     try:
@@ -535,7 +539,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                 payload["action"] = "none"
                 emit(payload, json_output=args.json)
                 return 0
-            with tempfile.TemporaryDirectory(prefix="llmops-update-") as temporary_name:
+            with tempfile.TemporaryDirectory(prefix="llmops-update-") as temporary_name, ExitStack() as stages:
                 temporary = Path(temporary_name)
                 archive, checksum_file = release_assets(
                     repository=repository,
@@ -545,15 +549,27 @@ def main(argv: Optional[list[str]] = None) -> int:
                     temporary=temporary,
                 )
                 verify_archive(archive, checksum_file)
-                staged = [
-                    (name, host, *_remote_stage(name, host, archive, checksum_file, available, args.host_timeout))
-                    for name, host in pending_hosts
-                ]
+                staged = []
+                for name, host in pending_hosts:
+                    stage = stages.enter_context(
+                        transfer_stage(
+                            "updates",
+                            run=lambda command, timeout, peer=host: _run_remote(peer, command, timeout),
+                            host=name,
+                            timeout=args.host_timeout,
+                        )
+                    )
+                    remote_archive, remote_checksum = _remote_stage(
+                        name, host, archive, checksum_file, stage, args.host_timeout
+                    )
+                    staged.append((name, host, stage, remote_archive, remote_checksum))
                 updated: list[tuple[str, dict[str, object]]] = []
                 results: list[dict[str, object]] = []
                 try:
-                    for name, host, remote_archive, remote_checksum in staged:
-                        results.append(_remote_apply(name, host, remote_archive, remote_checksum, available, args.host_timeout))
+                    for name, host, stage, remote_archive, remote_checksum in staged:
+                        results.append(
+                            _remote_apply(name, host, remote_archive, remote_checksum, available, args.host_timeout, stage=stage)
+                        )
                         updated.append((name, host))
                 except UpdateError as exc:
                     rollbacks = [_remote_rollback(name, host, args.host_timeout) for name, host in reversed(updated)]
@@ -610,7 +626,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                 raise UpdateError(f"release installer failed with status {completed.returncode}")
         emit(payload, json_output=args.json)
         return 0
-    except (OSError, UpdateError) as exc:
+    except (OSError, UpdateError, TransferStageError) as exc:
         if getattr(args, "json", False):
             print(json.dumps({"ok": False, "error": str(exc)}, indent=2, sort_keys=True))
         else:
